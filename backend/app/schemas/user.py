@@ -9,6 +9,7 @@ class UserResponse(BaseModel):
     email: str
     target_retention: float
     daily_study_minutes: int
+    paused_tracks: list[str] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -17,3 +18,4 @@ class UserResponse(BaseModel):
 class UserUpdate(BaseModel):
     target_retention: float | None = Field(default=None, gt=0.0, lt=1.0)
     daily_study_minutes: int | None = Field(default=None, ge=15, le=720)
+    paused_tracks: list[str] | None = None

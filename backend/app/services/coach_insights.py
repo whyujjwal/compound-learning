@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.card import Card, CardState
+from app.models.card import Card
 from app.models.coach_insight import CoachInsight, CoachInsightKind
 from app.models.material import StudyMaterial
 from app.models.review_log import ReviewLog, ReviewRating
@@ -78,22 +78,48 @@ def _build_daily_snapshot(db: Session, user: User) -> dict[str, Any]:
         .count()
     )
 
-    due_today_rows = (
+    # FSRS-due reviews (reps > 0). Not "overdue" in the block model — just reviews waiting.
+    due_review_rows = (
         db.query(Card, StudyMaterial, Track)
         .join(StudyMaterial, Card.material_id == StudyMaterial.id)
         .join(Track, StudyMaterial.track_id == Track.id)
-        .filter(Card.user_id == user.id, Card.due_at <= now)
+        .filter(Card.user_id == user.id, Card.reps > 0, Card.due_at <= now)
         .order_by(Card.due_at.asc())
         .limit(50)
         .all()
     )
 
     today_topics: dict[str, int] = {}
-    for _card, mat, track in due_today_rows:
+    for _card, _mat, track in due_review_rows:
         key = track.name
         today_topics[key] = today_topics.get(key, 0) + 1
 
-    minutes_today = sum(int(m.estimated_minutes or 0) for _c, m, _t in due_today_rows)
+    minutes_reviews = sum(int(m.estimated_minutes or 0) for _c, m, _t in due_review_rows)
+
+    # Per-track progress snapshot (started %, mastered %) — context for the coach
+    track_progress: list[dict[str, Any]] = []
+    for track in db.query(Track).filter(Track.user_id == user.id).all():
+        cards = (
+            db.query(Card)
+            .join(StudyMaterial)
+            .filter(StudyMaterial.track_id == track.id, Card.user_id == user.id)
+            .all()
+        )
+        total = len(cards)
+        if total == 0:
+            continue
+        started = sum(1 for c in cards if c.reps > 0)
+        mastered = sum(
+            1 for c in cards if c.reps >= 3 and (c.retrievability or 0) >= 0.85
+        )
+        track_progress.append(
+            {
+                "track": track.name,
+                "started_pct": round(100 * started / total, 1),
+                "mastered_pct": round(100 * mastered / total, 1),
+                "total": total,
+            }
+        )
 
     struggling = (
         db.query(Card, StudyMaterial)
@@ -108,15 +134,17 @@ def _build_daily_snapshot(db: Session, user: User) -> dict[str, Any]:
 
     return {
         "date": now.date().isoformat(),
-        "streak_days": stats.current_streak,
-        "longest_streak_days": stats.longest_streak,
+        "sessions_this_week": stats.sessions_this_week,
+        "days_active_30d": stats.days_active_30d,
+        "total_minutes_invested": stats.total_minutes_invested,
         "retention_pct": round(stats.retention_rate * 100, 1),
         "reviews_yesterday": reviews_yday,
         "lapses_yesterday": lapses_yday,
-        "due_today_cards": len(due_today_rows),
-        "due_today_minutes": minutes_today,
+        "due_reviews": len(due_review_rows),
+        "due_review_minutes": minutes_reviews,
         "available_tracks": track_names,
-        "topics_today": [
+        "track_progress": track_progress,
+        "topics_due": [
             {"track": k, "cards": v}
             for k, v in sorted(today_topics.items(), key=lambda kv: -kv[1])
         ],
@@ -206,7 +234,33 @@ def _build_weekly_snapshot(db: Session, user: User) -> dict[str, Any]:
         .all()
     )
 
-    track_names = [t.name for t in db.query(Track).filter(Track.user_id == user.id).all()]
+    track_progress: list[dict[str, Any]] = []
+    for track in db.query(Track).filter(Track.user_id == user.id).all():
+        cards = (
+            db.query(Card)
+            .join(StudyMaterial)
+            .filter(StudyMaterial.track_id == track.id, Card.user_id == user.id)
+            .all()
+        )
+        total = len(cards)
+        if total == 0:
+            continue
+        started = sum(1 for c in cards if c.reps > 0)
+        mastered = sum(
+            1 for c in cards if c.reps >= 3 and (c.retrievability or 0) >= 0.85
+        )
+        track_progress.append(
+            {
+                "track": track.name,
+                "started_pct": round(100 * started / total, 1),
+                "mastered_pct": round(100 * mastered / total, 1),
+                "total": total,
+            }
+        )
+
+    track_names = [tp["track"] for tp in track_progress] or [
+        t.name for t in db.query(Track).filter(Track.user_id == user.id).all()
+    ]
 
     return {
         "week_key": _week_key(now),
@@ -214,9 +268,11 @@ def _build_weekly_snapshot(db: Session, user: User) -> dict[str, Any]:
         "reviews_prev_week": reviews_prev_week,
         "lapses_this_week": lapses_this_week,
         "retention_pct": round(stats.retention_rate * 100, 1),
-        "streak_days": stats.current_streak,
-        "longest_streak_days": stats.longest_streak,
+        "sessions_this_week": stats.sessions_this_week,
+        "days_active_30d": stats.days_active_30d,
+        "total_minutes_invested": stats.total_minutes_invested,
         "available_tracks": track_names,
+        "track_progress": track_progress,
         "by_day": day_counts,
         "by_track": [{"track": name, "reviews": count} for name, count in per_track],
         "top_struggles": [
@@ -235,22 +291,26 @@ def _build_weekly_snapshot(db: Session, user: User) -> dict[str, Any]:
 # Prompt + model call
 # ---------------------------------------------------------------------------
 DAILY_SYSTEM = (
-    "You are Compound Coach. Generate ONE punchy sentence (max 22 words) for the learner's daily nudge, "
-    "based strictly on the JSON snapshot. Surface the single most useful thing: a streak milestone, "
-    "a retention drop, a heavy day ahead, or a struggling topic to be careful of. "
-    "If reviews_yesterday and due_today_cards are both 0, write an inviting onboarding line instead. "
-    "No fluff, no greeting, no emoji. Reference real numbers when present. "
-    "Output ONLY the sentence — no preamble, no quotes."
+    "You are Compound Coach, a calm self-paced learning companion. Write ONE punchy sentence "
+    "(max 22 words) for the learner's daily nudge based strictly on the JSON snapshot. "
+    "Surface the single most useful thing: a track they're making real progress on (mastered_pct), "
+    "a retention dip to watch, a struggling topic, or which track has the heaviest review queue. "
+    "If reviews_yesterday and due_reviews are both 0, write an inviting onboarding line instead. "
+    "NEVER mention streaks, day numbers, missed days, or being 'behind'. This is a pressure-free space. "
+    "No greeting, no emoji, no quotes — just the sentence."
 )
 
 WEEKLY_SYSTEM = (
-    "You are Compound Coach. Write a candid weekly postmortem (140-180 words) for the learner, "
-    "based strictly on the JSON snapshot. Structure: "
-    "(1) what they did — reviews count vs prev week, retention, streak; "
-    "(2) what worked and where attention is slipping (per-track or per-day pattern); "
-    "(3) one concrete recommendation for next week tied to the data. "
-    "If reviews_this_week is 0, instead write a short (60-90 word) starter plan tied to what tracks exist. "
-    "Markdown allowed — bold key numbers, short bulleted lists. No greeting, no sign-off. Be specific and direct."
+    "You are Compound Coach, a calm self-paced learning companion. Write a candid weekly review "
+    "(140-180 words) for the learner based strictly on the JSON snapshot. Structure: "
+    "(1) what they invested — sessions this week, total minutes, retention; "
+    "(2) where progress is happening (track_progress: started_pct / mastered_pct) and where retention "
+    "is slipping (by_track, top_struggles); "
+    "(3) one concrete next-week suggestion tied to a specific track or topic in the data. "
+    "If reviews_this_week is 0, instead write a short (60-90 word) starter plan referencing the "
+    "available_tracks. "
+    "NEVER mention streaks, missed days, or being 'behind' — talk about progress percentages and "
+    "retention drift instead. Markdown allowed — bold key numbers, short lists. No greeting, no sign-off."
 )
 
 

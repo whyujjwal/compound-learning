@@ -170,7 +170,8 @@ def build_daily_queue(db: Session, user: User) -> DailyQueueResponse:
         block_minutes = block_minutes // 2  # legacy "daily" value -> per-block
 
     weekday = now.weekday()
-    track_slugs = WEEKLY_BLOCK_TEMPLATE.get(weekday, [])
+    paused = set(user.paused_tracks or [])
+    track_slugs = [s for s in WEEKLY_BLOCK_TEMPLATE.get(weekday, []) if s not in paused]
 
     # Resolve tracks once
     tracks_by_slug: dict[str, Track] = {

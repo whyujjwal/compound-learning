@@ -9,3 +9,7 @@ node_modules/
 .env.local
 
 .DS_Store
+
+# Local tooling artifacts
+frontend/.playwright-cli/
+output/

@@ -54,11 +54,21 @@ def get_stats(db: Session, user: User) -> StatsResponse:
     now = datetime.now(UTC)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=7)
+    month_start = today_start - timedelta(days=30)
 
     total_cards = db.query(Card).filter(Card.user_id == user.id).count()
+    # "Due" now means FSRS-due reviews only (reps > 0) — new unstarted items aren't "due".
     due_cards = (
         db.query(Card)
-        .filter(Card.user_id == user.id, Card.due_at <= now)
+        .filter(Card.user_id == user.id, Card.reps > 0, Card.due_at <= now)
+        .count()
+    )
+    materials_started = (
+        db.query(Card).filter(Card.user_id == user.id, Card.reps > 0).count()
+    )
+    materials_mastered = (
+        db.query(Card)
+        .filter(Card.user_id == user.id, Card.reps >= 3, Card.retrievability >= 0.85)
         .count()
     )
     total_materials = (
@@ -108,6 +118,20 @@ def get_stats(db: Session, user: User) -> StatsResponse:
     ]
     current_streak, longest_streak = _compute_streaks(review_dates)
 
+    # Friendlier session-based metrics (no streak pressure)
+    week_days = {
+        _aware(d).date() for d in review_dates if _aware(d) >= week_start
+    }
+    month_days = {
+        _aware(d).date() for d in review_dates if _aware(d) >= month_start
+    }
+    total_seconds = (
+        db.query(func.coalesce(func.sum(ReviewLog.elapsed_time_seconds), 0))
+        .filter(ReviewLog.card_id.in_(user_card_ids))
+        .scalar()
+    ) or 0
+    total_minutes_invested = int(round(float(total_seconds) / 60))
+
     tracks = db.query(Track).filter(Track.user_id == user.id).all()
     track_breakdown: list[TrackStats] = []
     for track in tracks:
@@ -133,7 +157,9 @@ def get_stats(db: Session, user: User) -> StatsResponse:
                 track_color=track.color,
                 material_count=material_count,
                 card_count=len(cards),
-                due_count=sum(1 for c in cards if _aware(c.due_at) <= now),
+                due_count=sum(
+                    1 for c in cards if c.reps > 0 and _aware(c.due_at) <= now
+                ),
                 reviews_total=reviews_count,
             )
         )
@@ -143,9 +169,14 @@ def get_stats(db: Session, user: User) -> StatsResponse:
         due_cards=due_cards,
         total_materials=total_materials,
         total_tracks=total_tracks,
+        materials_started=materials_started,
+        materials_mastered=materials_mastered,
         reviews_today=reviews_today,
         reviews_this_week=reviews_this_week,
         reviews_total=reviews_total,
+        sessions_this_week=len(week_days),
+        days_active_30d=len(month_days),
+        total_minutes_invested=total_minutes_invested,
         retention_rate=retention_rate,
         current_streak=current_streak,
         longest_streak=longest_streak,

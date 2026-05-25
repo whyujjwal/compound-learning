@@ -18,9 +18,14 @@ class StatsResponse(BaseModel):
     due_cards: int
     total_materials: int
     total_tracks: int
+    materials_started: int = 0
+    materials_mastered: int = 0
     reviews_today: int
     reviews_this_week: int
     reviews_total: int
+    sessions_this_week: int = 0
+    days_active_30d: int = 0
+    total_minutes_invested: int = 0
     retention_rate: float
     current_streak: int
     longest_streak: int
