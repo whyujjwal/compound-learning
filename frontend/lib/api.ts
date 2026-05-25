@@ -1,15 +1,25 @@
+import { getAuthToken } from "./auth";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = typeof window !== "undefined" ? getAuthToken() : null;
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
     cache: "no-store",
   });
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+      const { clearAuthToken } = await import("./auth");
+      clearAuthToken();
+      window.location.href = "/login";
+      throw new Error("Session expired — please sign in again");
+    }
     let message = res.statusText;
     try {
       const body = await res.json();

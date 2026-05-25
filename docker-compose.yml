@@ -31,6 +31,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      APP_PASSWORD: ${APP_PASSWORD:-}
     ports:
       - "8000:8000"
 
@@ -40,6 +41,7 @@ services:
       - api
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000/api
+      APP_PASSWORD: ${APP_PASSWORD:-}
     ports:
       - "3000:3000"
 

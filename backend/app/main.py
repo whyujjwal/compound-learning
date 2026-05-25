@@ -5,7 +5,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import cards, chat, curriculum, materials, queue, stats, tracks, user
+from app.api.routes import auth, cards, chat, curriculum, materials, queue, stats, tracks, user
+from app.auth import auth_enabled, verify_token
 from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.services.bootstrap import bootstrap
@@ -42,12 +43,33 @@ app.add_middleware(
 )
 
 
+_PUBLIC_PATHS = {"/health", "/api/auth/login"}
+
+
+@app.middleware("http")
+async def require_app_password(request: Request, call_next):
+    if not auth_enabled():
+        return await call_next(request)
+
+    path = request.url.path
+    if path in _PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc") or path == "/openapi.json":
+        return await call_next(request)
+
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else None
+    if not verify_token(token):
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
+    return await call_next(request)
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
+app.include_router(auth.router, prefix="/api")
 app.include_router(tracks.router, prefix="/api")
 app.include_router(materials.router, prefix="/api")
 app.include_router(cards.router, prefix="/api")

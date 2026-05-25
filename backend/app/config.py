@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     ai_max_tokens: int = 2048
 
+    # When set, all API routes (except /health and /auth/login) require Authorization: Bearer <token>
+    app_password: str | None = None
+
     @property
     def ai_enabled(self) -> bool:
         if self.ai_provider == "anthropic":
