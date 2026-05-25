@@ -51,6 +51,10 @@ async def require_app_password(request: Request, call_next):
     if not auth_enabled():
         return await call_next(request)
 
+    # Browsers send OPTIONS preflight without Authorization — let CORS handle it.
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     path = request.url.path
     if path in _PUBLIC_PATHS or path.startswith("/docs") or path.startswith("/redoc") or path == "/openapi.json":
         return await call_next(request)
