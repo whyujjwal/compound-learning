@@ -171,24 +171,15 @@ def ensure_scheduler_params(db: Session, user: User, track: Track) -> None:
     db.commit()
 
 
-def _maybe_import_curriculum(db: Session, user: User) -> None:
-    """Import bundled curriculum when the user has no materials yet."""
-    material_count = (
-        db.query(StudyMaterial)
-        .join(Track)
-        .filter(Track.user_id == user.id)
-        .count()
-    )
-    if material_count >= 10:
-        return
-
+def _sync_curriculum(db: Session, user: User) -> None:
+    """Merge bundled curriculum.json into the user's tracks (create, update, prune orphans)."""
     curriculum_path = Path(__file__).resolve().parents[3] / "docs" / "curriculum.json"
     if not curriculum_path.exists():
         return
 
     from app.services.curriculum_loader import import_curriculum, load_file
 
-    import_curriculum(db, user, load_file(curriculum_path))
+    import_curriculum(db, user, load_file(curriculum_path), prune_orphans=True)
 
 
 def bootstrap(db: Session) -> None:
@@ -197,5 +188,5 @@ def bootstrap(db: Session) -> None:
     tracks = db.query(Track).filter(Track.user_id == user.id).all()
     for track in tracks:
         ensure_scheduler_params(db, user, track)
-    _maybe_import_curriculum(db, user)
+    _sync_curriculum(db, user)
     db.commit()

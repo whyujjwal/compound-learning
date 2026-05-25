@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { resourceAction } from "@/lib/resourceAction";
+import { parseMaterialNotes } from "@/lib/parseMaterialNotes";
 import { trackAccent } from "@/lib/trackColors";
 import type { QueueItem } from "@/lib/api";
 
@@ -13,6 +14,63 @@ const RATINGS = [
 ] as const;
 
 export type Rating = (typeof RATINGS)[number]["key"];
+
+function MaterialBrief({
+  content,
+  revealed,
+}: {
+  content: string | null;
+  revealed: boolean;
+}) {
+  const parsed = parseMaterialNotes(content);
+
+  if (!parsed.structured) {
+    if (!parsed.legacy) return null;
+    return (
+      <div className="session-brief">
+        <div className="session-section">
+          <div className="session-section-label">About</div>
+          <p className="session-section-body">{parsed.legacy}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="session-brief">
+      {parsed.sections.map((section) => {
+        if (section.key === "recall" && !revealed) {
+          return (
+            <div key={section.key} className="session-section session-section-muted">
+              <div className="session-section-label">{section.title}</div>
+              <p className="session-section-hint">
+                Finish deliverables, then Reveal to unlock self-test questions.
+              </p>
+            </div>
+          );
+        }
+        if (section.key === "recall" && !section.lines.length) return null;
+
+        const ordered = section.key === "do";
+        const ListTag = ordered ? "ol" : "ul";
+
+        return (
+          <div
+            key={section.key}
+            className={`session-section session-section-${section.key}${section.key === "recall" && revealed ? " session-section-recall-open" : ""}`}
+          >
+            <div className="session-section-label">{section.title}</div>
+            <ListTag className="session-section-list">
+              {section.lines.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ListTag>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Body of the active session card — title, content, FSRS metadata. */
 export function SessionCard({
@@ -40,6 +98,8 @@ export function SessionCard({
 
       <h1 className="session-card-title">{item.material_title}</h1>
 
+      <MaterialBrief content={item.material_content} revealed={revealed} />
+
       {item.material_url && (
         <div>
           <a
@@ -57,32 +117,25 @@ export function SessionCard({
       {!revealed ? (
         <>
           <p className="session-prompt">
-            Recall the concept, pattern, or approach. Press <kbd>Space</kbd> when ready.
+            Complete the deliverables above, then self-test with Reveal. Press{" "}
+            <kbd>Space</kbd>.
           </p>
           <button type="button" className="v2-btn session-reveal" onClick={onReveal}>
-            Show answer <kbd style={{ marginLeft: 6, fontSize: 10 }}>Space</kbd>
+            Show recall <kbd style={{ marginLeft: 6, fontSize: 10 }}>Space</kbd>
           </button>
         </>
       ) : (
-        <>
-          {item.material_content ? (
-            <pre className="session-content">{item.material_content}</pre>
-          ) : (
-            <p className="session-prompt">No content stored — recall from memory.</p>
+        <div className="session-fsrs">
+          {item.stability != null && (
+            <span><strong>S</strong>{item.stability.toFixed(1)}d</span>
           )}
-
-          <div className="session-fsrs">
-            {item.stability != null && (
-              <span><strong>S</strong>{item.stability.toFixed(1)}d</span>
-            )}
-            {item.retrievability != null && (
-              <span><strong>R</strong>{(item.retrievability * 100).toFixed(0)}%</span>
-            )}
-            {item.difficulty != null && (
-              <span><strong>D</strong>{item.difficulty.toFixed(1)}</span>
-            )}
-          </div>
-        </>
+          {item.retrievability != null && (
+            <span><strong>R</strong>{(item.retrievability * 100).toFixed(0)}%</span>
+          )}
+          {item.difficulty != null && (
+            <span><strong>D</strong>{item.difficulty.toFixed(1)}</span>
+          )}
+        </div>
       )}
     </section>
   );

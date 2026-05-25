@@ -55,6 +55,264 @@ def m(
     }
 
 
+def _brief(
+    watch_mins: int,
+    start_ep: int,
+    end_ep: int,
+    watch_focus: str,
+    do_steps: list[str],
+    deliverable: list[str],
+    recall: list[str],
+) -> str:
+    n = end_ep - start_ep + 1
+    vid_word = "video" if n == 1 else "videos"
+    lines = [
+        f"WATCH (~{watch_mins} min video)",
+        f"• Open playlist at episode {start_ep}. Watch eps {start_ep}-{end_ep} ({n} {vid_word}).",
+        f"• {watch_focus}",
+        "",
+        "DO (during this 2h block)",
+    ]
+    for i, step in enumerate(do_steps, 1):
+        lines.append(f"{i}. {step}")
+    lines += ["", "DELIVERABLE (before you rate Good)"]
+    for d in deliverable:
+        lines.append(f"• {d}")
+    lines += ["", "RECALL (after Reveal — no notes)"]
+    for r in recall:
+        lines.append(f"• {r}")
+    return "\n".join(lines)
+
+
+def _session_material(
+    creator: str,
+    session_num: int,
+    topic: str,
+    playlist_id: str,
+    start_ep: int,
+    end_ep: int,
+    video_mins: int,
+    block: str,
+    *,
+    watch_focus: str,
+    do_steps: list[str] | None = None,
+    deliverable: list[str] | None = None,
+    recall: list[str] | None = None,
+    priority: int = 9,
+    type: str = "video",
+    cost: float = 1.0,
+) -> dict[str, Any]:
+    n = end_ep - start_ep + 1
+    do = do_steps or [
+        "Pause after each video; write one sentence in your own words.",
+        "Sketch or table the key idea — don't just highlight the video.",
+        "Note one connection to prior material in this track.",
+    ]
+    deliver = deliverable or [
+        f"{n} one-line summary(ies) — one per video",
+        "One diagram, table, or formula sheet in your notes app",
+    ]
+    rec = recall or [
+        f"Explain “{topic}” in 60 seconds without notes.",
+        "What's the #1 mistake beginners make here?",
+    ]
+    notes = _brief(video_mins, start_ep, end_ep, watch_focus, do, deliver, rec)
+    url = f"https://www.youtube.com/playlist?list={playlist_id}&index={start_ep}"
+    title = f"{creator} · Session {session_num}: {topic} (eps {start_ep}-{end_ep})"
+    return m(
+        title,
+        url,
+        block,
+        minutes=video_mins,
+        priority=priority,
+        type=type,
+        notes=notes,
+        cost=cost,
+    )
+
+
+def _sessions_from_rows(
+    creator: str,
+    playlist_id: str,
+    block: str,
+    rows: list[tuple[Any, ...]],
+    *,
+    priority: int = 9,
+    type: str = "video",
+    cost: float = 1.0,
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for i, row in enumerate(rows, 1):
+        topic, start, end, mins, focus = row[0], row[1], row[2], row[3], row[4]
+        kw: dict[str, Any] = {"watch_focus": focus, "priority": priority, "type": type, "cost": cost}
+        if len(row) > 5 and row[5]:
+            kw["do_steps"] = row[5]
+        if len(row) > 6 and row[6]:
+            kw["deliverable"] = row[6]
+        if len(row) > 7 and row[7]:
+            kw["recall"] = row[7]
+        items.append(
+            _session_material(creator, i, topic, playlist_id, start, end, mins, block, **kw)
+        )
+    return items
+
+
+def _statquest_stats_sessions(block: str) -> list[dict[str, Any]]:
+    rows = [
+        ("Mean, median, mode, histograms", 1, 6, 58, "Central tendency and reading histogram shapes"),
+        ("Variance, std dev, MAD, IQR", 7, 12, 55, "Spread measures; when each is appropriate"),
+        ("Normal distribution & z-scores", 13, 18, 60, "Bell curve, z-scores, standardization"),
+        ("Central limit theorem", 19, 22, 55, "Why sample means look normal; intuition over proof"),
+        ("Sampling & standard error", 23, 28, 58, "Samples, SE, why bigger n shrinks uncertainty"),
+        ("Confidence intervals", 29, 34, 60, "CI interpretation; common misreadings of intervals"),
+        ("Hypothesis testing intro", 35, 40, 58, "Null/alternative, test statistics, rejection regions"),
+        ("p-values & significance", 41, 46, 60, "What p-values mean and do NOT mean"),
+        ("t-tests & paired tests", 47, 52, 58, "One-sample, two-sample, paired comparisons"),
+        ("ANOVA & post-hoc tests", 53, 58, 60, "Comparing 3+ groups; follow-up tests"),
+        ("Chi-squared & Fisher's exact", 59, 64, 58, "Categorical association tests"),
+        ("Regression basics & correlation", 65, 72, 60, "Linear fit, R², correlation vs causation"),
+    ]
+    return _sessions_from_rows(
+        "StatQuest Stats",
+        "PLblh5JKOoLUK0FLuzwntyYI10UQFUhsY9",
+        block,
+        rows,
+    )
+
+
+def _statquest_ml_sessions(block: str) -> list[dict[str, Any]]:
+    rows = [
+        ("Bias/variance, train vs test", 1, 5, 55, "Under/overfitting; train-test gap"),
+        ("Linear regression", 6, 10, 58, "Least squares, residuals, interpretation"),
+        ("Logistic regression", 11, 15, 60, "Sigmoid, odds, classification threshold"),
+        ("Decision trees", 16, 20, 58, "Splits, impurity, interpretability"),
+        ("Random forest & bagging", 21, 25, 60, "Ensembles, bootstrap, variance reduction"),
+        ("Gradient boost & XGBoost", 26, 30, 58, "Sequential error correction; when GB wins"),
+        ("SVM & kernels", 31, 35, 60, "Margin, support vectors, kernel trick"),
+        ("Neural network basics", 36, 40, 58, "Layers, activations, universal approximation"),
+        ("Clustering (k-means, hierarchical)", 41, 45, 55, "Unsupervised grouping; picking k"),
+        ("PCA & dimensionality reduction", 46, 50, 60, "Variance preservation; visualization use"),
+    ]
+    return _sessions_from_rows(
+        "StatQuest ML",
+        "PLblh5JKOoLUICTaGLRoHQDuF_7q2GfuJF",
+        block,
+        rows,
+    )
+
+
+def _statquest_nn_sessions(block: str) -> list[dict[str, Any]]:
+    rows = [
+        ("Forward pass, activations, softmax", 1, 5, 55, "How data flows forward; activation roles"),
+        ("Backprop & gradient descent", 6, 10, 58, "Chain rule in networks; weight updates"),
+        ("Dropout, batch norm, regularization", 11, 15, 60, "Fighting overfit; training stability"),
+        ("Architectures & training tips", 16, 21, 58, "Depth, width, practical training heuristics"),
+    ]
+    return _sessions_from_rows(
+        "StatQuest NN",
+        "PLblh5JKOoLUIxGDQs4LFFD--41Vzf-ME1",
+        block,
+        rows,
+    )
+
+
+def _gaurav_sen_sessions(block: str) -> list[dict[str, Any]]:
+    rows = [
+        ("Scaling, CAP, sharding basics", 1, 5, 88, "Horizontal scale, CAP tradeoffs, shard keys"),
+        ("Caching, CDN, load balancers", 6, 10, 90, "Cache-aside, CDN edge, L4/L7 LB"),
+        ("Message queues, pub/sub, Kafka", 11, 15, 92, "Async decoupling, partitions, consumer groups"),
+        ("Microservices, SOA, API gateways", 16, 20, 88, "Service boundaries, gateway patterns"),
+        ("Distributed coordination", 21, 25, 90, "Leader election, consensus overview"),
+        ("Design: Uber, payments, notifications", 26, 30, 92, "Real-time matching, idempotency, fanout"),
+        ("Design: Twitter, Netflix, Tinder", 31, 35, 90, "Feed, streaming, geo-matching case studies"),
+    ]
+    return _sessions_from_rows(
+        "Gaurav Sen SD",
+        "PLMCXHnjXnTnvo6alSjVkgxV-VH6EPyvoX",
+        block,
+        rows,
+        cost=1.1,
+    )
+
+
+def _jordan_sdi_sessions(block: str) -> list[dict[str, Any]]:
+    rows = [
+        ("SDI framework & requirements", 1, 3, 88, "Functional/non-functional reqs, scope, constraints"),
+        ("Capacity estimation", 4, 6, 90, "QPS, storage, bandwidth back-of-envelope math"),
+        ("API design & data modeling", 7, 9, 88, "Entities, relationships, read/write paths"),
+        ("Caching deep dive", 10, 12, 90, "Layers, invalidation, stampede, TTL strategy"),
+        ("Load balancing & proxies", 13, 15, 88, "Algorithms, sticky sessions, health checks"),
+        ("Database sharding & replication", 16, 18, 92, "Shard keys, replicas, read scaling"),
+        ("Consistent hashing", 19, 21, 90, "Ring, virtual nodes, minimal remapping"),
+        ("Message queues & events", 22, 24, 88, "At-least-once, ordering, dead letter queues"),
+        ("Design: URL shortener", 25, 27, 90, "Hash, collision, redirect, analytics"),
+        ("Design: Pastebin / file storage", 28, 30, 88, "Object storage, metadata, hot vs cold"),
+        ("Design: Twitter / news feed", 31, 33, 92, "Fanout on write vs read, celebrity problem"),
+        ("Design: Instagram / photos", 34, 36, 90, "Blob storage, CDN, timeline"),
+        ("Design: WhatsApp / messaging", 37, 39, 88, "WebSocket, delivery acks, ordering"),
+        ("Design: Uber / ride matching", 40, 42, 90, "Geo-index, supply/demand, surge"),
+        ("Design: Yelp / geo search", 43, 45, 88, "Geohash, quadtree, proximity queries"),
+        ("Design: Netflix / streaming", 46, 48, 92, "Encoding, CDN, adaptive bitrate"),
+        ("Design: Dropbox / sync", 49, 51, 90, "Chunking, dedup, conflict resolution"),
+        ("Design: Slack / real-time chat", 52, 54, 88, "Channels, presence, message sync"),
+        ("Design: TikTok / feed + rec", 55, 57, 90, "Candidate generation, ranking pipeline"),
+        ("Design: Amazon / e-commerce", 58, 60, 88, "Catalog, cart, inventory, checkout"),
+        ("Design: Google Docs / collab", 61, 63, 92, "OT/CRDT, versioning, conflict handling"),
+        ("Design: Ticketmaster / flash sales", 64, 66, 90, "Queueing, overselling prevention"),
+        ("Design: Payment systems", 67, 69, 88, "Idempotency, ledger, reconciliation"),
+        ("Design: Rate limiter / API gateway", 70, 72, 90, "Token bucket, sliding window, tiers"),
+        ("Design: Web crawler", 73, 75, 88, "Frontier, politeness, dedup, bloom filters"),
+        ("Design: Metrics at scale", 76, 78, 90, "Time-series, aggregation, cardinality"),
+        ("Design: Search autocomplete", 79, 80, 85, "Trie, ranking, prefix cache"),
+        ("Design: Ad click aggregator", 81, 82, 88, "Stream ingest, windowed counts"),
+        ("Design: Proximity / nearby", 83, 84, 90, "Geo shards, query fanout"),
+        ("Design: Distributed cache capstone", 85, 86, 88, "Eviction, consistency, hot keys"),
+    ]
+    return _sessions_from_rows(
+        "Jordan SDI",
+        "PLjTveVh7FakLdTmm42TMxbN8PvVn5g4KJ",
+        block,
+        rows,
+        cost=1.1,
+    )
+
+
+def _mit_6824_sessions(block: str) -> list[dict[str, Any]]:
+    rows = [
+        ("L1: Intro & MapReduce", 1, 1, 80, "Why distributed systems; MapReduce paper walkthrough"),
+        ("L2: RPC & threads", 2, 2, 80, "Go concurrency primitives; RPC failure modes"),
+        ("L3: GFS", 3, 3, 80, "Master/chunkservers; single-master tradeoffs"),
+        ("L4: Primary-backup replication", 4, 4, 80, "Replication state machine basics"),
+        ("L5: Go threads deep dive", 5, 5, 80, "Channels, goroutines, RPC patterns"),
+        ("L6: Raft basics", 6, 6, 80, "Leader election; safety intuition"),
+        ("L7: Raft log replication", 7, 7, 80, "Log matching; commit rules"),
+        ("L8: ZooKeeper", 8, 8, 80, "Coordination primitives; linearizability"),
+        ("L9: Chain replication / CRAQ", 9, 9, 80, "Chain vs primary-backup; read-your-writes"),
+        ("L10: Aurora & cloud DBs", 10, 10, 80, "Log-structured storage at cloud scale"),
+        ("L11: Memcached at Facebook", 11, 11, 80, "Cache consistency in the wild"),
+        ("L12: Distributed transactions", 12, 12, 80, "2PC, OCC, snapshot isolation"),
+        ("L13: Spanner", 13, 13, 80, "TrueTime; global strong consistency"),
+        ("L14: FaRM & RDMA", 14, 14, 80, "Fast transactions over RDMA"),
+        ("L15: Dynamo & consistent hashing", 15, 15, 80, "AP design; vector clocks; rings"),
+        ("L16: Eventual consistency & CRDTs", 16, 16, 80, "Conflict-free replicated data types"),
+        ("L17: COPS causal consistency", 17, 17, 80, "Causal+ sessions; geo replication"),
+        ("L18: Bitcoin consensus", 18, 18, 80, "Proof-of-work; eventual consensus"),
+        ("L19: Frangipani", 19, 19, 80, "Distributed file system layering"),
+        ("L20: Course wrap-up", 20, 20, 80, "Themes recap; exam-style synthesis"),
+        ("L21: Guest lecture", 21, 21, 80, "Bonus topic — take structured notes"),
+        ("L22: Guest lecture", 22, 22, 80, "Bonus topic — take structured notes"),
+    ]
+    return _sessions_from_rows(
+        "MIT 6.824",
+        "PLrw6a1wE39_tb2fErI4-WkMbsvGQk9_UB",
+        block,
+        rows,
+        type="course",
+        cost=1.5,
+        priority=10,
+    )
+
+
 # ============================================================================
 # DSA — Striver A2Z, top ~140 milestone problems with patterns
 # ============================================================================
@@ -830,9 +1088,9 @@ def add_math():
     # Block 0 — Gentle on-ramp: StatQuest + Khan Academy
     # (Added from learn-ai-engineering recommendations — accessible primers before MML)
     SQ = "Math · Foundations · StatQuest & Khan Academy"
+    items += _statquest_stats_sessions(SQ)
+    items += _statquest_ml_sessions(SQ)
     items += [
-        m("StatQuest — Statistics Fundamentals (playlist)", "https://www.youtube.com/playlist?list=PLblh5JKOoLUK0FLuzwntyYI10UQFUhsY9", SQ, minutes=240, priority=9, type="video", notes="Josh Starmer's gentle intro: mean/median/variance, distributions, central limit theorem, hypothesis tests. Watch in order; clearly explained."),
-        m("StatQuest — Machine Learning (playlist)", "https://www.youtube.com/playlist?list=PLblh5JKOoLUICTaGLRoHQDuF_7q2GfuJF", SQ, minutes=300, priority=9, type="video", notes="ML from scratch with diagrams: linear/logistic regression, trees, random forest, gradient boost, SVM, NN. Companion to Andrew Ng."),
         m("Khan Academy — Probability & Statistics", "https://www.khanacademy.org/math/statistics-probability", SQ, minutes=180, priority=7, type="course", notes="Self-paced. Skip what you know; lock in conditional probability + sampling distributions."),
         m("Mathematics for Machine Learning Specialization (Coursera)", "https://www.coursera.org/specializations/mathematics-machine-learning", SQ, minutes=600, priority=7, type="course", cost=1.2, notes="3-course Imperial College spec: Linear Algebra → Multivariate Calculus → PCA. Run in parallel with MML book."),
     ]
@@ -943,7 +1201,6 @@ def add_llm():
     # Before deep learning, lock in the core ML mental model + gradient-boosted trees.
     CM = "LLM/ML · Phase 0 · Classical ML Foundation"
     items += [
-        m("Josh Starmer — StatQuest ML playlist", "https://www.youtube.com/playlist?list=PLblh5JKOoLUICTaGLRoHQDuF_7q2GfuJF", CM, minutes=300, priority=9, type="video", notes="Bias/variance, all common algorithms, hyperparameter tuning — drawn out with crystal-clear diagrams. Best survey of classical ML."),
         m("Google — Machine Learning Crash Course", "https://developers.google.com/machine-learning/crash-course", CM, minutes=240, priority=8, type="course", notes="15-hour fast-paced intro: loss, gradient descent, overfitting, regularization, feature crosses, embeddings, fairness. With Colab labs."),
         m("Microsoft — Machine Learning for Beginners", "https://github.com/microsoft/ML-For-Beginners", CM, minutes=300, priority=7, type="course", notes="12-week classic ML curriculum with scikit-learn. Useful complement to StatQuest's theory."),
         m("scikit-learn — User Guide", "https://scikit-learn.org/stable/user_guide.html", CM, minutes=120, priority=8, type="reading", notes="The canonical Python ML toolbox. Skim sections 1, 2, 3, 5, 6, 9 — these are the patterns you'll re-use forever."),
@@ -989,7 +1246,9 @@ def add_llm():
         m("PyTorch — Learn the Basics (full tutorial)", "https://pytorch.org/tutorials/beginner/basics/intro.html", DLF, minutes=180, priority=9, type="course", notes="Deeper than the blitz: datasets/dataloaders, transforms, save/load, TensorBoard. Set baseline fluency."),
         m("Fast.ai — Practical Deep Learning for Coders v5", "https://course.fast.ai/", DLF, minutes=900, priority=9, type="course", cost=1.2, notes="Top-down approach: build CNN classifiers + tabular + NLP before theory. Jeremy Howard. 9 lessons."),
         m("Andrew Ng — Deep Learning Specialization", "https://www.coursera.org/specializations/deep-learning", DLF, minutes=900, priority=8, type="course", cost=1.2, notes="5 courses: NN basics → hyperparameters → ML projects → CNN → sequence models. Slow but bulletproof foundation."),
-        m("StatQuest — Neural Networks playlist", "https://www.youtube.com/playlist?list=PLblh5JKOoLUIxGDQs4LFFD--41Vzf-ME1", DLF, minutes=180, priority=7, type="video", notes="Visual NN deep-dive: backprop, activation, dropout, batch norm. Complementary to 3B1B."),
+    ]
+    items += _statquest_nn_sessions(DLF)
+    items += [
         m("Keras / TensorFlow — Sequential Model tutorial", "https://www.tensorflow.org/tutorials/keras/classification", DLF, minutes=60, priority=5, type="reading", notes="Optional: most ML jobs use PyTorch now, but Keras shows up in legacy/research codebases."),
     ]
 
@@ -1171,7 +1430,6 @@ def add_sd():
         m("ByteByteGo — Top 6 Load Balancing Algorithms", "https://www.youtube.com/watch?v=dBmxNsS3BGE", VID, minutes=10, priority=8, type="video"),
         m("ByteByteGo — Pub/Sub vs Message Queue", "https://www.youtube.com/watch?v=O1PgqUqZKTA", VID, minutes=10, priority=8, type="video"),
 
-        m("Gaurav Sen — System Design Playlist (35+ videos)", "https://www.youtube.com/playlist?list=PLMCXHnjXnTnvo6alSjVkgxV-VH6EPyvoX", VID, minutes=20, priority=9, type="video", notes="Classic case studies. Watch in order. The 'distributed systems' subset is excellent."),
         m("Gaurav Sen — Consistent Hashing", "https://www.youtube.com/watch?v=zaRkONvyGr8", VID, minutes=15, priority=10, type="video", notes="The canonical 15min explanation. Watch twice."),
         m("Gaurav Sen — Distributed Cache Design", "https://www.youtube.com/watch?v=iuqZvajTOyA", VID, minutes=25, priority=9, type="video"),
         m("Gaurav Sen — Distributed Counter", "https://www.youtube.com/watch?v=brWyKbyHrgs", VID, minutes=25, priority=7, type="video", notes="CRDTs, eventual consistency."),
@@ -1180,32 +1438,17 @@ def add_sd():
         m("Gaurav Sen — Design Tinder", "https://www.youtube.com/watch?v=tndzLznxq40", VID, minutes=25, priority=7, type="video"),
         m("Gaurav Sen — Notification Service Design", "https://www.youtube.com/watch?v=mNHzgxFmaiE", VID, minutes=25, priority=7, type="video"),
 
-        m("Jordan Has No Life — System Design Interview (playlist)", "https://www.youtube.com/playlist?list=PLjTveVh7FakLdTmm42TMxbN8PvVn5g4KJ", VID, minutes=30, priority=9, type="video", notes="The most detailed free SD playlist on YouTube. Methodical, brutal honesty about tradeoffs."),
         m("Jordan — Designing Slack", "https://www.youtube.com/watch?v=Ye85QO4LbVE", VID, minutes=45, priority=8, type="video"),
         m("Jordan — Designing Netflix", "https://www.youtube.com/watch?v=tWjcD8H4G6I", VID, minutes=45, priority=8, type="video"),
         m("Jordan — Designing Yelp", "https://www.youtube.com/watch?v=jzUjJa15Wp8", VID, minutes=45, priority=7, type="video"),
         m("Jordan — Designing TikTok", "https://www.youtube.com/watch?v=07kFsiNu6Z4", VID, minutes=45, priority=7, type="video"),
         m("Jordan — Designing Amazon", "https://www.youtube.com/watch?v=oNg34cRFV6E", VID, minutes=45, priority=8, type="video"),
 
-        m("MIT 6.824 — Distributed Systems (full course, free)", "https://www.youtube.com/playlist?list=PLrw6a1wE39_tb2fErI4-WkMbsvGQk9_UB", VID, minutes=30, priority=10, type="course", cost=1.5, notes="THE gold standard distributed systems course. 20 lectures, Robert Morris (MIT). Theory deep enough that everything else feels shallow. Spread across 4 weeks; this is your moat."),
-        m("MIT 6.824 — Lecture 1: Introduction (MapReduce)", "https://www.youtube.com/watch?v=cQP8WApzIQQ", VID, minutes=80, priority=10, type="video", notes="Foundations: why distributed, MapReduce paper walkthrough."),
-        m("MIT 6.824 — Lecture 3: GFS", "https://www.youtube.com/watch?v=EpIgvowZr00", VID, minutes=80, priority=10, type="video", notes="Google File System. Master + chunkservers. Single-master tradeoffs."),
-        m("MIT 6.824 — Lecture 4: Primary-Backup Replication", "https://www.youtube.com/watch?v=gXiDmq1zDq4", VID, minutes=80, priority=9, type="video"),
-        m("MIT 6.824 — Lecture 5: Go threads, RPC", "https://www.youtube.com/watch?v=2HHTNz_Mz_8", VID, minutes=80, priority=7, type="video"),
-        m("MIT 6.824 — Lecture 6: Raft basics", "https://www.youtube.com/watch?v=R2-9bsKmEbo", VID, minutes=80, priority=10, type="video", cost=1.3, notes="Raft consensus paper walkthrough. Leader election. Required reading."),
-        m("MIT 6.824 — Lecture 7: Raft log replication", "https://www.youtube.com/watch?v=h3JiQ_lnkE8", VID, minutes=80, priority=10, type="video"),
-        m("MIT 6.824 — Lecture 8: ZooKeeper", "https://www.youtube.com/watch?v=pbmyrNjzdDk", VID, minutes=80, priority=8, type="video", notes="Coordination service. Strong consistency primitives others build on."),
-        m("MIT 6.824 — Lecture 9: Chain Replication / CRAQ", "https://www.youtube.com/watch?v=IXHzbCuADt0", VID, minutes=80, priority=7, type="video"),
-        m("MIT 6.824 — Lecture 10: Cloud replicated DBs (Aurora)", "https://www.youtube.com/watch?v=8bMjeNXBjJ8", VID, minutes=80, priority=8, type="video"),
-        m("MIT 6.824 — Lecture 12: Distributed transactions", "https://www.youtube.com/watch?v=DPLPRzGOTBA", VID, minutes=80, priority=9, type="video", notes="2PC, OCC, snapshot isolation."),
-        m("MIT 6.824 — Lecture 13: Spanner", "https://www.youtube.com/watch?v=ZulDvY429B8", VID, minutes=80, priority=9, type="video", notes="Google's globally distributed strongly consistent DB. TrueTime."),
-        m("MIT 6.824 — Lecture 14: FaRM (transactions over RDMA)", "https://www.youtube.com/watch?v=tcaIEMBxpKw", VID, minutes=80, priority=6, type="video"),
-        m("MIT 6.824 — Lecture 17: COPS (causal consistency)", "https://www.youtube.com/watch?v=2yOO1S88EFM", VID, minutes=80, priority=7, type="video"),
-        m("MIT 6.824 — Lecture 19: Frangipani", "https://www.youtube.com/watch?v=2X4ZswcOzvA", VID, minutes=80, priority=6, type="video"),
-        m("MIT 6.824 — Lecture 20: Bitcoin (eventual consensus)", "https://www.youtube.com/watch?v=oCGsLDt1V1A", VID, minutes=80, priority=6, type="video"),
-
         m("Designing Data-Intensive Applications (book)", "https://dataintensive.net/", VID, minutes=60, priority=10, type="reading", cost=1.5, notes="Martin Kleppmann. THE textbook. Schedule 1 chapter per week alongside videos. Non-negotiable."),
     ]
+    items += _gaurav_sen_sessions(VID)
+    items += _jordan_sdi_sessions(VID)
+    items += _mit_6824_sessions(VID)
 
     LLD = "System Design · Phase 1 · LLD"
     items += [

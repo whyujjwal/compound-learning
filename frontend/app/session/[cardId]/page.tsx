@@ -79,9 +79,7 @@ export default function SessionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [startTs, setStartTs] = useState(Date.now());
   const [done, setDone] = useState(false);
-  // Session-wide clock: set once when the page mounts, ticks until completion.
-  const [sessionStart] = useState(() => Date.now());
-  const elapsed = useElapsed(sessionStart, !done);
+  const { elapsed, paused, togglePause } = useBlockClock(queue?.ts ?? null, !done);
 
   // Resolve queue: prefer sessionStorage; otherwise fetch a single card.
   useEffect(() => {
@@ -166,7 +164,12 @@ export default function SessionPage() {
         <header className="session-bar">
           <SessionExit />
           <div className="session-bar-meta">
-            <SessionTimer seconds={elapsed} title="Time in this block" />
+            <SessionTimer
+              seconds={elapsed}
+              paused={paused}
+              onTogglePause={togglePause}
+              title="Time in this block (pause excluded)"
+            />
             <span className="session-bar-counter">
               {total} <span className="total">/ {total}</span>
             </span>
@@ -202,7 +205,12 @@ export default function SessionPage() {
           </span>
         </div>
         <div className="session-bar-meta">
-          <SessionTimer seconds={elapsed} title="Time in this block" />
+          <SessionTimer
+            seconds={elapsed}
+            paused={paused}
+            onTogglePause={togglePause}
+            title="Time in this block (pause excluded)"
+          />
           <span className="session-bar-counter">
             {index + 1} <span className="total">/ {total}</span>
           </span>
@@ -232,25 +240,130 @@ function SessionExit() {
   );
 }
 
-function SessionTimer({ seconds, title }: { seconds: number; title?: string }) {
+function SessionTimer({
+  seconds,
+  paused,
+  onTogglePause,
+  title,
+}: {
+  seconds: number;
+  paused: boolean;
+  onTogglePause: () => void;
+  title?: string;
+}) {
   return (
-    <span className="session-bar-timer" title={title} aria-label="Elapsed session time">
-      <span className="session-bar-timer-dot" aria-hidden />
-      <span className="session-bar-timer-value">{formatClock(seconds)}</span>
-    </span>
+    <div className="session-bar-timer-wrap">
+      <span
+        className={`session-bar-timer${paused ? " session-bar-timer-paused" : ""}`}
+        title={title}
+        aria-label={paused ? "Session timer paused" : "Elapsed session time"}
+      >
+        <span className="session-bar-timer-dot" aria-hidden />
+        <span className="session-bar-timer-value">{formatClock(seconds)}</span>
+      </span>
+      <button
+        type="button"
+        className="session-bar-timer-btn"
+        onClick={onTogglePause}
+        aria-pressed={paused}
+        title={paused ? "Resume timer" : "Pause timer"}
+      >
+        {paused ? "▶" : "⏸"}
+      </button>
+    </div>
   );
 }
 
-function useElapsed(startTs: number, running: boolean): number {
+type ClockState = {
+  queueTs: number;
+  startedAt: number;
+  accumulatedPauseMs: number;
+  pauseStartedAt: number | null;
+};
+
+const CLOCK_KEY = "compound:session-clock";
+
+function loadClock(queueTs: number | null): ClockState | null {
+  if (typeof window === "undefined" || queueTs == null) return null;
+  try {
+    const raw = window.sessionStorage.getItem(CLOCK_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw) as ClockState;
+    return c.queueTs === queueTs ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveClock(state: ClockState) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(CLOCK_KEY, JSON.stringify(state));
+  } catch {}
+}
+
+function useBlockClock(
+  queueTs: number | null,
+  running: boolean
+): { elapsed: number; paused: boolean; togglePause: () => void } {
+  const [clock, setClock] = useState<ClockState | null>(null);
+  const [paused, setPaused] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+
   useEffect(() => {
-    if (!running) return;
-    const tick = () => setNow(Date.now());
-    tick();
-    const id = window.setInterval(tick, 1000);
+    if (queueTs == null) return;
+    const existing = loadClock(queueTs);
+    if (existing) {
+      setClock(existing);
+      setPaused(Boolean(existing.pauseStartedAt));
+      return;
+    }
+    const fresh: ClockState = {
+      queueTs,
+      startedAt: Date.now(),
+      accumulatedPauseMs: 0,
+      pauseStartedAt: null,
+    };
+    saveClock(fresh);
+    setClock(fresh);
+    setPaused(false);
+  }, [queueTs]);
+
+  const togglePause = useCallback(() => {
+    setClock((prev) => {
+      if (!prev) return prev;
+      if (prev.pauseStartedAt) {
+        const delta = Date.now() - prev.pauseStartedAt;
+        const resumed: ClockState = {
+          ...prev,
+          accumulatedPauseMs: prev.accumulatedPauseMs + delta,
+          pauseStartedAt: null,
+        };
+        saveClock(resumed);
+        setPaused(false);
+        return resumed;
+      }
+      const pausedState: ClockState = { ...prev, pauseStartedAt: Date.now() };
+      saveClock(pausedState);
+      setPaused(true);
+      return pausedState;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!running || paused) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [running]);
-  return Math.max(0, Math.floor((now - startTs) / 1000));
+  }, [running, paused]);
+
+  const elapsed = useMemo(() => {
+    if (!clock) return 0;
+    let pauseMs = clock.accumulatedPauseMs;
+    if (clock.pauseStartedAt) pauseMs += now - clock.pauseStartedAt;
+    return Math.max(0, Math.floor((now - clock.startedAt - pauseMs) / 1000));
+  }, [clock, now]);
+
+  return { elapsed, paused, togglePause };
 }
 
 function formatClock(totalSeconds: number): string {

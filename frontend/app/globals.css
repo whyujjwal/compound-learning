@@ -2303,6 +2303,12 @@ a:hover { color: var(--accent-bright); }
   gap: var(--s-3);
 }
 
+.session-bar-timer-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .session-bar-timer {
   display: inline-flex;
   align-items: center;
@@ -2329,6 +2335,35 @@ a:hover { color: var(--accent-bright); }
 }
 
 .session-bar-timer-value { color: var(--fg); }
+
+.session-bar-timer-paused .session-bar-timer-dot {
+  background: var(--fg-mute);
+  animation: none;
+  box-shadow: none;
+}
+
+.session-bar-timer-paused .session-bar-timer-value { color: var(--fg-mute); }
+
+.session-bar-timer-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--fg-soft);
+  font-family: var(--font-mono-stack);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.session-bar-timer-btn:hover {
+  color: var(--fg);
+  border-color: var(--fg-mute);
+}
 
 @keyframes session-timer-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(200, 155, 107, 0.45); }
@@ -2369,6 +2404,55 @@ a:hover { color: var(--accent-bright); }
   line-height: 1.15;
   margin: 0;
 }
+
+.session-brief {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  width: 100%;
+}
+
+.session-section {
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: var(--s-4);
+  border-left: 3px solid var(--hairline);
+}
+
+.session-section-watch { border-left-color: var(--accent); }
+.session-section-do { border-left-color: #6b9fd4; }
+.session-section-deliverable { border-left-color: #7cb87a; }
+.session-section-recall,
+.session-section-recall-open { border-left-color: #c89b6b; }
+.session-section-muted { opacity: 0.72; }
+
+.session-section-label {
+  font-family: var(--font-mono-stack);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-mute);
+  margin-bottom: var(--s-2);
+}
+
+.session-section-body,
+.session-section-hint {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg-soft);
+}
+
+.session-section-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--fg-soft);
+}
+
+.session-section-list li + li { margin-top: 6px; }
 
 .session-content {
   background: var(--surface-1);
