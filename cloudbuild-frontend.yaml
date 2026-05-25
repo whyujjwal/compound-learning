@@ -4,8 +4,8 @@ steps:
     'build',
     '-t', 'asia-south1-docker.pkg.dev/$PROJECT_ID/compound/web:latest',
     '--build-arg', 'NEXT_PUBLIC_API_URL=$_NEXT_PUBLIC_API_URL',
-    '-f', 'frontend/Dockerfile',
-    '.'
+    '-f', 'Dockerfile',
+    'frontend'
   ]
 images:
 - 'asia-south1-docker.pkg.dev/$PROJECT_ID/compound/web:latest'
