@@ -15,8 +15,10 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     ai_max_tokens: int = 2048
 
-    # When set, all API routes (except /health and /auth/login) require Authorization: Bearer <token>
+    # Legacy shared password gate (optional). JWT auth is preferred when configured.
     app_password: str | None = None
+    jwt_secret: str = "compound-dev-secret-change-in-production"
+    jwt_expire_hours: int = 168
 
     @property
     def ai_enabled(self) -> bool:

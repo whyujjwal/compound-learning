@@ -1,14 +1,17 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.track import Track
+from app.models.user import User
 from app.schemas.material import MaterialCreate, MaterialResponse, MaterialUpdate
-from app.services.bootstrap import get_default_user
+from app.schemas.session import StudySessionResponse
+from app.services.session_service import mark_material_complete
 
 router = APIRouter(prefix="/materials", tags=["materials"])
 
@@ -36,8 +39,11 @@ def _material_response(db: Session, material: StudyMaterial) -> MaterialResponse
 
 
 @router.get("", response_model=list[MaterialResponse])
-def list_materials(track_id: UUID | None = None, db: Session = Depends(get_db)) -> list[MaterialResponse]:
-    user = get_default_user(db)
+def list_materials(
+    track_id: UUID | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[MaterialResponse]:
     query = (
         db.query(StudyMaterial)
         .join(Track)
@@ -50,8 +56,11 @@ def list_materials(track_id: UUID | None = None, db: Session = Depends(get_db)) 
 
 
 @router.get("/{material_id}", response_model=MaterialResponse)
-def get_material(material_id: UUID, db: Session = Depends(get_db)) -> MaterialResponse:
-    user = get_default_user(db)
+def get_material(
+    material_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MaterialResponse:
     material = (
         db.query(StudyMaterial)
         .join(Track)
@@ -64,8 +73,11 @@ def get_material(material_id: UUID, db: Session = Depends(get_db)) -> MaterialRe
 
 
 @router.post("", response_model=MaterialResponse, status_code=201)
-def create_material(payload: MaterialCreate, db: Session = Depends(get_db)) -> MaterialResponse:
-    user = get_default_user(db)
+def create_material(
+    payload: MaterialCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MaterialResponse:
     track = db.query(Track).filter(Track.id == payload.track_id, Track.user_id == user.id).first()
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
@@ -96,9 +108,11 @@ def create_material(payload: MaterialCreate, db: Session = Depends(get_db)) -> M
 
 @router.patch("/{material_id}", response_model=MaterialResponse)
 def update_material(
-    material_id: UUID, payload: MaterialUpdate, db: Session = Depends(get_db)
+    material_id: UUID,
+    payload: MaterialUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> MaterialResponse:
-    user = get_default_user(db)
     material = (
         db.query(StudyMaterial)
         .join(Track)
@@ -117,8 +131,11 @@ def update_material(
 
 
 @router.delete("/{material_id}", status_code=204)
-def delete_material(material_id: UUID, db: Session = Depends(get_db)) -> None:
-    user = get_default_user(db)
+def delete_material(
+    material_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
     material = (
         db.query(StudyMaterial)
         .join(Track)
@@ -129,3 +146,47 @@ def delete_material(material_id: UUID, db: Session = Depends(get_db)) -> None:
         raise HTTPException(status_code=404, detail="Material not found")
     db.delete(material)
     db.commit()
+
+
+@router.post("/{material_id}/complete", response_model=StudySessionResponse, status_code=201)
+def complete_material(
+    material_id: UUID,
+    notes: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> StudySessionResponse:
+    material = (
+        db.query(StudyMaterial)
+        .join(Track)
+        .filter(StudyMaterial.id == material_id, Track.user_id == user.id)
+        .first()
+    )
+    if not material:
+        raise HTTPException(status_code=404, detail="Material not found")
+    try:
+        session = mark_material_complete(db, user, material_id, notes=notes)
+        db.commit()
+        from sqlalchemy.orm import joinedload
+        from app.models.study_session import StudySession
+
+        session = (
+            db.query(StudySession)
+            .options(joinedload(StudySession.material))
+            .filter(StudySession.id == session.id)
+            .first()
+        )
+        return StudySessionResponse(
+            id=session.id,
+            material_id=session.material_id,
+            material_title=session.material.title,
+            started_at=session.started_at,
+            ended_at=session.ended_at,
+            duration_minutes=session.duration_minutes,
+            completion_status=session.completion_status,
+            self_rating=session.self_rating,
+            notes=session.notes,
+            external_evidence_url=session.external_evidence_url,
+            created_at=session.created_at,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

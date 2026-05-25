@@ -8,10 +8,15 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.card import Card
 from app.models.material import StudyMaterial
+from app.models.material_completion import CompletionState, MaterialCompletion
 from app.models.review_log import ReviewLog, ReviewRating
+from app.models.study_session import CompletionStatus, StudySession
 from app.models.track import Track
 from app.models.user import User
+from app.schemas.session import StudySessionCreate
+from app.services.session_service import create_session
 from app.services.stats_service import get_stats
+from app.services.weekly_schedule import track_slugs_for_weekday
 
 
 def _aware(dt):
@@ -94,6 +99,79 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "list_tracks",
         "description": "List all tracks with their slugs, names, and material counts.",
         "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "get_session_history",
+        "description": "Get recent study sessions logged for external practice (LeetCode, Coursera, etc.).",
+        "input_schema": {
+            "type": "object",
+            "properties": {"limit": {"type": "integer", "default": 15, "minimum": 1, "maximum": 50}},
+            "required": [],
+        },
+    },
+    {
+        "name": "get_incomplete_materials",
+        "description": "Materials not yet marked complete via study sessions, optionally filtered by track.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"track_slug": {"type": "string"}, "limit": {"type": "integer", "default": 15}},
+            "required": [],
+        },
+    },
+    {
+        "name": "get_leeches",
+        "description": "Cards with 5+ lapses that need extra attention.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"limit": {"type": "integer", "default": 10}},
+            "required": [],
+        },
+    },
+    {
+        "name": "pause_track",
+        "description": "Pause a track slug so it is excluded from daily blocks.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"track_slug": {"type": "string"}},
+            "required": ["track_slug"],
+        },
+    },
+    {
+        "name": "adjust_daily_budget",
+        "description": "Change per-block study minutes budget.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"minutes": {"type": "integer", "minimum": 30, "maximum": 240}},
+            "required": ["minutes"],
+        },
+    },
+    {
+        "name": "log_session",
+        "description": "Log a manual study session for a material (by title search).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "material_title": {"type": "string"},
+                "duration_minutes": {"type": "integer"},
+                "self_rating": {"type": "integer", "minimum": 1, "maximum": 5},
+                "notes": {"type": "string"},
+            },
+            "required": ["material_title"],
+        },
+    },
+    {
+        "name": "generate_weekly_plan",
+        "description": "Suggest focus tracks for the week based on lagging progress.",
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "generate_flashcards_from_notes",
+        "description": "Split session notes into 3 flashcard prompts for a material.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"material_title": {"type": "string"}, "notes": {"type": "string"}},
+            "required": ["material_title", "notes"],
+        },
     },
 ]
 
@@ -305,6 +383,160 @@ class ToolExecutor:
                 for m in materials
             ],
         }
+
+    def _tool_get_session_history(self, limit: int = 15) -> dict[str, Any]:
+        sessions = (
+            self.db.query(StudySession)
+            .options(joinedload(StudySession.material))
+            .filter(StudySession.user_id == self.user.id)
+            .order_by(desc(StudySession.created_at))
+            .limit(limit)
+            .all()
+        )
+        return {
+            "count": len(sessions),
+            "sessions": [
+                {
+                    "material": s.material.title if s.material else None,
+                    "status": s.completion_status.value,
+                    "minutes": s.duration_minutes,
+                    "rating": s.self_rating,
+                    "when": s.created_at.isoformat(),
+                }
+                for s in sessions
+            ],
+        }
+
+    def _tool_get_incomplete_materials(
+        self, track_slug: str | None = None, limit: int = 15
+    ) -> dict[str, Any]:
+        q = (
+            self.db.query(StudyMaterial)
+            .join(Track)
+            .outerjoin(
+                MaterialCompletion,
+                (MaterialCompletion.material_id == StudyMaterial.id)
+                & (MaterialCompletion.user_id == self.user.id),
+            )
+            .filter(
+                Track.user_id == self.user.id,
+                (MaterialCompletion.state.is_(None))
+                | (MaterialCompletion.state != CompletionState.COMPLETED),
+            )
+        )
+        if track_slug:
+            q = q.filter(Track.slug == track_slug)
+        materials = q.limit(limit).all()
+        return {
+            "count": len(materials),
+            "materials": [{"title": m.title, "block": m.block_label} for m in materials],
+        }
+
+    def _tool_get_leeches(self, limit: int = 10) -> dict[str, Any]:
+        cards = (
+            self.db.query(Card)
+            .options(joinedload(Card.material).joinedload(StudyMaterial.track))
+            .filter(Card.user_id == self.user.id, Card.lapses >= 5)
+            .order_by(Card.lapses.desc())
+            .limit(limit)
+            .all()
+        )
+        return {
+            "count": len(cards),
+            "leeches": [
+                {
+                    "title": c.material.title,
+                    "track": c.material.track.name,
+                    "lapses": c.lapses,
+                    "retrievability_percent": round(c.retrievability * 100, 1),
+                }
+                for c in cards
+            ],
+        }
+
+    def _tool_pause_track(self, track_slug: str) -> dict[str, Any]:
+        track = (
+            self.db.query(Track)
+            .filter(Track.user_id == self.user.id, Track.slug == track_slug)
+            .first()
+        )
+        if not track:
+            return {"error": f"Track '{track_slug}' not found"}
+        paused = list(self.user.paused_tracks or [])
+        if track_slug not in paused:
+            paused.append(track_slug)
+            self.user.paused_tracks = paused
+            self.db.commit()
+        return {"paused_tracks": paused, "message": f"Paused {track_slug}"}
+
+    def _tool_adjust_daily_budget(self, minutes: int) -> dict[str, Any]:
+        self.user.daily_study_minutes = minutes
+        self.db.commit()
+        return {"daily_study_minutes": minutes, "message": f"Block budget set to {minutes} min"}
+
+    def _tool_log_session(
+        self,
+        material_title: str,
+        duration_minutes: int | None = None,
+        self_rating: int | None = None,
+        notes: str | None = None,
+    ) -> dict[str, Any]:
+        material = (
+            self.db.query(StudyMaterial)
+            .join(Track)
+            .filter(
+                Track.user_id == self.user.id,
+                func.lower(StudyMaterial.title).like(f"%{material_title.lower()}%"),
+            )
+            .first()
+        )
+        if not material:
+            return {"error": f"No material matching '{material_title}'"}
+        session = create_session(
+            self.db,
+            self.user,
+            StudySessionCreate(
+                material_id=material.id,
+                duration_minutes=duration_minutes,
+                self_rating=self_rating,
+                notes=notes,
+                completion_status=CompletionStatus.COMPLETED,
+            ),
+        )
+        self.db.commit()
+        return {"logged": True, "material": material.title, "session_id": str(session.id)}
+
+    def _tool_generate_weekly_plan(self) -> dict[str, Any]:
+        stats = get_stats(self.db, self.user)
+        lagging = sorted(stats.track_breakdown, key=lambda t: t.reviews_total)[:2]
+        weekday = datetime.now(UTC).weekday()
+        today = track_slugs_for_weekday(weekday)
+        return {
+            "today_blocks": today,
+            "focus_tracks": [t.track_name for t in lagging],
+            "recommendation": (
+                f"Today covers {', '.join(today)}. Prioritize extra time on "
+                f"{lagging[0].track_name if lagging else 'your weakest track'}."
+            ),
+        }
+
+    def _tool_generate_flashcards_from_notes(
+        self, material_title: str, notes: str
+    ) -> dict[str, Any]:
+        chunks = [s.strip() for s in notes.replace("\n", ". ").split(".") if s.strip()]
+        prompts = chunks[:3] if chunks else [f"What is the core idea of {material_title}?"]
+        cards = [
+            {"front": f"{material_title}: {p[:80]}", "back": p}
+            for p in prompts
+        ]
+        while len(cards) < 3:
+            cards.append(
+                {
+                    "front": f"Explain {material_title} concept #{len(cards)+1}",
+                    "back": "Fill from your session notes.",
+                }
+            )
+        return {"material": material_title, "suggested_cards": cards[:3]}
 
     def _tool_list_tracks(self) -> dict[str, Any]:
         tracks = self.db.query(Track).filter(Track.user_id == self.user.id).all()

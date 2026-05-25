@@ -186,6 +186,9 @@ export default function TrackPage() {
             </div>
           </div>
           <div className="track-cta">
+            <Link href={`/graph/${slug}`} className="v2-btn ghost" style={{ marginRight: 8 }}>
+              Knowledge graph
+            </Link>
             <button
               type="button"
               className="v2-btn primary"

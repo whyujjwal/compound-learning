@@ -227,15 +227,29 @@ export type Stats = {
 export type User = {
   id: string;
   email: string;
+  display_name: string | null;
   target_retention: number;
   daily_study_minutes: number;
   paused_tracks: string[];
+  milestone_title: string | null;
+  milestone_date: string | null;
+  created_at: string;
 };
 
 export const api = {
   getUser: () => request<User>("/user/me"),
   updateUser: (
-    data: Partial<Pick<User, "target_retention" | "daily_study_minutes" | "paused_tracks">>
+    data: Partial<
+      Pick<
+        User,
+        | "target_retention"
+        | "daily_study_minutes"
+        | "paused_tracks"
+        | "display_name"
+        | "milestone_title"
+        | "milestone_date"
+      >
+    >
   ) => request<User>("/user/me", { method: "PATCH", body: JSON.stringify(data) }),
 
   getTracks: () => request<Track[]>("/tracks"),
@@ -304,6 +318,9 @@ export const api = {
     ),
 
   getCurriculumOverview: () => request<CurriculumOverview>("/curriculum/overview"),
+  getWeeklySchedule: () => request<Record<string, { block: number; track: string }[]>>("/curriculum/schedule"),
+  getTodaySchedule: () =>
+    request<{ block: number; track: string; track_name: string | null }[]>("/curriculum/schedule/today"),
   importCurriculum: () => request<Record<string, number>>("/curriculum/import/default", { method: "POST" }),
   getTrackProgress: (slug: string) => request<TrackProgress>(`/tracks/slug/${slug}/progress`),
   getExtraQueue: (trackSlug: string, count = 5, excludeCardIds: string[] = []) => {
@@ -339,6 +356,45 @@ export const api = {
     request<CoachInsight>(`/chat/insights/daily${refresh ? "?refresh=true" : ""}`),
   getWeeklyInsight: (refresh = false) =>
     request<CoachInsight>(`/chat/insights/weekly${refresh ? "?refresh=true" : ""}`),
+
+  logSession: (data: {
+    material_id: string;
+    duration_minutes?: number;
+    completion_status?: "STARTED" | "COMPLETED" | "SKIPPED";
+    self_rating?: number;
+    notes?: string;
+    external_evidence_url?: string;
+  }) =>
+    request<StudySession>("/sessions", { method: "POST", body: JSON.stringify(data) }),
+
+  completeMaterial: (materialId: string, notes?: string) =>
+    request<StudySession>(
+      `/materials/${materialId}/complete${notes ? `?notes=${encodeURIComponent(notes)}` : ""}`,
+      { method: "POST" }
+    ),
+
+  getRecentSessions: (limit = 20) => request<StudySession[]>(`/sessions/recent?limit=${limit}`),
+
+  getKnowledgeGraph: (slug: string) => request<KnowledgeGraph>(`/knowledge-graph/track/${slug}`),
+
+  getLeeches: (limit = 20) => request<GraphNode[]>(`/knowledge-graph/leeches?limit=${limit}`),
+
+  listOrganizations: () => request<Organization[]>(`/organizations`),
+
+  createOrganization: (data: { name: string; slug: string; description?: string }) =>
+    request<Organization>("/organizations", { method: "POST", body: JSON.stringify(data) }),
+
+  register: (email: string, password: string, display_name?: string) =>
+    request<AuthResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, display_name }),
+    }),
+
+  loginWithEmail: (email: string, password: string) =>
+    request<AuthResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
 };
 
 export type CoachInsight = {
@@ -366,4 +422,52 @@ export type Conversation = {
   created_at: string;
   updated_at: string;
   messages: ChatMessage[];
+};
+
+export type StudySession = {
+  id: string;
+  material_id: string;
+  material_title: string | null;
+  started_at: string;
+  ended_at: string | null;
+  duration_minutes: number | null;
+  completion_status: string;
+  self_rating: number | null;
+  notes: string | null;
+  external_evidence_url: string | null;
+  created_at: string;
+};
+
+export type GraphNode = {
+  id: string;
+  title: string;
+  block_label: string | null;
+  sequence: number;
+  mastered: boolean;
+  started: boolean;
+  lapses: number;
+  is_leech: boolean;
+};
+
+export type KnowledgeGraph = {
+  track_slug: string;
+  track_name: string;
+  nodes: GraphNode[];
+  edges: { source: string; target: string }[];
+};
+
+export type Organization = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  created_at: string;
+  member_count: number;
+};
+
+export type AuthResponse = {
+  auth_required: boolean;
+  token: string | null;
+  user_id: string | null;
+  email: string | null;
 };

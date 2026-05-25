@@ -5,11 +5,27 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import auth, cards, chat, curriculum, materials, queue, stats, tracks, user
+from app.api.routes import (
+    auth,
+    cards,
+    chat,
+    curriculum,
+    integrations,
+    knowledge_graph,
+    materials,
+    organizations,
+    queue,
+    sessions,
+    stats,
+    tracks,
+    user,
+)
 from app.auth import auth_enabled, verify_token
 from app.config import settings
 from app.database import Base, SessionLocal, engine
+from app.services.auth_service import decode_access_token
 from app.services.bootstrap import bootstrap
+from app.services.cors_helpers import cors_middleware_kwargs
 
 logging.basicConfig(
     level=settings.log_level,
@@ -32,26 +48,26 @@ async def lifespan(_: FastAPI):
     logger.info("Compound API shutting down.")
 
 
-app = FastAPI(title="Compound Learning Platform", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Compound Learning Platform", version="2.0.0", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, **cors_middleware_kwargs())
+
+_PUBLIC_PATHS = {"/health", "/api/auth/login", "/api/auth/register", "/api/integrations/lti/config"}
 
 
-_PUBLIC_PATHS = {"/health", "/api/auth/login"}
+def _token_valid(token: str | None) -> bool:
+    if not token:
+        return False
+    if verify_token(token):
+        return True
+    return decode_access_token(token) is not None
 
 
 @app.middleware("http")
-async def require_app_password(request: Request, call_next):
+async def require_auth(request: Request, call_next):
     if not auth_enabled():
         return await call_next(request)
 
-    # Browsers send OPTIONS preflight without Authorization — let CORS handle it.
     if request.method == "OPTIONS":
         return await call_next(request)
 
@@ -61,7 +77,7 @@ async def require_app_password(request: Request, call_next):
 
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else None
-    if not verify_token(token):
+    if not _token_valid(token):
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
     return await call_next(request)
@@ -82,6 +98,10 @@ app.include_router(stats.router, prefix="/api")
 app.include_router(user.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(curriculum.router, prefix="/api")
+app.include_router(sessions.router, prefix="/api")
+app.include_router(organizations.router, prefix="/api")
+app.include_router(knowledge_graph.router, prefix="/api")
+app.include_router(integrations.router, prefix="/api")
 
 
 @app.get("/health")

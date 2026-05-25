@@ -13,6 +13,8 @@ const VIEWS = [
 
 const FOOTER = [
   { href: "/curriculum", label: "Roadmap", icon: "▦", match: (p: string) => p === "/curriculum" },
+  { href: "/curriculum/edit", label: "Editor", icon: "✎", match: (p: string) => p.startsWith("/curriculum/edit") },
+  { href: "/team", label: "Team", icon: "◈", match: (p: string) => p.startsWith("/team") },
   { href: "/settings", label: "Settings", icon: "⚙", match: (p: string) => p.startsWith("/settings") },
 ];
 

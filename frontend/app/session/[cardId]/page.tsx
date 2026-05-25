@@ -258,7 +258,51 @@ export default function SessionPage() {
         submitting={submitting}
         onRate={submit}
       />
+      <SessionLogPanel materialId={current.material_id} materialTitle={current.material_title} />
     </>
+  );
+}
+
+function SessionLogPanel({
+  materialId,
+  materialTitle,
+}: {
+  materialId: string;
+  materialTitle: string;
+}) {
+  const [minutes, setMinutes] = useState(25);
+  const [rating, setRating] = useState(3);
+  const [notes, setNotes] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  async function logSession() {
+    await api.logSession({
+      material_id: materialId,
+      duration_minutes: minutes,
+      self_rating: rating,
+      notes: notes || undefined,
+      completion_status: "COMPLETED",
+    });
+    setSaved(true);
+  }
+
+  return (
+    <aside className="session-log-panel">
+      <p className="session-log-title">Log practice · {materialTitle}</p>
+      <div className="session-log-row">
+        <label>
+          Minutes
+          <input type="number" min={1} max={240} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} />
+        </label>
+        <label>
+          Confidence
+          <input type="number" min={1} max={5} value={rating} onChange={(e) => setRating(Number(e.target.value))} />
+        </label>
+        <button type="button" className="v2-btn ghost sm" onClick={logSession}>
+          {saved ? "Logged ✓" : "Log session"}
+        </button>
+      </div>
+    </aside>
   );
 }
 

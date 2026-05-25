@@ -1,37 +1,16 @@
 import logging
 from pathlib import Path
 
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.card import Card
 from app.models.material import StudyMaterial
+from app.models.organization import MemberRole, Organization, OrganizationMember
 from app.models.scheduler_params import DEFAULT_FSRS_WEIGHTS, SchedulerParameters
 from app.models.track import Track
 from app.models.user import User
 
 logger = logging.getLogger("compound.bootstrap")
-
-
-# Idempotent ALTER TABLE statements applied at startup so the deployed
-# database stays in sync with the SQLAlchemy models without needing a
-# full migration framework. Each statement must be safe to run multiple
-# times against an already-up-to-date schema.
-_LIGHTWEIGHT_MIGRATIONS: tuple[str, ...] = (
-    "ALTER TABLE users ADD COLUMN IF NOT EXISTS paused_tracks "
-    "VARCHAR[] NOT NULL DEFAULT '{}'",
-)
-
-
-def apply_lightweight_migrations(db: Session) -> None:
-    for stmt in _LIGHTWEIGHT_MIGRATIONS:
-        try:
-            db.execute(text(stmt))
-        except Exception:
-            db.rollback()
-            logger.exception("Lightweight migration failed: %s", stmt)
-            raise
-    db.commit()
 
 SYSTEM_TRACKS = [
     {
@@ -57,70 +36,44 @@ SYSTEM_TRACKS = [
     },
 ]
 
-SEED_MATERIALS = {
-    "dsa": [
-        {
-            "title": "Two Sum — Hash Map Pattern",
-            "raw_content": "Use a hash map to store complements. For each nums[i], check if target - nums[i] exists. O(n) time, O(n) space.",
-            "external_url": "https://leetcode.com/problems/two-sum/",
-            "estimated_minutes": 15,
-            "priority_percent": 5,
-        },
-        {
-            "title": "Sliding Window Maximum",
-            "raw_content": "Monotonic deque stores indices in decreasing value order. Front is always the window max. Pop from back when adding smaller elements.",
-            "estimated_minutes": 25,
-            "priority_percent": 15,
-        },
-        {
-            "title": "Binary Search on Answer Space",
-            "raw_content": "When answer is monotonic (feasible/infeasible split), binary search the answer range. Template: while lo < hi, mid = (lo+hi+1)//2, check feasibility.",
-            "estimated_minutes": 20,
-            "priority_percent": 20,
-        },
-    ],
-    "ai-math": [
-        {
-            "title": "Matrix Calculus — Chain Rule",
-            "raw_content": "For y = f(g(x)), dy/dx = (df/dg)(dg/dx). Jacobian generalizes to vector-valued functions. Backprop is reverse-mode autodiff applying chain rule.",
-            "estimated_minutes": 30,
-            "priority_percent": 10,
-        },
-        {
-            "title": "Attention Mechanism",
-            "raw_content": "Attention(Q,K,V) = softmax(QK^T / sqrt(d_k)) V. Queries attend to keys; values are weighted sums. Multi-head splits into parallel subspaces.",
-            "estimated_minutes": 25,
-            "priority_percent": 15,
-        },
-    ],
-    "system-design": [
-        {
-            "title": "Cache-Aside Pattern",
-            "raw_content": "App checks cache first. On miss, read DB, populate cache, return. On write, update DB then invalidate cache. Simple but stale reads possible between write and invalidate.",
-            "estimated_minutes": 15,
-            "priority_percent": 10,
-        },
-        {
-            "title": "CAP Theorem",
-            "raw_content": "Under partition, choose Consistency (all nodes see same data) or Availability (every request gets response). CP: HBase, ZooKeeper. AP: Cassandra, DynamoDB.",
-            "estimated_minutes": 20,
-            "priority_percent": 15,
-        },
-    ],
-}
-
 
 def get_default_user(db: Session) -> User:
     user = db.query(User).filter(User.email == "learner@compound.local").first()
     if user:
         return user
-    user = User(email="learner@compound.local")
+    user = User(email="learner@compound.local", display_name="Learner")
     db.add(user)
     db.flush()
     seed_system_tracks(db, user)
+    seed_default_organization(db, user)
     db.commit()
     db.refresh(user)
     return user
+
+
+def seed_default_organization(db: Session, user: User) -> None:
+    org = db.query(Organization).filter(Organization.slug == "compound").first()
+    if not org:
+        org = Organization(
+            name="Compound",
+            slug="compound",
+            description="Default learning organization",
+        )
+        db.add(org)
+        db.flush()
+    existing = (
+        db.query(OrganizationMember)
+        .filter(OrganizationMember.organization_id == org.id, OrganizationMember.user_id == user.id)
+        .first()
+    )
+    if not existing:
+        db.add(
+            OrganizationMember(
+                organization_id=org.id,
+                user_id=user.id,
+                role=MemberRole.ADMIN,
+            )
+        )
 
 
 def seed_system_tracks(db: Session, user: User) -> None:
@@ -129,22 +82,6 @@ def seed_system_tracks(db: Session, user: User) -> None:
         db.add(track)
         db.flush()
         ensure_scheduler_params(db, user, track)
-
-
-def seed_demo_materials(db: Session, user: User) -> None:
-    tracks = {t.slug: t for t in db.query(Track).filter(Track.user_id == user.id).all()}
-    for slug, materials in SEED_MATERIALS.items():
-        track = tracks.get(slug)
-        if not track:
-            continue
-        existing = db.query(StudyMaterial).filter(StudyMaterial.track_id == track.id).count()
-        if existing > 0:
-            continue
-        for item in materials:
-            material = StudyMaterial(track_id=track.id, **item)
-            db.add(material)
-            db.flush()
-            db.add(Card(user_id=user.id, material_id=material.id))
 
 
 def ensure_scheduler_params(db: Session, user: User, track: Track) -> None:
@@ -172,7 +109,6 @@ def ensure_scheduler_params(db: Session, user: User, track: Track) -> None:
 
 
 def _sync_curriculum(db: Session, user: User) -> None:
-    """Merge bundled curriculum.json into the user's tracks (create, update, prune orphans)."""
     curriculum_path = Path(__file__).resolve().parents[3] / "docs" / "curriculum.json"
     if not curriculum_path.exists():
         return
@@ -180,10 +116,12 @@ def _sync_curriculum(db: Session, user: User) -> None:
     from app.services.curriculum_loader import import_curriculum, load_file
 
     import_curriculum(db, user, load_file(curriculum_path), prune_orphans=True)
+    from app.services.weekly_schedule import invalidate_schedule_cache
+
+    invalidate_schedule_cache()
 
 
 def bootstrap(db: Session) -> None:
-    apply_lightweight_migrations(db)
     user = get_default_user(db)
     tracks = db.query(Track).filter(Track.user_id == user.id).all()
     for track in tracks:

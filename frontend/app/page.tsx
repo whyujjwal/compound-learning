@@ -9,17 +9,8 @@ import { Heatmap } from "@/components/Heatmap";
 import { trackAccent } from "@/lib/trackColors";
 import { api, type BlockEntry, type CoachInsight, type QueueItem } from "@/lib/api";
 
-const DAY_TRACKS: Record<number, string[]> = {
-  0: ["dsa", "ai-math"],
-  1: ["dsa", "llm-ml"],
-  2: ["dsa", "system-design"],
-  3: ["ai-math", "llm-ml"],
-  4: ["dsa", "system-design"],
-  5: ["dsa", "ai-math", "llm-ml", "system-design"],
-  6: ["dsa", "ai-math", "llm-ml", "system-design"],
-};
-
 const DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 function dateLabel(): { day: string; meta: string } {
   const d = new Date();
@@ -345,11 +336,15 @@ function BlockRow({
 }
 
 function ThisWeek({ tracks }: { tracks: Record<string, { name: string; slug: string; color: string }> }) {
+  const [schedule, setSchedule] = useState<Record<string, { block: number; track: string }[]> | null>(null);
+  useEffect(() => {
+    api.getWeeklySchedule().then(setSchedule).catch(() => {});
+  }, []);
   const today = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
   return (
     <div className="week-list">
       {DAY_ABBR.map((abbr, i) => {
-        const slugs = DAY_TRACKS[i] ?? [];
+        const slugs = (schedule?.[DAY_KEYS[i]] ?? []).map((b) => b.track);
         const isToday = i === today;
         return (
           <div key={abbr} className={`week-row${isToday ? " today" : ""}`}>

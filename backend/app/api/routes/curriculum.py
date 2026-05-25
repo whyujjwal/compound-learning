@@ -7,9 +7,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.track import Track
+from app.models.user import User
 from app.schemas.curriculum import (
     BlockScheduleItem,
     BlockSummary,
@@ -17,58 +19,77 @@ from app.schemas.curriculum import (
     TrackCurriculumSummary,
     WeeklySchedule,
 )
-from app.services.bootstrap import get_default_user
+from app.schemas.reschedule import RescheduleRequest, RescheduleResponse
 from app.services.curriculum_loader import import_curriculum, load_file
+from app.services.mastery import is_mastered
+from app.services.weekly_schedule import (
+    load_weekly_schedule_model,
+    today_block_items,
+    track_slugs_for_weekday,
+)
 
 router = APIRouter(prefix="/curriculum", tags=["curriculum"])
 
 DEFAULT_PATH = Path(__file__).resolve().parents[3].parent / "docs" / "curriculum.json"
 
-DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-TRACK_NAMES = {
-    "dsa": "Data Structures & Algorithms",
-    "ai-math": "Mathematics for AI",
-    "llm-ml": "LLM & Machine Learning",
-    "system-design": "System Design",
-    "review": "Review & Projects",
-}
-
 
 def _load_schedule() -> WeeklySchedule | None:
-    if not DEFAULT_PATH.exists():
-        return None
-    data = load_file(DEFAULT_PATH)
-    raw = data.get("weekly_schedule")
-    if not raw:
-        return None
-    return WeeklySchedule.model_validate(raw)
+    return load_weekly_schedule_model()
 
 
-def _today_blocks(schedule: WeeklySchedule | None) -> list[BlockScheduleItem]:
+@router.get("/schedule", response_model=WeeklySchedule)
+def get_weekly_schedule() -> WeeklySchedule:
+    schedule = _load_schedule()
     if not schedule:
-        return []
-    key = DAY_KEYS[datetime.now(UTC).weekday()]
-    blocks = getattr(schedule, key, [])
-    return [
-        BlockScheduleItem(
-            block=b.block,
-            track=b.track,
-            track_name=TRACK_NAMES.get(b.track, b.track),
+        raise HTTPException(status_code=404, detail="Weekly schedule not found")
+    return schedule
+
+
+@router.get("/schedule/today", response_model=list[BlockScheduleItem])
+def get_today_schedule() -> list[BlockScheduleItem]:
+    return today_block_items()
+
+
+@router.post("/reschedule", response_model=RescheduleResponse)
+def reschedule_curriculum(
+    payload: RescheduleRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RescheduleResponse:
+    """Adjust pacing from a start date. Does not shift FSRS due dates — only reports lagging tracks."""
+    tracks = db.query(Track).filter(Track.user_id == user.id).all()
+    lagging: list[str] = []
+    for track in tracks:
+        materials = db.query(StudyMaterial).filter(StudyMaterial.track_id == track.id).count()
+        if materials == 0:
+            continue
+        cards = (
+            db.query(Card)
+            .join(StudyMaterial)
+            .filter(StudyMaterial.track_id == track.id, Card.user_id == user.id)
+            .all()
         )
-        for b in blocks
-    ]
-
-
-def _is_mastered(card: Card) -> bool:
-    return (card.retrievability or 0) >= 0.85 and card.reps >= 3
+        mastered = sum(1 for c in cards if is_mastered(c))
+        if materials and mastered / materials < 0.15:
+            lagging.append(track.slug)
+    return RescheduleResponse(
+        start_date=payload.start_date,
+        message=(
+            f"Pace review from {payload.start_date.isoformat()}. "
+            f"Lagging tracks: {', '.join(lagging) if lagging else 'none'}."
+        ),
+        adjusted_tracks=lagging,
+    )
 
 
 @router.get("/overview", response_model=CurriculumOverview)
-def curriculum_overview(db: Session = Depends(get_db)) -> CurriculumOverview:
-    user = get_default_user(db)
+def curriculum_overview(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CurriculumOverview:
     now = datetime.now(UTC)
     schedule = _load_schedule()
-    today = _today_blocks(schedule)
+    today = today_block_items()
 
     tracks = db.query(Track).filter(Track.user_id == user.id).order_by(Track.name).all()
     track_summaries: list[TrackCurriculumSummary] = []
@@ -95,7 +116,7 @@ def curriculum_overview(db: Session = Depends(get_db)) -> CurriculumOverview:
         card_by_material = {c.material_id: c for c in cards}
 
         started = sum(1 for c in cards if c.reps > 0)
-        mastered = sum(1 for c in cards if _is_mastered(c))
+        mastered = sum(1 for c in cards if is_mastered(c))
         due_reviews = sum(
             1
             for c in cards
@@ -132,7 +153,7 @@ def curriculum_overview(db: Session = Depends(get_db)) -> CurriculumOverview:
             if card:
                 if card.reps > 0:
                     block_map[label].started_count += 1
-                if _is_mastered(card):
+                if is_mastered(card):
                     block_map[label].mastered_count += 1
                 if (card is None or card.reps == 0) and not block_map[label].next_material:
                     block_map[label].next_material = material.title
@@ -182,13 +203,12 @@ class ImportFromJSONRequest(BaseModel):
 
 
 @router.post("/import/default", response_model=dict[str, int])
-def import_default(prune: bool = False, db: Session = Depends(get_db)) -> dict[str, int]:
-    """Import the bundled curriculum at docs/curriculum.json.
-
-    Pass `?prune=true` to also delete materials that no longer appear in the JSON
-    (cleans up legacy items from earlier curriculum revisions).
-    """
-    user = get_default_user(db)
+def import_default(
+    prune: bool = False,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, int]:
+    """Import the bundled curriculum at docs/curriculum.json."""
     if not DEFAULT_PATH.exists():
         raise HTTPException(status_code=404, detail=f"Default curriculum not found at {DEFAULT_PATH}")
     data = load_file(DEFAULT_PATH)
@@ -196,8 +216,11 @@ def import_default(prune: bool = False, db: Session = Depends(get_db)) -> dict[s
 
 
 @router.post("/import/path", response_model=dict[str, int])
-def import_from_path(payload: ImportFromPathRequest, db: Session = Depends(get_db)) -> dict[str, int]:
-    user = get_default_user(db)
+def import_from_path(
+    payload: ImportFromPathRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, int]:
     if not payload.path:
         raise HTTPException(status_code=400, detail="path is required")
     try:
@@ -208,8 +231,11 @@ def import_from_path(payload: ImportFromPathRequest, db: Session = Depends(get_d
 
 
 @router.post("/import", response_model=dict[str, int])
-def import_inline(payload: ImportFromJSONRequest, db: Session = Depends(get_db)) -> dict[str, int]:
-    user = get_default_user(db)
+def import_inline(
+    payload: ImportFromJSONRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, int]:
     return import_curriculum(db, user, payload.data)
 
 

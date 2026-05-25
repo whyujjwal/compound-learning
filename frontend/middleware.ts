@@ -1,11 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
+import { jwtVerify } from "jose";
 import { AUTH_COOKIE, expectedToken } from "@/lib/auth";
 
 const PUBLIC_PATHS = new Set(["/login"]);
 
+function looksLikeJwt(token: string): boolean {
+  return token.split(".").length === 3;
+}
+
+async function isValidJwt(token: string): Promise<boolean> {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) return looksLikeJwt(token);
+  try {
+    await jwtVerify(token, new TextEncoder().encode(secret));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function middleware(request: NextRequest) {
   const password = process.env.APP_PASSWORD;
-  if (!password) {
+  if (!password && !process.env.JWT_SECRET) {
     return NextResponse.next();
   }
 
@@ -19,12 +35,15 @@ export async function middleware(request: NextRequest) {
     return redirectToLogin(request);
   }
 
-  const valid = token === (await expectedToken(password));
-  if (!valid) {
-    return redirectToLogin(request);
+  if (password && token === (await expectedToken(password))) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  if (await isValidJwt(token)) {
+    return NextResponse.next();
+  }
+
+  return redirectToLogin(request);
 }
 
 function redirectToLogin(request: NextRequest) {

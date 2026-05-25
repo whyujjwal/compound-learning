@@ -34,3 +34,5 @@ class StudyMaterial(Base):
     track = relationship("Track", back_populates="materials")
     cards = relationship("Card", back_populates="material", cascade="all, delete-orphan")
     prerequisite = relationship("StudyMaterial", remote_side="StudyMaterial.id")
+    study_sessions = relationship("StudySession", back_populates="material", cascade="all, delete-orphan")
+    completions = relationship("MaterialCompletion", back_populates="material", cascade="all, delete-orphan")

@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models.chat import Conversation, Message
+from app.models.user import User
 from app.schemas.chat import (
     AIStatus,
     CoachInsightResponse,
@@ -18,7 +20,6 @@ from app.schemas.chat import (
     SendMessageResponse,
 )
 from app.services.ai_service import AIDisabled, chat_completion
-from app.services.bootstrap import get_default_user
 from app.services.coach_insights import get_or_create_daily, get_or_create_weekly
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -30,8 +31,10 @@ def ai_status() -> AIStatus:
 
 
 @router.get("/conversations", response_model=list[ConversationSummary])
-def list_conversations(db: Session = Depends(get_db)) -> list[ConversationSummary]:
-    user = get_default_user(db)
+def list_conversations(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[ConversationSummary]:
     rows = (
         db.query(
             Conversation,
@@ -57,9 +60,10 @@ def list_conversations(db: Session = Depends(get_db)) -> list[ConversationSummar
 
 @router.post("/conversations", response_model=ConversationDetail, status_code=201)
 def create_conversation(
-    payload: CreateConversationRequest, db: Session = Depends(get_db)
+    payload: CreateConversationRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> ConversationDetail:
-    user = get_default_user(db)
     conv = Conversation(user_id=user.id, title=payload.title or "New conversation")
     db.add(conv)
     db.commit()
@@ -74,8 +78,11 @@ def create_conversation(
 
 
 @router.get("/conversations/{conv_id}", response_model=ConversationDetail)
-def get_conversation(conv_id: UUID, db: Session = Depends(get_db)) -> ConversationDetail:
-    user = get_default_user(db)
+def get_conversation(
+    conv_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ConversationDetail:
     conv = (
         db.query(Conversation)
         .options(joinedload(Conversation.messages))
@@ -94,8 +101,11 @@ def get_conversation(conv_id: UUID, db: Session = Depends(get_db)) -> Conversati
 
 
 @router.delete("/conversations/{conv_id}", status_code=204)
-def delete_conversation(conv_id: UUID, db: Session = Depends(get_db)) -> None:
-    user = get_default_user(db)
+def delete_conversation(
+    conv_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
     conv = (
         db.query(Conversation)
         .filter(Conversation.id == conv_id, Conversation.user_id == user.id)
@@ -109,9 +119,11 @@ def delete_conversation(conv_id: UUID, db: Session = Depends(get_db)) -> None:
 
 @router.post("/conversations/{conv_id}/messages", response_model=SendMessageResponse)
 def send_message(
-    conv_id: UUID, payload: SendMessageRequest, db: Session = Depends(get_db)
+    conv_id: UUID,
+    payload: SendMessageRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> SendMessageResponse:
-    user = get_default_user(db)
     conv = (
         db.query(Conversation)
         .options(joinedload(Conversation.messages))
@@ -135,9 +147,6 @@ def send_message(
     )
 
 
-# ---------------------------------------------------------------------------
-# Proactive coach insights — daily nudge + weekly postmortem
-# ---------------------------------------------------------------------------
 def _insight_to_response(insight) -> CoachInsightResponse:
     return CoachInsightResponse(
         kind=insight.kind.value if hasattr(insight.kind, "value") else str(insight.kind),
@@ -151,8 +160,11 @@ def _insight_to_response(insight) -> CoachInsightResponse:
 
 
 @router.get("/insights/daily", response_model=CoachInsightResponse)
-def daily_insight(refresh: bool = False, db: Session = Depends(get_db)) -> CoachInsightResponse:
-    user = get_default_user(db)
+def daily_insight(
+    refresh: bool = False,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CoachInsightResponse:
     try:
         insight = get_or_create_daily(db, user, refresh=refresh)
     except AIDisabled as e:
@@ -163,8 +175,11 @@ def daily_insight(refresh: bool = False, db: Session = Depends(get_db)) -> Coach
 
 
 @router.get("/insights/weekly", response_model=CoachInsightResponse)
-def weekly_insight(refresh: bool = False, db: Session = Depends(get_db)) -> CoachInsightResponse:
-    user = get_default_user(db)
+def weekly_insight(
+    refresh: bool = False,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CoachInsightResponse:
     try:
         insight = get_or_create_weekly(db, user, refresh=refresh)
     except AIDisabled as e:

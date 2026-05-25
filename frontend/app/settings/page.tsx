@@ -21,6 +21,8 @@ export default function SettingsPage() {
   const [retention, setRetention] = useState(0.9);
   const [blockMinutes, setBlockMinutes] = useState(120);
   const [pausedTracks, setPausedTracks] = useState<string[]>([]);
+  const [milestoneTitle, setMilestoneTitle] = useState("");
+  const [milestoneDate, setMilestoneDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -39,6 +41,8 @@ export default function SettingsPage() {
         setRetention(u.target_retention);
         setBlockMinutes(u.daily_study_minutes);
         setPausedTracks(u.paused_tracks ?? []);
+        setMilestoneTitle(u.milestone_title ?? "");
+        setMilestoneDate(u.milestone_date ? u.milestone_date.slice(0, 10) : "");
         setAIStatus(s);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
@@ -58,6 +62,8 @@ export default function SettingsPage() {
         target_retention: retention,
         daily_study_minutes: blockMinutes,
         paused_tracks: pausedTracks,
+        milestone_title: milestoneTitle || null,
+        milestone_date: milestoneDate ? new Date(milestoneDate).toISOString() : null,
       });
       setUser(updated);
       setMessage("Saved.");
@@ -121,6 +127,31 @@ export default function SettingsPage() {
             <span className="field-hint">
               How long a single block lasts. New items pack up to this budget; FSRS reviews always run.
             </span>
+          </div>
+        </section>
+
+        <section className="settings-panel">
+          <h2>Milestone / exam mode</h2>
+          <p className="field-hint" style={{ marginBottom: 12 }}>
+            Set a target date (e.g. interview) to boost consolidation reviews as the date approaches.
+          </p>
+          <div className="field">
+            <span className="field-label">Milestone title</span>
+            <input
+              className="v2-input"
+              placeholder="Google interview"
+              value={milestoneTitle}
+              onChange={(e) => setMilestoneTitle(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <span className="field-label">Target date</span>
+            <input
+              type="date"
+              className="v2-input"
+              value={milestoneDate}
+              onChange={(e) => setMilestoneDate(e.target.value)}
+            />
           </div>
         </section>
 

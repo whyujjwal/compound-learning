@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.track import Track
@@ -16,14 +17,11 @@ from app.schemas.track import (
     TrackResponse,
     TrackUpdate,
 )
-from app.services.bootstrap import get_default_user, ensure_scheduler_params
+from app.services.bootstrap import ensure_scheduler_params
+from app.services.fsrs_optimizer import optimize_track_weights
+from app.services.mastery import is_mastered
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
-
-
-def _is_mastered(card: Card) -> bool:
-    return (card.retrievability or 0) >= 0.85 and card.reps >= 3
-
 
 def _track_response(db: Session, track: Track) -> TrackResponse:
     now = datetime.now(UTC)
@@ -55,15 +53,20 @@ def _track_response(db: Session, track: Track) -> TrackResponse:
 
 
 @router.get("", response_model=list[TrackResponse])
-def list_tracks(db: Session = Depends(get_db)) -> list[TrackResponse]:
-    user = get_default_user(db)
+def list_tracks(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[TrackResponse]:
     tracks = db.query(Track).filter(Track.user_id == user.id).order_by(Track.is_system.desc(), Track.name).all()
     return [_track_response(db, t) for t in tracks]
 
 
 @router.post("", response_model=TrackResponse, status_code=201)
-def create_track(payload: TrackCreate, db: Session = Depends(get_db)) -> TrackResponse:
-    user = get_default_user(db)
+def create_track(
+    payload: TrackCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> TrackResponse:
     existing = (
         db.query(Track)
         .filter(Track.user_id == user.id, Track.slug == payload.slug)
@@ -89,8 +92,11 @@ def create_track(payload: TrackCreate, db: Session = Depends(get_db)) -> TrackRe
 
 
 @router.get("/{track_id}", response_model=TrackResponse)
-def get_track(track_id: UUID, db: Session = Depends(get_db)) -> TrackResponse:
-    user = get_default_user(db)
+def get_track(
+    track_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> TrackResponse:
     track = db.query(Track).filter(Track.id == track_id, Track.user_id == user.id).first()
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
@@ -99,9 +105,11 @@ def get_track(track_id: UUID, db: Session = Depends(get_db)) -> TrackResponse:
 
 @router.patch("/{track_id}", response_model=TrackResponse)
 def update_track(
-    track_id: UUID, payload: TrackUpdate, db: Session = Depends(get_db)
+    track_id: UUID,
+    payload: TrackUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> TrackResponse:
-    user = get_default_user(db)
     track = db.query(Track).filter(Track.id == track_id, Track.user_id == user.id).first()
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
@@ -115,8 +123,11 @@ def update_track(
 
 
 @router.delete("/{track_id}", status_code=204)
-def delete_track(track_id: UUID, db: Session = Depends(get_db)) -> None:
-    user = get_default_user(db)
+def delete_track(
+    track_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
     track = db.query(Track).filter(Track.id == track_id, Track.user_id == user.id).first()
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
@@ -127,9 +138,11 @@ def delete_track(track_id: UUID, db: Session = Depends(get_db)) -> None:
 
 
 @router.get("/slug/{slug}/progress", response_model=TrackProgressResponse)
-def get_track_progress(slug: str, db: Session = Depends(get_db)) -> TrackProgressResponse:
-    """Per-track progress: how far through, current block, next material, retention health."""
-    user = get_default_user(db)
+def get_track_progress(
+    slug: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> TrackProgressResponse:
     track = db.query(Track).filter(Track.user_id == user.id, Track.slug == slug).first()
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
@@ -150,7 +163,7 @@ def get_track_progress(slug: str, db: Session = Depends(get_db)) -> TrackProgres
     card_by_material = {c.material_id: c for c in cards}
 
     started = [c for c in cards if c.reps > 0]
-    mastered = [c for c in cards if _is_mastered(c)]
+    mastered = [c for c in cards if is_mastered(c)]
     due_reviews = sum(
         1
         for c in started
@@ -189,7 +202,7 @@ def get_track_progress(slug: str, db: Session = Depends(get_db)) -> TrackProgres
         if card is not None:
             if card.reps > 0:
                 block_map[label].started_count += 1
-            if _is_mastered(card):
+            if is_mastered(card):
                 block_map[label].mastered_count += 1
 
     return TrackProgressResponse(
@@ -208,3 +221,15 @@ def get_track_progress(slug: str, db: Session = Depends(get_db)) -> TrackProgres
         next_block_label=next_block_label,
         blocks=sorted(block_map.values(), key=lambda b: b.label),
     )
+
+
+@router.post("/{track_id}/optimize-fsrs")
+def optimize_fsrs(
+    track_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    track = db.query(Track).filter(Track.id == track_id, Track.user_id == user.id).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+    return optimize_track_weights(db, user, track.id)

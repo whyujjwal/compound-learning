@@ -13,13 +13,15 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     target_retention: Mapped[float] = mapped_column(Float, nullable=False, default=0.90)
-    # Per-block budget in minutes (used to pack new items into each block).
     daily_study_minutes: Mapped[int] = mapped_column(nullable=False, default=120)
-    # Track slugs the user has paused — excluded from the daily block stack.
     paused_tracks: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, default=list, server_default="{}"
     )
+    milestone_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    milestone_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -29,3 +31,8 @@ class User(Base):
     scheduler_parameters = relationship(
         "SchedulerParameters", back_populates="user", cascade="all, delete-orphan"
     )
+    study_sessions = relationship("StudySession", back_populates="user", cascade="all, delete-orphan")
+    material_completions = relationship(
+        "MaterialCompletion", back_populates="user", cascade="all, delete-orphan"
+    )
+    memberships = relationship("OrganizationMember", back_populates="user", cascade="all, delete-orphan")

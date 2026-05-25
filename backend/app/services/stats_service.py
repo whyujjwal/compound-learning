@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.models.card import Card
 from app.models.material import StudyMaterial
+from app.models.material_completion import CompletionState, MaterialCompletion
 from app.models.review_log import ReviewLog, ReviewRating
+from app.models.study_session import StudySession
 from app.models.track import Track
 from app.models.user import User
 from app.schemas.stats import StatsResponse, TrackStats
@@ -130,7 +132,18 @@ def get_stats(db: Session, user: User) -> StatsResponse:
         .filter(ReviewLog.card_id.in_(user_card_ids))
         .scalar()
     ) or 0
-    total_minutes_invested = int(round(float(total_seconds) / 60))
+    session_minutes = (
+        db.query(func.coalesce(func.sum(StudySession.duration_minutes), 0))
+        .filter(StudySession.user_id == user.id)
+        .scalar()
+    ) or 0
+    total_minutes_invested = int(round(float(total_seconds) / 60)) + int(session_minutes)
+
+    study_sessions_week = (
+        db.query(StudySession)
+        .filter(StudySession.user_id == user.id, StudySession.created_at >= week_start)
+        .count()
+    )
 
     tracks = db.query(Track).filter(Track.user_id == user.id).all()
     track_breakdown: list[TrackStats] = []
@@ -174,7 +187,7 @@ def get_stats(db: Session, user: User) -> StatsResponse:
         reviews_today=reviews_today,
         reviews_this_week=reviews_this_week,
         reviews_total=reviews_total,
-        sessions_this_week=len(week_days),
+        sessions_this_week=max(len(week_days), study_sessions_week),
         days_active_30d=len(month_days),
         total_minutes_invested=total_minutes_invested,
         retention_rate=retention_rate,

@@ -1,16 +1,4 @@
-"""Block-based daily queue.
-
-The user opens the app any day. The app:
-  1. Looks up the assigned tracks for today (weekly template).
-  2. For each block (one per assigned track), builds an ordered list of items:
-       reviews  = FSRS-due cards (reps > 0 AND due_at <= now) for that track
-       new      = next-in-sequence cards (reps == 0) for that track,
-                  packed until block budget filled
-  3. Returns the blocks. No calendar anchoring, no "overdue", no reschedule.
-
-If the user misses days, blocks tomorrow look identical. They pick up where
-they left off because `reps == 0` is stable across time.
-"""
+"""Block-based daily queue with priority postponement, prerequisites, and HEFT ordering."""
 
 from __future__ import annotations
 
@@ -18,28 +6,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Iterable
 
-from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.card import Card, CardState
+from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.track import Track
 from app.models.user import User
 from app.schemas.queue import BlockEntry, DailyQueueResponse, QueueItem
+from app.services.mastery import (
+    build_card_index,
+    is_critical_priority,
+    prerequisites_met,
+)
+from app.services.weekly_schedule import track_slugs_for_weekday
 
-# Weekly template — which tracks are studied on which day.
-# Weekday integer (Mon=0 ... Sun=6) → ordered list of track slugs (one per block).
-WEEKLY_BLOCK_TEMPLATE: dict[int, list[str]] = {
-    0: ["dsa", "ai-math"],
-    1: ["dsa", "llm-ml"],
-    2: ["dsa", "system-design"],
-    3: ["ai-math", "llm-ml"],
-    4: ["dsa", "system-design"],
-    5: ["dsa", "ai-math", "llm-ml", "system-design"],
-    6: ["dsa", "ai-math", "llm-ml", "system-design"],
-}
-
-# Time-of-day labels for blocks within a single day.
 _SLOT_LABELS = {
     2: ["Morning", "Afternoon"],
     3: ["Morning", "Afternoon", "Evening"],
@@ -56,8 +36,26 @@ def _slot_label(idx: int, total: int) -> str:
     return f"Block {idx + 1}"
 
 
-def _aware(dt: datetime) -> datetime:
-    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
+def _heft_sort_key(item: QueueItem, slot_idx: int, total_slots: int) -> float:
+    """Morning blocks: high cognitive cost first. Evening blocks: low cost first."""
+    midpoint = (total_slots - 1) / 2
+    if slot_idx <= midpoint:
+        return -item.cognitive_cost
+    return item.cognitive_cost
+
+
+def _sort_block_items(items: list[QueueItem], slot_idx: int, total_slots: int) -> list[QueueItem]:
+    reviews = [i for i in items if i.kind == "review"]
+    new_items = [i for i in items if i.kind == "new"]
+    reviews.sort(key=lambda i: i.due_at)
+    new_items.sort(
+        key=lambda i: (
+            i.priority_percent,
+            i.sequence,
+        )
+    )
+    ordered = reviews + new_items
+    return sorted(ordered, key=lambda i: _heft_sort_key(i, slot_idx, total_slots))
 
 
 @dataclass
@@ -97,7 +95,6 @@ def _to_item(c: _Card, *, kind: str, now: datetime) -> QueueItem:
 
 
 def _due_review_cards(db: Session, user: User, track_id, now: datetime) -> list[_Card]:
-    """Cards that have been reviewed at least once AND are due now."""
     rows = (
         db.query(Card)
         .join(StudyMaterial, Card.material_id == StudyMaterial.id)
@@ -115,15 +112,15 @@ def _due_review_cards(db: Session, user: User, track_id, now: datetime) -> list[
     return [_Card(card=c, material=c.material, track=c.material.track) for c in rows]
 
 
-def _next_new_cards(
+def _eligible_new_cards(
     db: Session,
     user: User,
     track_id,
     *,
-    limit: int = 50,
+    limit: int = 80,
     exclude_ids: Iterable | None = None,
 ) -> list[_Card]:
-    """Next-in-sequence cards that have never been reviewed (reps == 0)."""
+    card_index = build_card_index(db, user.id, track_id)
     q = (
         db.query(Card)
         .join(StudyMaterial, Card.material_id == StudyMaterial.id)
@@ -134,84 +131,102 @@ def _next_new_cards(
             StudyMaterial.track_id == track_id,
             Card.reps == 0,
         )
-        .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
+        .order_by(StudyMaterial.priority_percent.asc(), StudyMaterial.sequence.asc())
     )
     if exclude_ids:
         excl = list(exclude_ids)
         if excl:
             q = q.filter(Card.id.notin_(excl))
-    rows = q.limit(limit).all()
-    return [_Card(card=c, material=c.material, track=c.material.track) for c in rows]
+    rows = q.limit(limit * 2).all()
+    eligible: list[_Card] = []
+    for c in rows:
+        if prerequisites_met(db, user.id, c.material, card_by_material=card_index):
+            eligible.append(_Card(card=c, material=c.material, track=c.material.track))
+        if len(eligible) >= limit:
+            break
+    return eligible
 
 
-def _pack_new_into_block(cards: list[_Card], budget_minutes: int) -> list[_Card]:
-    """Take new cards in order until we exceed budget. Always include at least 1."""
+def _pack_new_with_priority(
+    cards: list[_Card],
+    budget_minutes: int,
+) -> tuple[list[_Card], list[_Card]]:
+    """Pack new cards by priority. Critical items always included; defer lowest priority."""
+    if not cards:
+        return [], []
+
+    critical = [c for c in cards if is_critical_priority(c.material.priority_percent)]
+    deferrable = [c for c in cards if not is_critical_priority(c.material.priority_percent)]
+    deferrable.sort(key=lambda c: c.material.priority_percent, reverse=True)
+
     picked: list[_Card] = []
     used = 0
-    for c in cards:
+
+    for c in critical + deferrable:
         mins = max(c.material.estimated_minutes or 20, 5)
         if not picked:
             picked.append(c)
             used += mins
             continue
         if used + mins > budget_minutes:
-            break
+            continue
         picked.append(c)
         used += mins
-    return picked
+
+    picked_ids = {c.card.id for c in picked}
+    deferred = [c for c in cards if c.card.id not in picked_ids]
+    return picked, deferred
 
 
 def build_daily_queue(db: Session, user: User) -> DailyQueueResponse:
     now = datetime.now(UTC)
     block_minutes = user.daily_study_minutes or DEFAULT_BLOCK_MINUTES
-    # daily_study_minutes is for the WHOLE day historically; in the block model
-    # we treat it as a per-block budget. Use the smaller of (per-block default, user value).
     if block_minutes > 240:
-        block_minutes = block_minutes // 2  # legacy "daily" value -> per-block
+        block_minutes = block_minutes // 2
 
     weekday = now.weekday()
     paused = set(user.paused_tracks or [])
-    track_slugs = [s for s in WEEKLY_BLOCK_TEMPLATE.get(weekday, []) if s not in paused]
+    track_slugs = [s for s in track_slugs_for_weekday(weekday) if s not in paused]
 
-    # Resolve tracks once
     tracks_by_slug: dict[str, Track] = {
-        t.slug: t
-        for t in db.query(Track).filter(Track.user_id == user.id).all()
+        t.slug: t for t in db.query(Track).filter(Track.user_id == user.id).all()
     }
 
     blocks: list[BlockEntry] = []
     all_items: list[QueueItem] = []
     seen_card_ids: set = set()
+    total_slots = len(track_slugs)
 
     for idx, slug in enumerate(track_slugs):
         track = tracks_by_slug.get(slug)
         if track is None:
             continue
 
-        # Reviews always shown in full (retention is non-negotiable)
         reviews = _due_review_cards(db, user, track.id, now)
         review_minutes = sum(max(r.material.estimated_minutes or 20, 5) for r in reviews)
 
-        # New items: fill remaining budget
-        remaining = max(block_minutes - review_minutes, 30)  # always allow at least one new
-        new_pool = _next_new_cards(db, user, track.id, limit=40, exclude_ids=seen_card_ids)
-        new_cards = _pack_new_into_block(new_pool, remaining)
+        remaining = max(block_minutes - review_minutes, 30)
+        new_pool = _eligible_new_cards(
+            db, user, track.id, limit=40, exclude_ids=seen_card_ids
+        )
+        new_cards, _deferred = _pack_new_with_priority(new_pool, remaining)
         new_minutes = sum(max(c.material.estimated_minutes or 20, 5) for c in new_cards)
 
         review_items = [_to_item(c, kind="review", now=now) for c in reviews]
         new_items = [_to_item(c, kind="new", now=now) for c in new_cards]
+        block_items = _sort_block_items(review_items + new_items, idx, max(total_slots, 1))
+        review_items = [i for i in block_items if i.kind == "review"]
+        new_items = [i for i in block_items if i.kind == "new"]
 
-        # Mark all selected cards as seen so they don't double-pull into other blocks
         for c in reviews + new_cards:
             seen_card_ids.add(c.card.id)
 
-        all_items.extend(review_items)
-        all_items.extend(new_items)
+        all_items.extend(block_items)
 
         blocks.append(
             BlockEntry(
                 slot=idx,
-                slot_label=_slot_label(idx, len(track_slugs)),
+                slot_label=_slot_label(idx, total_slots),
                 track_id=track.id,
                 track_slug=track.slug,
                 track_name=track.name,
@@ -244,7 +259,6 @@ def build_extra_pull(
     *,
     exclude_card_ids: Iterable | None = None,
 ) -> list[QueueItem]:
-    """Pull N more new-in-sequence items from a single track. Used by 'Push more'."""
     track = (
         db.query(Track)
         .filter(Track.user_id == user.id, Track.slug == track_slug)
@@ -253,7 +267,7 @@ def build_extra_pull(
     if track is None:
         return []
     now = datetime.now(UTC)
-    cards = _next_new_cards(
+    cards = _eligible_new_cards(
         db, user, track.id, limit=count, exclude_ids=exclude_card_ids or []
     )
-    return [_to_item(c, kind="new", now=now) for c in cards]
+    return [_to_item(c, kind="new", now=now) for c in cards[:count]]

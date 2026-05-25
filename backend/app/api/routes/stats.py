@@ -6,10 +6,11 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models.card import Card
 from app.models.review_log import ReviewLog, ReviewRating
+from app.models.user import User
 from app.schemas.stats import StatsResponse
-from app.services.bootstrap import get_default_user
 from app.services.stats_service import get_stats
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -27,17 +28,19 @@ class RetentionPoint(BaseModel):
 
 
 @router.get("", response_model=StatsResponse)
-def get_user_stats(db: Session = Depends(get_db)) -> StatsResponse:
-    user = get_default_user(db)
+def get_user_stats(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> StatsResponse:
     return get_stats(db, user)
 
 
 @router.get("/activity", response_model=list[ActivityPoint])
 def get_activity(
-    days: int = Query(120, ge=7, le=365), db: Session = Depends(get_db)
+    days: int = Query(120, ge=7, le=365),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[ActivityPoint]:
-    """Daily review counts for the last N days (filled with zeros for empty days)."""
-    user = get_default_user(db)
     now = datetime.now(UTC)
     start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
     user_card_ids = select(Card.id).where(Card.user_id == user.id)
@@ -70,10 +73,10 @@ def get_activity(
 
 @router.get("/retention-timeline", response_model=list[RetentionPoint])
 def get_retention_timeline(
-    days: int = Query(30, ge=7, le=365), db: Session = Depends(get_db)
+    days: int = Query(30, ge=7, le=365),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[RetentionPoint]:
-    """Per-day retention rate (good+hard+easy / total) for the last N days."""
-    user = get_default_user(db)
     now = datetime.now(UTC)
     start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
     user_card_ids = select(Card.id).where(Card.user_id == user.id)

@@ -35,6 +35,7 @@ jobs:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           gcloud run deploy compound-api \
             --image=asia-south1-docker.pkg.dev/${GCP_PROJECT_ID}/compound/api:latest \
@@ -42,12 +43,11 @@ jobs:
             --region=asia-south1 \
             --port=8000 \
             --add-cloudsql-instances=${GCP_PROJECT_ID}:asia-south1:compound-db \
-            --set-env-vars="DATABASE_URL=postgresql+psycopg2://compound:CompoundDBPass2026!@/compound?host=/cloudsql/${GCP_PROJECT_ID}:asia-south1:compound-db,CORS_ORIGINS=*,AI_PROVIDER=gemini,AI_MODEL=gemini-2.5-flash,GEMINI_API_KEY=${GEMINI_API_KEY},APP_PASSWORD=${APP_PASSWORD}" \
+            --set-env-vars="DATABASE_URL=postgresql+psycopg2://compound:CompoundDBPass2026!@/compound?host=/cloudsql/${GCP_PROJECT_ID}:asia-south1:compound-db,CORS_ORIGINS=http://localhost:3000,AI_PROVIDER=gemini,AI_MODEL=gemini-2.5-flash,GEMINI_API_KEY=${GEMINI_API_KEY},APP_PASSWORD=${APP_PASSWORD},JWT_SECRET=${JWT_SECRET}" \
             --update-annotations=run.googleapis.com/invoker-iam-disabled=true \
             --no-allow-unauthenticated \
             --project=${GCP_PROJECT_ID}
           
-          # Output the URL
           url=$(gcloud run services describe compound-api --region=asia-south1 --format="value(status.url)" --project=${GCP_PROJECT_ID})
           echo "backend_url=$url" >> $GITHUB_OUTPUT
 
@@ -58,16 +58,31 @@ jobs:
             . --project=${{ secrets.GCP_PROJECT_ID }}
 
       - name: Deploy Frontend to Cloud Run
+        id: deploy-frontend
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           gcloud run deploy compound-web \
             --image=asia-south1-docker.pkg.dev/${GCP_PROJECT_ID}/compound/web:latest \
             --platform=managed \
             --region=asia-south1 \
             --port=3000 \
-            --set-env-vars="APP_PASSWORD=${APP_PASSWORD}" \
+            --set-env-vars="APP_PASSWORD=${APP_PASSWORD},JWT_SECRET=${JWT_SECRET}" \
             --update-annotations=run.googleapis.com/invoker-iam-disabled=true \
             --no-allow-unauthenticated \
+            --project=${GCP_PROJECT_ID}
+          
+          WEB_URL=$(gcloud run services describe compound-web --region=asia-south1 --format="value(status.url)" --project=${GCP_PROJECT_ID})
+          echo "web_url=$WEB_URL" >> $GITHUB_OUTPUT
+
+      - name: Update API CORS for web origin
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          WEB_URL: ${{ steps.deploy-frontend.outputs.web_url }}
+        run: |
+          gcloud run services update compound-api \
+            --region=asia-south1 \
+            --update-env-vars="CORS_ORIGINS=${WEB_URL}" \
             --project=${GCP_PROJECT_ID}

@@ -32,6 +32,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       APP_PASSWORD: ${APP_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-compound-dev-secret-change-in-production}
     ports:
       - "8000:8000"
 
@@ -42,6 +43,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000/api
       APP_PASSWORD: ${APP_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-compound-dev-secret-change-in-production}
     ports:
       - "3000:3000"
 

@@ -4,12 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
+from app.dependencies import get_current_user
 from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.review_log import ReviewLog
 from app.models.track import Track
+from app.models.user import User
 from app.schemas.card import CardDetailResponse, CardResponse, ReviewLogResponse, ReviewResponse, ReviewSubmit
-from app.services.bootstrap import get_default_user
 from app.services.fsrs_service import review_card
 
 router = APIRouter(prefix="/cards", tags=["cards"])
@@ -39,8 +40,11 @@ def _card_detail(db: Session, card: Card) -> CardDetailResponse:
 
 
 @router.get("", response_model=list[CardDetailResponse])
-def list_cards(track_id: UUID | None = None, db: Session = Depends(get_db)) -> list[CardDetailResponse]:
-    user = get_default_user(db)
+def list_cards(
+    track_id: UUID | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[CardDetailResponse]:
     query = (
         db.query(Card)
         .join(StudyMaterial)
@@ -55,8 +59,11 @@ def list_cards(track_id: UUID | None = None, db: Session = Depends(get_db)) -> l
 
 
 @router.get("/{card_id}", response_model=CardDetailResponse)
-def get_card(card_id: UUID, db: Session = Depends(get_db)) -> CardDetailResponse:
-    user = get_default_user(db)
+def get_card(
+    card_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CardDetailResponse:
     card = (
         db.query(Card)
         .options(joinedload(Card.material).joinedload(StudyMaterial.track))
@@ -70,9 +77,11 @@ def get_card(card_id: UUID, db: Session = Depends(get_db)) -> CardDetailResponse
 
 @router.post("/{card_id}/review", response_model=ReviewResponse)
 def submit_review(
-    card_id: UUID, payload: ReviewSubmit, db: Session = Depends(get_db)
+    card_id: UUID,
+    payload: ReviewSubmit,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> ReviewResponse:
-    user = get_default_user(db)
     card = (
         db.query(Card)
         .options(joinedload(Card.material))
