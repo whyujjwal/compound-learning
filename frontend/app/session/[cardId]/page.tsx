@@ -79,6 +79,9 @@ export default function SessionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [startTs, setStartTs] = useState(Date.now());
   const [done, setDone] = useState(false);
+  // Session-wide clock: set once when the page mounts, ticks until completion.
+  const [sessionStart] = useState(() => Date.now());
+  const elapsed = useElapsed(sessionStart, !done);
 
   // Resolve queue: prefer sessionStorage; otherwise fetch a single card.
   useEffect(() => {
@@ -162,16 +165,19 @@ export default function SessionPage() {
       <>
         <header className="session-bar">
           <SessionExit />
-          <span className="session-bar-counter">
-            {total} <span className="total">/ {total}</span>
-          </span>
+          <div className="session-bar-meta">
+            <SessionTimer seconds={elapsed} title="Time in this block" />
+            <span className="session-bar-counter">
+              {total} <span className="total">/ {total}</span>
+            </span>
+          </div>
         </header>
         <div className="session-end">
           <h1 className="session-end-title" style={accent ? { color: accent } : undefined}>
             Block complete.
           </h1>
           <p className="session-end-sub">
-            Heatmap will catch up shortly. Pick another block or call it.
+            {total} card{total === 1 ? "" : "s"} in {formatDuration(elapsed)}. Heatmap will catch up shortly.
           </p>
           <div style={{ display: "inline-flex", gap: 8 }}>
             <Link href="/" className="v2-btn primary">Back to Today</Link>
@@ -195,9 +201,12 @@ export default function SessionPage() {
             {queue?.context ?? current.track_name}
           </span>
         </div>
-        <span className="session-bar-counter">
-          {index + 1} <span className="total">/ {total}</span>
-        </span>
+        <div className="session-bar-meta">
+          <SessionTimer seconds={elapsed} title="Time in this block" />
+          <span className="session-bar-counter">
+            {index + 1} <span className="total">/ {total}</span>
+          </span>
+        </div>
       </header>
       <div className="session-card-wrap">
         <SessionCard
@@ -221,4 +230,45 @@ function SessionExit() {
       ← Exit
     </Link>
   );
+}
+
+function SessionTimer({ seconds, title }: { seconds: number; title?: string }) {
+  return (
+    <span className="session-bar-timer" title={title} aria-label="Elapsed session time">
+      <span className="session-bar-timer-dot" aria-hidden />
+      <span className="session-bar-timer-value">{formatClock(seconds)}</span>
+    </span>
+  );
+}
+
+function useElapsed(startTs: number, running: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const tick = () => setNow(Date.now());
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [running]);
+  return Math.max(0, Math.floor((now - startTs) / 1000));
+}
+
+function formatClock(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(sec).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function formatDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
 }

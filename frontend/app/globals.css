@@ -2290,6 +2290,49 @@ a:hover { color: var(--accent-bright); }
 
 .session-bar-counter .total { color: var(--fg-mute); }
 
+.session-bar-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.session-bar-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--fg-soft);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.session-bar-timer-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(200, 155, 107, 0.45);
+  animation: session-timer-pulse 1.6s ease-out infinite;
+}
+
+.session-bar-timer-value { color: var(--fg); }
+
+@keyframes session-timer-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(200, 155, 107, 0.45); }
+  70%  { box-shadow: 0 0 0 6px rgba(200, 155, 107, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(200, 155, 107, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-bar-timer-dot { animation: none; }
+}
+
 .session-card-wrap {
   display: grid;
   place-items: start center;
@@ -2626,6 +2669,8 @@ a:hover { color: var(--accent-bright); }
   /* ── Session view ── */
   .session-bar { padding: 0 12px; }
   .session-bar-track { display: none; }
+  .session-bar-meta { gap: var(--s-2); }
+  .session-bar-timer { padding: 2px 6px; font-size: 11px; }
   .session-card-wrap { padding: var(--s-4) var(--s-4) var(--s-3); }
   .session-card-title { font-size: 22px; }
   .session-content { max-height: 38vh; }
