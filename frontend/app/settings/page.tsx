@@ -1,11 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useShell } from "@/components/ui/Shell";
 import { trackAccent } from "@/lib/trackColors";
+import { clearAuthToken } from "@/lib/auth";
 import { api, type Track, type User } from "@/lib/api";
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { setRightPanel } = useShell();
   useEffect(() => {
     setRightPanel(null);
@@ -195,6 +198,23 @@ AI_MODEL=gemini-2.5-flash
 GEMINI_API_KEY=AIza...`}</pre>
           </>
         )}
+      </section>
+
+      <section className="settings-panel">
+        <h2>Access</h2>
+        <p style={{ color: "var(--fg-soft)", fontSize: 13, margin: "0 0 12px", lineHeight: 1.55 }}>
+          Sign out to clear this browser&apos;s session and return to the password screen.
+        </p>
+        <button
+          type="button"
+          className="v2-btn"
+          onClick={() => {
+            clearAuthToken();
+            router.replace("/login");
+          }}
+        >
+          Sign out
+        </button>
       </section>
     </>
   );
