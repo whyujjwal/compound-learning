@@ -1,19 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Heatmap } from "@/components/Heatmap";
-
-type Activity = { date: string; count: number };
 
 export function AppBar({
-  activity,
   onOpenCmdk,
   onTogglePanel,
   panelOpen,
   onToggleNav,
   navOpen,
 }: {
-  activity: Activity[];
   onOpenCmdk: () => void;
   onTogglePanel: () => void;
   panelOpen: boolean;
@@ -47,9 +42,7 @@ export function AppBar({
         <span className="appbar-brand-dot" aria-hidden />
         Compound
       </Link>
-      <div className="appbar-heatmap" aria-hidden>
-        <Heatmap data={activity} weeks={16} size={8} gap={2} />
-      </div>
+      <div className="appbar-spacer" aria-hidden />
       <div className="appbar-tools">
         <button
           type="button"

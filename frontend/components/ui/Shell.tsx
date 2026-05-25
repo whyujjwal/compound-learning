@@ -189,7 +189,6 @@ export function Shell({ children }: { children: ReactNode }) {
     <Ctx.Provider value={ctx}>
       <div className="shell">
         <AppBar
-          activity={activity}
           onOpenCmdk={openCmdk}
           onTogglePanel={togglePanel}
           panelOpen={panelOpen}

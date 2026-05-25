@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useShell } from "@/components/ui/Shell";
 import { RightPanel, PanelSection } from "@/components/ui/RightPanel";
+import { Heatmap } from "@/components/Heatmap";
 import { trackAccent } from "@/lib/trackColors";
 import { api, type BlockEntry, type CoachInsight, type QueueItem } from "@/lib/api";
 
@@ -31,7 +32,7 @@ function dateLabel(): { day: string; meta: string } {
 export default function TodayPage() {
   const shell = useShell();
   const router = useRouter();
-  const { queue, stats, tracks, reloadQueue, setRightPanel, setActions } = shell;
+  const { queue, stats, tracks, activity, reloadQueue, setRightPanel, setActions } = shell;
 
   const [nudge, setNudge] = useState<CoachInsight | null>(null);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
@@ -168,6 +169,14 @@ export default function TodayPage() {
           </PanelSection>
         ) : null}
 
+        {activity.length > 0 && (
+          <PanelSection label="Activity · last 16 weeks">
+            <div className="panel-heatmap-wrap">
+              <Heatmap data={activity} weeks={16} size={10} gap={3} />
+            </div>
+          </PanelSection>
+        )}
+
         <PanelSection label="This week">
           <ThisWeek tracks={trackBySlug} />
         </PanelSection>
@@ -201,7 +210,7 @@ export default function TodayPage() {
       </RightPanel>
     );
     return () => setRightPanel(null);
-  }, [setRightPanel, nudge, nudgeDismissed, refreshNudge, dismissNudge, stats, trackBySlug]);
+  }, [setRightPanel, nudge, nudgeDismissed, refreshNudge, dismissNudge, stats, trackBySlug, activity]);
 
   const date = dateLabel();
   const blocks = queue?.blocks ?? [];

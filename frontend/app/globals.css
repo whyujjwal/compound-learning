@@ -388,14 +388,21 @@ a:hover { color: var(--accent-bright); }
   box-shadow: 0 0 12px -2px var(--accent);
 }
 
-.appbar-heatmap {
+.appbar-spacer {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   min-width: 0;
-  overflow: hidden;
 }
+
+.panel-heatmap-wrap {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.panel-heatmap-wrap::-webkit-scrollbar { height: 6px; }
+.panel-heatmap-wrap::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 3px; }
 
 .appbar-tools {
   display: inline-flex;
@@ -2512,7 +2519,6 @@ a:hover { color: var(--accent-bright); }
 
   .appbar { padding: 0 12px; gap: 8px; }
   .appbar-hamburger { display: inline-grid; }
-  .appbar-heatmap { display: none; }
   .appbar-brand { font-size: 11px; letter-spacing: 0.12em; }
   .cmdk-trigger-label { display: none; }
   .cmdk-trigger { padding: 0 8px; }
