@@ -1,0 +1,283 @@
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+
+from app.config import settings
+from app.database import Base, get_db
+from app.main import app
+
+engine = create_engine(settings.database_url, pool_pre_ping=True)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture()
+def client():
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    def override_get_db():
+        try:
+            yield db
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    from app.services import bootstrap
+    from app.services.bootstrap import get_default_user
+    from app.services.curriculum_loader import import_curriculum
+
+    bootstrap.bootstrap(db)
+    user = get_default_user(db)
+    import_curriculum(
+        db,
+        user,
+        {
+            "tracks": [
+                {
+                    "slug": "dsa",
+                    "name": "Data Structures & Algorithms",
+                    "color": "#22c55e",
+                    "materials": [
+                        {
+                            "title": "Two Sum (test)",
+                            "url": "https://leetcode.com/problems/two-sum/",
+                            "block_label": "DSA · Test",
+                            "estimated_minutes": 25,
+                            "priority_percent": 10,
+                            "notes": "Test material.",
+                        },
+                        {
+                            "title": "Sliding Window Maximum (test)",
+                            "url": "https://leetcode.com/problems/sliding-window-maximum/",
+                            "block_label": "DSA · Test",
+                            "estimated_minutes": 40,
+                            "priority_percent": 12,
+                        },
+                    ],
+                },
+                {
+                    "slug": "ai-math",
+                    "name": "Mathematics for AI",
+                    "color": "#a87f9e",
+                    "materials": [
+                        {
+                            "title": "Gradient intuition (test)",
+                            "url": "https://www.3blue1brown.com/",
+                            "block_label": "Math · Test",
+                            "estimated_minutes": 20,
+                            "priority_percent": 14,
+                        },
+                        {
+                            "title": "Bayes rule (test)",
+                            "url": "https://www.youtube.com/",
+                            "block_label": "Math · Test",
+                            "estimated_minutes": 25,
+                            "priority_percent": 18,
+                        },
+                    ],
+                },
+                {
+                    "slug": "system-design",
+                    "name": "System Design",
+                    "color": "#0ea5e9",
+                    "materials": [
+                        {
+                            "title": "CAP theorem (test)",
+                            "url": "https://example.com",
+                            "block_label": "SD · Test",
+                            "estimated_minutes": 20,
+                            "priority_percent": 16,
+                        },
+                        {
+                            "title": "Load balancing (test)",
+                            "url": "https://example.com",
+                            "block_label": "SD · Test",
+                            "estimated_minutes": 25,
+                            "priority_percent": 22,
+                        },
+                    ],
+                },
+            ]
+        },
+    )
+
+    with TestClient(app) as c:
+        yield c
+
+    app.dependency_overrides.clear()
+    db.close()
+
+
+def test_health(client):
+    res = client.get("/health")
+    assert res.status_code == 200
+    assert res.json()["status"] == "ok"
+
+
+def test_system_tracks_seeded(client):
+    res = client.get("/api/tracks")
+    assert res.status_code == 200
+    tracks = res.json()
+    assert len(tracks) >= 3
+    slugs = {t["slug"] for t in tracks}
+    assert "dsa" in slugs
+    assert "ai-math" in slugs
+    assert "system-design" in slugs
+
+
+def test_demo_materials_seeded(client):
+    materials = client.get("/api/materials").json()
+    assert len(materials) >= 5
+
+
+def test_create_custom_track(client):
+    res = client.post(
+        "/api/tracks",
+        json={"slug": "rust", "name": "Rust Programming", "color": "#de5000"},
+    )
+    assert res.status_code == 201
+    assert res.json()["slug"] == "rust"
+
+
+def test_create_material_and_queue(client):
+    tracks = client.get("/api/tracks").json()
+    dsa = next(t for t in tracks if t["slug"] == "dsa")
+    res = client.post(
+        "/api/materials",
+        json={
+            "track_id": dsa["id"],
+            "title": "Test Problem",
+            "raw_content": "Test content for review",
+            "estimated_minutes": 10,
+            "priority_percent": 30,
+        },
+    )
+    assert res.status_code == 201
+    material = res.json()
+    assert material["card_id"] is not None
+
+    queue = client.get("/api/queue/daily").json()
+    assert queue["budget_minutes"] == 120
+    assert any(i["material_title"] == "Test Problem" for i in queue["items"])
+
+
+def test_review_flow(client):
+    queue = client.get("/api/queue/daily").json()
+    active = [i for i in queue["items"] if not i["postponed"]]
+    assert len(active) > 0
+
+    card_id = active[0]["card_id"]
+    res = client.post(
+        f"/api/cards/{card_id}/review",
+        json={"rating": "GOOD", "elapsed_time_seconds": 45},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["card"]["reps"] >= 1
+
+
+def test_stats(client):
+    res = client.get("/api/stats")
+    assert res.status_code == 200
+    stats = res.json()
+    assert stats["total_tracks"] >= 3
+    assert "track_breakdown" in stats
+    assert len(stats["track_breakdown"]) >= 3
+
+
+def test_material_crud(client):
+    tracks = client.get("/api/tracks").json()
+    track_id = tracks[0]["id"]
+    create = client.post(
+        "/api/materials",
+        json={"track_id": track_id, "title": "CRUD Test", "raw_content": "Original"},
+    )
+    material_id = create.json()["id"]
+
+    get_res = client.get(f"/api/materials/{material_id}")
+    assert get_res.status_code == 200
+
+    patch = client.patch(
+        f"/api/materials/{material_id}",
+        json={"title": "CRUD Updated", "priority_percent": 5},
+    )
+    assert patch.status_code == 200
+    assert patch.json()["title"] == "CRUD Updated"
+
+    delete = client.delete(f"/api/materials/{material_id}")
+    assert delete.status_code == 204
+
+
+def test_user_settings(client):
+    res = client.patch(
+        "/api/user/me",
+        json={"daily_study_minutes": 90, "target_retention": 0.85},
+    )
+    assert res.status_code == 200
+    assert res.json()["daily_study_minutes"] == 90
+    assert res.json()["target_retention"] == 0.85
+
+
+def test_track_update(client):
+    tracks = client.get("/api/tracks").json()
+    custom = client.post(
+        "/api/tracks",
+        json={"slug": "edit-me", "name": "Before Edit"},
+    ).json()
+    res = client.patch(
+        f"/api/tracks/{custom['id']}",
+        json={"name": "After Edit", "cognitive_multiplier": 1.5},
+    )
+    assert res.status_code == 200
+    assert res.json()["name"] == "After Edit"
+
+
+def test_card_detail(client):
+    cards = client.get("/api/cards").json()
+    assert len(cards) > 0
+    card_id = cards[0]["id"]
+    res = client.get(f"/api/cards/{card_id}")
+    assert res.status_code == 200
+    assert "material_title" in res.json()
+    assert "review_logs" in res.json()
+
+
+def test_chat_status_disabled_by_default(client):
+    res = client.get("/api/chat/status")
+    assert res.status_code == 200
+    body = res.json()
+    assert "enabled" in body
+    assert "provider" in body
+
+
+def test_conversation_crud(client):
+    create = client.post("/api/chat/conversations", json={"title": "Test convo"})
+    assert create.status_code == 201
+    conv_id = create.json()["id"]
+
+    listing = client.get("/api/chat/conversations").json()
+    assert any(c["id"] == conv_id for c in listing)
+
+    detail = client.get(f"/api/chat/conversations/{conv_id}").json()
+    assert detail["title"] == "Test convo"
+    assert detail["messages"] == []
+
+    delete = client.delete(f"/api/chat/conversations/{conv_id}")
+    assert delete.status_code == 204
+
+
+def test_chat_send_without_api_key(client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
+    monkeypatch.setattr(settings, "gemini_api_key", None)
+    conv = client.post("/api/chat/conversations", json={}).json()
+    res = client.post(
+        f"/api/chat/conversations/{conv['id']}/messages",
+        json={"content": "How am I doing?"},
+    )
+    assert res.status_code == 503

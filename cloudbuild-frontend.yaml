@@ -1,0 +1,11 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: [
+    'build',
+    '-t', 'asia-south1-docker.pkg.dev/$PROJECT_ID/compound/web:latest',
+    '--build-arg', 'NEXT_PUBLIC_API_URL=$_NEXT_PUBLIC_API_URL',
+    '-f', 'frontend/Dockerfile',
+    '.'
+  ]
+images:
+- 'asia-south1-docker.pkg.dev/$PROJECT_ID/compound/web:latest'

@@ -1,0 +1,14 @@
+**/.git
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+**/.next
+**/.env
+**/.env.local
+**/.DS_Store
+**/coverage
+*.log
+.cursor
+docs/generate_curriculum.py

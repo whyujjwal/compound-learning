@@ -1,0 +1,15 @@
+.gcloudignore
+.git
+.gitignore
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/node_modules
+**/.next
+**/.env
+**/.env.local
+**/.DS_Store
+.cursor
+*.log
+terminals/

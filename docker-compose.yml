@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: compound
+      POSTGRES_PASSWORD: compound
+      POSTGRES_DB: compound
+    ports:
+      - "5432:5432"
+    volumes:
+      - compound_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compound -d compound"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://compound:compound@db:5432/compound
+      CORS_ORIGINS: http://localhost:3000,http://web:3000
+      LOG_LEVEL: INFO
+      AI_PROVIDER: ${AI_PROVIDER:-gemini}
+      AI_MODEL: ${AI_MODEL:-gemini-2.5-flash}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports:
+      - "8000:8000"
+
+  web:
+    build: ./frontend
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+    ports:
+      - "3000:3000"
+
+volumes:
+  compound_pg:
