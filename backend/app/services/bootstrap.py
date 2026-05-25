@@ -1,5 +1,7 @@
+import logging
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.card import Card
@@ -7,6 +9,29 @@ from app.models.material import StudyMaterial
 from app.models.scheduler_params import DEFAULT_FSRS_WEIGHTS, SchedulerParameters
 from app.models.track import Track
 from app.models.user import User
+
+logger = logging.getLogger("compound.bootstrap")
+
+
+# Idempotent ALTER TABLE statements applied at startup so the deployed
+# database stays in sync with the SQLAlchemy models without needing a
+# full migration framework. Each statement must be safe to run multiple
+# times against an already-up-to-date schema.
+_LIGHTWEIGHT_MIGRATIONS: tuple[str, ...] = (
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS paused_tracks "
+    "VARCHAR[] NOT NULL DEFAULT '{}'",
+)
+
+
+def apply_lightweight_migrations(db: Session) -> None:
+    for stmt in _LIGHTWEIGHT_MIGRATIONS:
+        try:
+            db.execute(text(stmt))
+        except Exception:
+            db.rollback()
+            logger.exception("Lightweight migration failed: %s", stmt)
+            raise
+    db.commit()
 
 SYSTEM_TRACKS = [
     {
@@ -167,6 +192,7 @@ def _maybe_import_curriculum(db: Session, user: User) -> None:
 
 
 def bootstrap(db: Session) -> None:
+    apply_lightweight_migrations(db)
     user = get_default_user(db)
     tracks = db.query(Track).filter(Track.user_id == user.id).all()
     for track in tracks:
