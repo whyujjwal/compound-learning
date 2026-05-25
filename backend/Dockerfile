@@ -17,6 +17,8 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
+COPY backend/alembic.ini .
+COPY backend/alembic ./alembic
 # Curriculum JSON lives at /docs/curriculum.json so app.api.routes.curriculum can find it
 # via Path(__file__).resolve().parents[3].parent / "docs" / "curriculum.json".
 COPY docs/curriculum.json /docs/curriculum.json
@@ -25,4 +27,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
 
 EXPOSE 8000
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
