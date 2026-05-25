@@ -78,17 +78,26 @@ export default function TodayPage() {
 
   // ── Block actions ────────────────────────────────────────
   const startBlock = useCallback(
-    (block: BlockEntry) => {
-      const extra = extraByTrack[block.track_slug] ?? [];
-      const items = [...block.reviews, ...block.new_items, ...extra];
+    async (block: BlockEntry) => {
+      let active = block;
+      try {
+        const daily = await api.getDailyQueue();
+        const fresh = daily.blocks.find((b) => b.slot === block.slot);
+        if (fresh) active = fresh;
+      } catch {
+        /* use cached block if refresh fails */
+      }
+      const extra = extraByTrack[active.track_slug] ?? [];
+      const items = [...active.reviews, ...active.new_items, ...extra];
       if (items.length === 0) return;
       if (typeof window !== "undefined") {
         try {
+          window.sessionStorage.removeItem("compound:session-clock");
           window.sessionStorage.setItem(
             "compound:session-queue",
             JSON.stringify({
               ts: Date.now(),
-              context: `${block.slot_label} · ${block.track_name}`,
+              context: `${active.slot_label} · ${active.track_name}`,
               items,
             })
           );

@@ -10,7 +10,7 @@ import {
   type Rating,
 } from "@/components/ui/SessionCard";
 import { trackAccent } from "@/lib/trackColors";
-import { api, type QueueItem } from "@/lib/api";
+import { api, type CardDetail, type QueueItem } from "@/lib/api";
 
 type Cached = {
   ts: number;
@@ -36,33 +36,51 @@ function saveQueue(c: Cached) {
   } catch {}
 }
 
+/** Map live card API data onto a queue row (keeps block/kind from the queue when present). */
+function cardToQueueItem(c: CardDetail, prior?: QueueItem): QueueItem {
+  return {
+    card_id: c.id,
+    material_id: c.material_id,
+    material_title: c.material_title,
+    material_content: c.material_content,
+    material_url: c.material_url,
+    block_label: prior?.block_label ?? null,
+    resource_type: prior?.resource_type ?? null,
+    sequence: prior?.sequence ?? 0,
+    track_id: c.track_id,
+    track_slug: prior?.track_slug ?? "",
+    track_name: c.track_name,
+    track_color: c.track_color,
+    state: c.state,
+    due_at: c.due_at,
+    priority_percent: prior?.priority_percent ?? 50,
+    estimated_minutes: prior?.estimated_minutes ?? 20,
+    cognitive_cost: prior?.cognitive_cost ?? 1,
+    difficulty: c.difficulty,
+    stability: c.stability,
+    retrievability: c.retrievability,
+    kind: prior?.kind ?? (c.reps > 0 ? "review" : "new"),
+  };
+}
+
+async function refreshQueueItems(items: QueueItem[]): Promise<QueueItem[]> {
+  return Promise.all(
+    items.map(async (item) => {
+      try {
+        const c = await api.getCard(item.card_id);
+        return cardToQueueItem(c, item);
+      } catch {
+        return item;
+      }
+    })
+  );
+}
+
 /** Fallback: build a 1-item queue from a CardDetail when sessionStorage is empty. */
 async function fetchFallbackItem(cardId: string): Promise<QueueItem | null> {
   try {
     const c = await api.getCard(cardId);
-    return {
-      card_id: c.id,
-      material_id: c.material_id,
-      material_title: c.material_title,
-      material_content: c.material_content,
-      material_url: c.material_url,
-      block_label: null,
-      resource_type: null,
-      sequence: 0,
-      track_id: c.track_id,
-      track_slug: "",
-      track_name: c.track_name,
-      track_color: c.track_color,
-      state: c.state,
-      due_at: c.due_at,
-      priority_percent: 50,
-      estimated_minutes: 20,
-      cognitive_cost: 1,
-      difficulty: c.difficulty,
-      stability: c.stability,
-      retrievability: c.retrievability,
-      kind: c.reps > 0 ? "review" : "new",
-    };
+    return cardToQueueItem(c);
   } catch {
     return null;
   }
@@ -81,15 +99,23 @@ export default function SessionPage() {
   const [done, setDone] = useState(false);
   const { elapsed, paused, togglePause } = useBlockClock(queue?.ts ?? null, !done);
 
-  // Resolve queue: prefer sessionStorage; otherwise fetch a single card.
+  // Resolve queue from sessionStorage, then refresh every item from the API so
+  // curriculum updates (new titles/notes) are never masked by stale cache.
   useEffect(() => {
-    const cached = loadQueue();
-    if (cached && cached.items.some((it) => it.card_id === cardId)) {
-      setQueue(cached);
-      setLoading(false);
-      return;
-    }
-    fetchFallbackItem(cardId).then((item) => {
+    let cancelled = false;
+    async function load() {
+      const cached = loadQueue();
+      if (cached?.items.some((it) => it.card_id === cardId)) {
+        const items = await refreshQueueItems(cached.items);
+        const next: Cached = { ...cached, items };
+        if (cancelled) return;
+        saveQueue(next);
+        setQueue(next);
+        setLoading(false);
+        return;
+      }
+      const item = await fetchFallbackItem(cardId);
+      if (cancelled) return;
       if (item) {
         const c: Cached = {
           ts: Date.now(),
@@ -100,7 +126,11 @@ export default function SessionPage() {
         setQueue(c);
       }
       setLoading(false);
-    });
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [cardId]);
 
   const index = useMemo(() => {
