@@ -5,7 +5,7 @@ type Cell = { date: string; count: number };
 export function Heatmap({
   data,
   weeks = 16,
-  color = "#a78bfa",
+  color = "#c89b6b",
   emptyColor = "rgba(255,255,255,0.04)",
   size = 11,
   gap = 3,

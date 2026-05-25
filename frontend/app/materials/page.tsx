@@ -2,9 +2,12 @@
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useShell } from "@/components/ui/Shell";
+import { trackAccent } from "@/lib/trackColors";
 import { api, type Material, type Track } from "@/lib/api";
 
 function MaterialsContent() {
+  const { setRightPanel } = useShell();
   const searchParams = useSearchParams();
   const preselected = searchParams.get("track");
 
@@ -24,6 +27,11 @@ function MaterialsContent() {
   const [priority, setPriority] = useState(50);
   const [cognitive, setCognitive] = useState(1.0);
 
+  useEffect(() => {
+    setRightPanel(null);
+    return () => setRightPanel(null);
+  }, [setRightPanel]);
+
   async function load() {
     setLoading(true);
     try {
@@ -39,7 +47,10 @@ function MaterialsContent() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!trackId) return;
@@ -60,7 +71,12 @@ function MaterialsContent() {
         priority_percent: priority,
         cognitive_cost_multiplier: cognitive,
       });
-      setTitle(""); setContent(""); setUrl(""); setMinutes(15); setPriority(50); setCognitive(1.0);
+      setTitle("");
+      setContent("");
+      setUrl("");
+      setMinutes(15);
+      setPriority(50);
+      setCognitive(1.0);
       setShowAdd(false);
       setMaterials(await api.getMaterials(trackId));
     } catch (e) {
@@ -103,121 +119,240 @@ function MaterialsContent() {
   }
 
   const trackMap = Object.fromEntries(tracks.map((t) => [t.id, t]));
-  const activeTrack = trackMap[trackId];
+  const activeTrack = trackId ? trackMap[trackId] : undefined;
 
   return (
     <>
-      <header className="roadmap-strip">
-        <div className="roadmap-strip-left">
-          <h1 className="roadmap-title">Materials</h1>
-          <span className="roadmap-summary">{materials.length} items</span>
+      <header className="page-head">
+        <div>
+          <h1 className="page-title">Library · Materials</h1>
+          <p className="page-sub">{materials.length} items</p>
         </div>
+        <button
+          type="button"
+          className="v2-btn"
+          onClick={() => setShowAdd((v) => !v)}
+          disabled={!tracks.length}
+        >
+          {showAdd ? "Cancel" : "+ Add"}
+        </button>
       </header>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", gap: "1rem", flexWrap: "wrap" }}>
-        <label style={{ flex: 1, maxWidth: "340px", margin: 0 }}>
-          Filter by track
+      <div className="lib-bar">
+        <div className="field">
+          <span className="field-label">Filter by track</span>
           <select value={trackId} onChange={(e) => setTrackId(e.target.value)}>
             <option value="">All tracks</option>
             {tracks.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
-        </label>
-        <button className="primary" onClick={() => setShowAdd(!showAdd)} disabled={!tracks.length}>
-          {showAdd ? "Cancel" : "+ Add Material"}
-        </button>
+        </div>
       </div>
 
       {showAdd && (
-        <div className="panel">
+        <section className="settings-panel">
           <h2>New material{activeTrack ? ` · ${activeTrack.name}` : ""}</h2>
-          <form className="form-grid" onSubmit={handleCreate}>
-            <label>
-              Track
-              <select value={trackId} onChange={(e) => setTrackId(e.target.value)} required>
+          <form onSubmit={handleCreate}>
+            <div className="field">
+              <span className="field-label">Track</span>
+              <select
+                value={trackId}
+                onChange={(e) => setTrackId(e.target.value)}
+                required
+              >
                 <option value="">Select track</option>
                 {tracks.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
                 ))}
               </select>
-            </label>
-            <label>Title <input value={title} onChange={(e) => setTitle(e.target.value)} required /></label>
-            <label>
-              Content (shown on reveal)
-              <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={4} placeholder="Key concepts, patterns, formulas…" />
-            </label>
-            <label>Reference URL <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" /></label>
-            <div className="form-row">
-              <label>Est. minutes <input type="number" min={1} max={480} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} /></label>
-              <label>Priority (0–100) <input type="number" min={0} max={100} value={priority} onChange={(e) => setPriority(Number(e.target.value))} /></label>
             </div>
-            <label>
-              Cognitive cost multiplier
-              <input type="number" step="0.1" min="0.1" max="5" value={cognitive} onChange={(e) => setCognitive(Number(e.target.value))} />
-            </label>
-            {error && !editing && <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>}
-            <button type="submit" className="primary" disabled={submitting || !trackId}>
-              {submitting ? "Adding…" : "Add Material"}
+            <div className="field">
+              <span className="field-label">Title</span>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <span className="field-label">Content (shown on reveal)</span>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                rows={4}
+                placeholder="Key concepts, patterns, formulas…"
+              />
+            </div>
+            <div className="field">
+              <span className="field-label">Reference URL</span>
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://…"
+              />
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <span className="field-label">Minutes</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={480}
+                  value={minutes}
+                  onChange={(e) => setMinutes(Number(e.target.value))}
+                />
+              </div>
+              <div className="field">
+                <span className="field-label">Priority</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={priority}
+                  onChange={(e) => setPriority(Number(e.target.value))}
+                />
+              </div>
+              <div className="field">
+                <span className="field-label">Cognitive ×</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="5"
+                  value={cognitive}
+                  onChange={(e) => setCognitive(Number(e.target.value))}
+                />
+              </div>
+            </div>
+            {error && <p className="field-msg-bad">{error}</p>}
+            <button type="submit" className="v2-btn primary" disabled={submitting || !trackId}>
+              {submitting ? "Adding…" : "Add material"}
             </button>
           </form>
-        </div>
+        </section>
       )}
 
       {editing && (
-        <div className="panel">
+        <section className="settings-panel">
           <h2>Edit material</h2>
-          <form className="form-grid" onSubmit={handleUpdate}>
-            <label>Title <input value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} required /></label>
-            <label>Content <textarea value={editing.raw_content ?? ""} onChange={(e) => setEditing({ ...editing, raw_content: e.target.value })} rows={4} /></label>
-            <label>URL <input value={editing.external_url ?? ""} onChange={(e) => setEditing({ ...editing, external_url: e.target.value })} /></label>
-            <div className="form-row">
-              <label>Minutes <input type="number" min={1} value={editing.estimated_minutes} onChange={(e) => setEditing({ ...editing, estimated_minutes: Number(e.target.value) })} /></label>
-              <label>Priority <input type="number" min={0} max={100} value={editing.priority_percent} onChange={(e) => setEditing({ ...editing, priority_percent: Number(e.target.value) })} /></label>
+          <form onSubmit={handleUpdate}>
+            <div className="field">
+              <span className="field-label">Title</span>
+              <input
+                type="text"
+                value={editing.title}
+                onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                required
+              />
             </div>
-            <div className="actions">
-              <button type="submit" className="primary" disabled={submitting}>Save</button>
-              <button type="button" className="ghost" onClick={() => setEditing(null)}>Cancel</button>
+            <div className="field">
+              <span className="field-label">Content</span>
+              <textarea
+                value={editing.raw_content ?? ""}
+                onChange={(e) => setEditing({ ...editing, raw_content: e.target.value })}
+                rows={4}
+              />
+            </div>
+            <div className="field">
+              <span className="field-label">URL</span>
+              <input
+                type="url"
+                value={editing.external_url ?? ""}
+                onChange={(e) => setEditing({ ...editing, external_url: e.target.value })}
+              />
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <span className="field-label">Minutes</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={editing.estimated_minutes}
+                  onChange={(e) =>
+                    setEditing({ ...editing, estimated_minutes: Number(e.target.value) })
+                  }
+                />
+              </div>
+              <div className="field">
+                <span className="field-label">Priority</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={editing.priority_percent}
+                  onChange={(e) =>
+                    setEditing({ ...editing, priority_percent: Number(e.target.value) })
+                  }
+                />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="submit" className="v2-btn primary" disabled={submitting}>
+                Save
+              </button>
+              <button type="button" className="v2-btn ghost" onClick={() => setEditing(null)}>
+                Cancel
+              </button>
             </div>
           </form>
-        </div>
+        </section>
       )}
 
       {loading ? (
-        <div className="empty">Loading materials…</div>
+        <p style={{ color: "var(--fg-mute)" }}>Loading materials…</p>
       ) : materials.length === 0 ? (
-        <div className="empty">No materials in this track yet.</div>
+        <p style={{ color: "var(--fg-mute)" }}>No materials in this track yet.</p>
       ) : (
-        <div className="card-list">
+        <div>
           {materials.map((m) => {
             const track = trackMap[m.track_id];
+            const accent = track ? trackAccent(track.slug, track.color) : "var(--accent)";
             return (
-              <div key={m.id} className="list-item">
-                <h3>{m.title}</h3>
-                <div className="meta-row">
-                  {track && (
-                    <span className="badge track">
-                      <span className="dot" style={{ background: track.color }} />
-                      {track.name}
-                    </span>
-                  )}
-                  <span className="badge">{m.estimated_minutes}m</span>
-                  <span className="badge">P{m.priority_percent}</span>
-                  {m.card_state && <span className="badge">{m.card_state}</span>}
-                  {m.card_due_at && (
-                    <span className="badge">Due {new Date(m.card_due_at).toLocaleDateString()}</span>
+              <article
+                key={m.id}
+                className="lib-row"
+                style={{ ["--track-color" as string]: accent }}
+              >
+                <div>
+                  <div className="lib-row-title">{m.title}</div>
+                  <div className="lib-row-meta">
+                    {track && (
+                      <span className="pill track">
+                        <span className="track-dot" aria-hidden /> {track.name}
+                      </span>
+                    )}
+                    <span className="pill muted">{m.estimated_minutes}m</span>
+                    <span className="pill muted">P{m.priority_percent}</span>
+                    {m.card_state && <span className="pill muted">{m.card_state}</span>}
+                  </div>
+                  {m.raw_content && (
+                    <p className="lib-row-body">
+                      {m.raw_content.slice(0, 180)}
+                      {m.raw_content.length > 180 ? "…" : ""}
+                    </p>
                   )}
                 </div>
-                {m.raw_content && (
-                  <p className="muted" style={{ fontSize: "0.9rem", margin: "0.65rem 0 0", lineHeight: 1.6 }}>
-                    {m.raw_content.slice(0, 180)}{m.raw_content.length > 180 ? "…" : ""}
-                  </p>
-                )}
-                <div className="actions">
-                  <button className="ghost" onClick={() => setEditing(m)}>Edit</button>
-                  <button className="danger" onClick={() => handleDelete(m.id)}>Delete</button>
+                <div className="lib-row-actions">
+                  <button
+                    type="button"
+                    className="v2-btn sm ghost"
+                    onClick={() => setEditing(m)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="v2-btn sm ghost"
+                    style={{ color: "var(--bad)" }}
+                    onClick={() => handleDelete(m.id)}
+                  >
+                    Delete
+                  </button>
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>
@@ -228,7 +363,7 @@ function MaterialsContent() {
 
 export default function MaterialsPage() {
   return (
-    <Suspense fallback={<div className="empty">Loading…</div>}>
+    <Suspense fallback={<p style={{ color: "var(--fg-mute)" }}>Loading…</p>}>
       <MaterialsContent />
     </Suspense>
   );

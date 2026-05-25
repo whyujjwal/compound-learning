@@ -2,15 +2,23 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useShell } from "@/components/ui/Shell";
+import { trackAccent } from "@/lib/trackColors";
 import { api, type CardDetail, type Track } from "@/lib/api";
 
 function CardsContent() {
+  const { setRightPanel } = useShell();
   const searchParams = useSearchParams();
   const [tracks, setTracks] = useState<Track[]>([]);
   const [cards, setCards] = useState<CardDetail[]>([]);
   const [trackFilter, setTrackFilter] = useState(searchParams.get("track") ?? "");
   const [selected, setSelected] = useState<CardDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setRightPanel(null);
+    return () => setRightPanel(null);
+  }, [setRightPanel]);
 
   useEffect(() => {
     async function load() {
@@ -24,102 +32,125 @@ function CardsContent() {
     load();
   }, [trackFilter]);
 
-  if (loading) return <div className="empty">Loading cards…</div>;
+  if (loading) return <p style={{ color: "var(--fg-mute)" }}>Loading cards…</p>;
+
+  const trackMap = Object.fromEntries(tracks.map((t) => [t.id, t]));
 
   return (
     <>
-      <header className="roadmap-strip">
-        <div className="roadmap-strip-left">
-          <h1 className="roadmap-title">Cards</h1>
-          <span className="roadmap-summary">{cards.length} cards</span>
+      <header className="page-head">
+        <div>
+          <h1 className="page-title">Library · Cards</h1>
+          <p className="page-sub">{cards.length} cards</p>
         </div>
       </header>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem", gap: "1rem", flexWrap: "wrap" }}>
-        <label style={{ flex: 1, maxWidth: "340px", margin: 0 }}>
-          Filter by track
-          <select value={trackFilter} onChange={(e) => { setTrackFilter(e.target.value); setSelected(null); }}>
+      <div className="lib-bar">
+        <div className="field">
+          <span className="field-label">Filter by track</span>
+          <select
+            value={trackFilter}
+            onChange={(e) => {
+              setTrackFilter(e.target.value);
+              setSelected(null);
+            }}
+          >
             <option value="">All tracks</option>
             {tracks.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
             ))}
           </select>
-        </label>
-        <div className="muted" style={{ fontFamily: "var(--mono)", fontSize: "0.75rem" }}>
-          {cards.length} cards
         </div>
       </div>
 
-      <div className={`cards-layout ${selected ? "split" : ""}`}>
-        <div className="card-list">
+      <div className={`lib-cards-layout${selected ? " split" : ""}`}>
+        <div>
           {cards.length === 0 ? (
-            <div className="empty">No cards found.</div>
+            <p style={{ color: "var(--fg-mute)" }}>No cards found.</p>
           ) : (
-            cards.map((card) => (
-              <div
-                key={card.id}
-                className="list-item"
-                style={{
-                  cursor: "pointer",
-                  borderColor: selected?.id === card.id ? "var(--amber)" : undefined,
-                }}
-                onClick={() => setSelected(card)}
-              >
-                <h3>{card.material_title}</h3>
-                <div className="meta-row">
-                  <span className="badge track">
-                    <span className="dot" style={{ background: card.track_color }} />
-                    {card.track_name}
-                  </span>
-                  <span className="badge">{card.state}</span>
-                  <span className="badge">R {card.reps} · L {card.lapses}</span>
-                </div>
-                <div className="fsrs-meta">
-                  <span>S {card.stability.toFixed(1)}d</span>
-                  <span>D {card.difficulty.toFixed(1)}</span>
-                  <span>{(card.retrievability * 100).toFixed(0)}%</span>
-                </div>
-              </div>
-            ))
+            cards.map((card) => {
+              const trackId = card.track_id;
+              const track = trackMap[trackId];
+              const accent = track
+                ? trackAccent(track.slug, card.track_color)
+                : trackAccent("", card.track_color);
+              const isSelected = selected?.id === card.id;
+              return (
+                <article
+                  key={card.id}
+                  className="lib-row"
+                  style={{
+                    ["--track-color" as string]: accent,
+                    cursor: "pointer",
+                    borderColor: isSelected ? accent : undefined,
+                  }}
+                  onClick={() => setSelected(card)}
+                >
+                  <div>
+                    <div className="lib-row-title">{card.material_title}</div>
+                    <div className="lib-row-meta">
+                      <span className="pill track">
+                        <span className="track-dot" aria-hidden /> {card.track_name}
+                      </span>
+                      <span className="pill muted">{card.state}</span>
+                      <span className="pill muted">
+                        R{card.reps} · L{card.lapses}
+                      </span>
+                      <span className="pill muted">
+                        S {card.stability.toFixed(1)}d
+                      </span>
+                      <span className="pill muted">
+                        {(card.retrievability * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              );
+            })
           )}
         </div>
 
         {selected && (
-          <div className="panel">
+          <aside className="card-detail">
             <h2>{selected.material_title}</h2>
             {selected.material_content && (
-              <pre className="content-block">{selected.material_content}</pre>
+              <pre className="card-detail-content">{selected.material_content}</pre>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem 1rem", fontFamily: "var(--mono)", fontSize: "0.8rem", color: "var(--text-soft)", marginBottom: "1.25rem" }}>
+            <div className="card-detail-grid">
               <span>State</span><span>{selected.state}</span>
               <span>Stability</span><span>{selected.stability.toFixed(2)} d</span>
               <span>Difficulty</span><span>{selected.difficulty.toFixed(2)}</span>
               <span>Retrievability</span><span>{(selected.retrievability * 100).toFixed(1)}%</span>
               <span>Reps · Lapses</span><span>{selected.reps} · {selected.lapses}</span>
-              <span>Due</span><span>{new Date(selected.due_at).toLocaleString()}</span>
+              <span>Due</span><span>{new Date(selected.due_at).toLocaleDateString()}</span>
             </div>
             {selected.review_logs.length > 0 ? (
               <>
-                <h2 style={{ marginTop: "1rem" }}>History</h2>
-                <div className="card-list">
-                  {selected.review_logs.map((log) => (
-                    <div key={log.id} className="list-item" style={{ padding: "0.5rem 0.85rem" }}>
-                      <div className="meta-row">
-                        <span className="badge">{log.rating}</span>
-                        <span className="badge">{log.elapsed_time_seconds}s</span>
-                        <span className="badge">{new Date(log.reviewed_at).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <h2 style={{ marginTop: 16 }}>History</h2>
+                {selected.review_logs.map((log) => (
+                  <div key={log.id} className="lib-row-meta" style={{ marginBottom: 6 }}>
+                    <span className="pill">{log.rating}</span>
+                    <span className="pill muted">{log.elapsed_time_seconds}s</span>
+                    <span className="pill muted">
+                      {new Date(log.reviewed_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                ))}
               </>
             ) : (
-              <p className="muted">No reviews yet.</p>
+              <p style={{ color: "var(--fg-mute)" }}>No reviews yet.</p>
             )}
-            <button className="ghost" onClick={() => setSelected(null)} style={{ marginTop: "1rem" }}>
+            <button
+              type="button"
+              className="v2-btn ghost sm"
+              onClick={() => setSelected(null)}
+              style={{ marginTop: 12 }}
+            >
               Close
             </button>
-          </div>
+          </aside>
         )}
       </div>
     </>
@@ -128,7 +159,7 @@ function CardsContent() {
 
 export default function CardsPage() {
   return (
-    <Suspense fallback={<div className="empty">Loading…</div>}>
+    <Suspense fallback={<p style={{ color: "var(--fg-mute)" }}>Loading…</p>}>
       <CardsContent />
     </Suspense>
   );

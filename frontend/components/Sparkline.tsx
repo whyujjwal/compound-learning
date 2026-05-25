@@ -4,7 +4,7 @@ export function Sparkline({
   values,
   width = 240,
   height = 60,
-  color = "#a78bfa",
+  color = "#c89b6b",
   fill = true,
   smooth = true,
   strokeWidth = 1.5,

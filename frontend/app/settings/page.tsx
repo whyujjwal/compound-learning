@@ -1,14 +1,23 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { StatCard } from "@/components/StatCard";
-import { api, type User } from "@/lib/api";
+import { useShell } from "@/components/ui/Shell";
+import { trackAccent } from "@/lib/trackColors";
+import { api, type Track, type User } from "@/lib/api";
 
 export default function SettingsPage() {
+  const { setRightPanel } = useShell();
+  useEffect(() => {
+    setRightPanel(null);
+    return () => setRightPanel(null);
+  }, [setRightPanel]);
+
   const [user, setUser] = useState<User | null>(null);
+  const [tracks, setTracks] = useState<Track[]>([]);
   const [aiStatus, setAIStatus] = useState<{ enabled: boolean; provider: string; model: string } | null>(null);
   const [retention, setRetention] = useState(0.9);
-  const [minutes, setMinutes] = useState(120);
+  const [blockMinutes, setBlockMinutes] = useState(120);
+  const [pausedTracks, setPausedTracks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -17,10 +26,16 @@ export default function SettingsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [u, s] = await Promise.all([api.getUser(), api.getAIStatus()]);
+        const [u, t, s] = await Promise.all([
+          api.getUser(),
+          api.getTracks(),
+          api.getAIStatus(),
+        ]);
         setUser(u);
+        setTracks(t);
         setRetention(u.target_retention);
-        setMinutes(u.daily_study_minutes);
+        setBlockMinutes(u.daily_study_minutes);
+        setPausedTracks(u.paused_tracks ?? []);
         setAIStatus(s);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
@@ -38,7 +53,8 @@ export default function SettingsPage() {
     try {
       const updated = await api.updateUser({
         target_retention: retention,
-        daily_study_minutes: minutes,
+        daily_study_minutes: blockMinutes,
+        paused_tracks: pausedTracks,
       });
       setUser(updated);
       setMessage("Saved.");
@@ -49,35 +65,33 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) return <div className="empty">Loading settings…</div>;
+  const toggleTrack = (slug: string) =>
+    setPausedTracks((prev) =>
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
+    );
+
+  if (loading) return <p style={{ color: "var(--fg-mute)" }}>Loading settings…</p>;
+
+  const activeCount = tracks.length - pausedTracks.length;
 
   return (
     <>
-      <header className="roadmap-strip">
-        <div className="roadmap-strip-left">
-          <h1 className="roadmap-title">Settings</h1>
-          <span className="roadmap-summary">
-            {user?.email ?? "—"} · {Math.round(retention * 100)}% retention · {minutes}m/day
-          </span>
+      <header className="page-head">
+        <div>
+          <h1 className="page-title">Settings</h1>
+          <p className="page-sub">
+            {user?.email} · {Math.round(retention * 100)}% retention · {blockMinutes}m / block
+          </p>
         </div>
       </header>
 
-      <div className="stats-row">
-        <StatCard label="Account" value={user?.email.split("@")[0] ?? "—"} hint={user?.email} />
-        <StatCard label="Retention" value={`${Math.round(retention * 100)}%`} hint="FSRS target" />
-        <StatCard label="Daily" value={`${minutes}m`} hint="study budget" />
-        <StatCard
-          label="Coach"
-          value={aiStatus?.enabled ? "live" : "off"}
-          hint={aiStatus?.enabled ? aiStatus.model.split("-").slice(0, 3).join("-") : "no API key"}
-        />
-      </div>
-
-      <div className="panel">
-        <h2>Scheduler</h2>
-        <form className="form-grid" onSubmit={handleSave}>
-          <label>
-            Target retention <span style={{ color: "var(--amber)" }}>· {Math.round(retention * 100)}%</span>
+      <form onSubmit={handleSave}>
+        <section className="settings-panel">
+          <h2>Session</h2>
+          <div className="field">
+            <span className="field-label">
+              Target retention <span className="field-value">{Math.round(retention * 100)}%</span>
+            </span>
             <input
               type="range"
               min={0.7}
@@ -86,54 +100,102 @@ export default function SettingsPage() {
               value={retention}
               onChange={(e) => setRetention(Number(e.target.value))}
             />
-            <span style={{ fontSize: "0.8rem", color: "var(--muted)", textTransform: "none", letterSpacing: 0, fontFamily: "var(--body)" }}>
-              Higher = more frequent reviews, stronger memory. Default 90%.
+            <span className="field-hint">
+              FSRS aims to schedule reviews so you recall this fraction of cards. Default 90%.
             </span>
-          </label>
-          <label>
-            Daily study budget (minutes)
-            <input type="number" min={15} max={720} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} />
-            <span style={{ fontSize: "0.8rem", color: "var(--muted)", textTransform: "none", letterSpacing: 0, fontFamily: "var(--body)" }}>
-              Cards above 80% priority auto-postpone when this is exceeded.
+          </div>
+
+          <div className="field">
+            <span className="field-label">Block size · {blockMinutes} minutes</span>
+            <input
+              type="number"
+              min={30}
+              max={240}
+              step={5}
+              value={blockMinutes}
+              onChange={(e) => setBlockMinutes(Number(e.target.value))}
+            />
+            <span className="field-hint">
+              How long a single block lasts. New items pack up to this budget; FSRS reviews always run.
             </span>
-          </label>
-          {error && <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>}
-          {message && <p style={{ color: "var(--success)", margin: 0 }}>{message}</p>}
-          <button type="submit" className="primary" disabled={saving}>
+          </div>
+        </section>
+
+        <section className="settings-panel">
+          <h2>Active tracks</h2>
+          <div className="field">
+            <span className="field-hint">
+              Paused tracks are skipped in today&apos;s blocks. Reviews still appear if you open a track manually.
+              {activeCount === 0 && (
+                <strong style={{ color: "var(--warn)", display: "block", marginTop: 6 }}>
+                  All tracks paused — your block stack will be empty.
+                </strong>
+              )}
+            </span>
+          </div>
+          <div className="toggle-grid">
+            {tracks.map((t) => {
+              const paused = pausedTracks.includes(t.slug);
+              const accent = trackAccent(t.slug, t.color);
+              return (
+                <button
+                  key={t.slug}
+                  type="button"
+                  onClick={() => toggleTrack(t.slug)}
+                  className={`toggle-card${paused ? " paused" : " active"}`}
+                  style={{ ["--toggle-accent" as string]: accent }}
+                >
+                  <span className="toggle-card-state">{paused ? "Paused" : "Active"}</span>
+                  <span className="toggle-card-name">{t.name}</span>
+                  <span className="toggle-card-meta">{t.material_count} materials</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <button type="submit" className="v2-btn primary" disabled={saving}>
             {saving ? "Saving…" : "Save"}
           </button>
-        </form>
-      </div>
+          {message && <span className="field-msg-ok">{message}</span>}
+          {error && <span className="field-msg-bad">{error}</span>}
+        </div>
+      </form>
 
-      <div className="panel">
-        <h2>How scheduling works</h2>
-        <ul style={{ color: "var(--text-soft)", fontSize: "0.92rem", lineHeight: 1.75, paddingLeft: "1.25rem", margin: 0 }}>
-          <li><strong style={{ color: "var(--amber)", fontFamily: "var(--display)", fontStyle: "italic" }}>FSRS-6</strong> models memory decay and schedules reviews before you forget.</li>
-          <li><strong style={{ color: "var(--amber)", fontFamily: "var(--display)", fontStyle: "italic" }}>Priority queue</strong> protects critical cards (0–10%) from auto-postpone.</li>
-          <li><strong style={{ color: "var(--amber)", fontFamily: "var(--display)", fontStyle: "italic" }}>HEFT planner</strong> orders tasks across morning/afternoon focus windows.</li>
-          <li><strong style={{ color: "var(--amber)", fontFamily: "var(--display)", fontStyle: "italic" }}>Per-track weights</strong> let domain-specific memory profiles emerge over time.</li>
+      <section className="settings-panel" style={{ marginTop: 24 }}>
+        <h2>How sessions work</h2>
+        <ul style={{ margin: 0, paddingLeft: 18, color: "var(--fg-soft)", fontSize: 13, lineHeight: 1.7 }}>
+          <li><strong style={{ color: "var(--fg)" }}>FSRS-6</strong> schedules each rep just before you forget.</li>
+          <li><strong style={{ color: "var(--fg)" }}>Two blocks weekdays, four weekends</strong> — one track per block.</li>
+          <li><strong style={{ color: "var(--fg)" }}>Next-in-sequence</strong> — picks up wherever you left off.</li>
+          <li><strong style={{ color: "var(--fg)" }}>No streak penalty.</strong> Miss a week and tomorrow looks the same.</li>
         </ul>
-      </div>
+      </section>
 
-      <div className="panel">
-        <h2>Coach (AI Advisor)</h2>
+      <section className="settings-panel">
+        <h2>Coach</h2>
         {aiStatus?.enabled ? (
-          <p style={{ margin: 0, color: "var(--text-soft)" }}>
-            Connected to <code style={{ background: "var(--ink-2)", padding: "0.1rem 0.4rem", borderRadius: "3px", fontFamily: "var(--mono)" }}>{aiStatus.model}</code>.
-            Coach can read your stats, recent reviews, struggling cards, and per-track breakdowns.
+          <p style={{ color: "var(--fg-soft)", fontSize: 13, margin: 0, lineHeight: 1.55 }}>
+            Connected to{" "}
+            <code style={{ fontFamily: "var(--font-mono-stack)", color: "var(--accent)" }}>
+              {aiStatus.model}
+            </code>
+            . Coach reads progress, retention, struggling cards, and per-track breakdowns to surface
+            daily nudges and weekly reviews.
           </p>
         ) : (
           <>
-            <p style={{ marginTop: 0, color: "var(--text-soft)" }}>
+            <p style={{ color: "var(--fg-mute)", fontSize: 13, margin: "0 0 12px" }}>
               Coach is offline. Add an API key to enable AI advice.
             </p>
-            <pre style={{
-              fontFamily: "var(--mono)", fontSize: "0.78rem", background: "var(--ink-2)",
-              padding: "0.85rem 1rem", borderRadius: "var(--radius)", margin: 0, color: "var(--text-soft)",
-            }}>{`# backend/.env\nANTHROPIC_API_KEY=sk-ant-...\n# or:\n# OPENAI_API_KEY=sk-...\n# AI_PROVIDER=openai\n# AI_MODEL=gpt-4o`}</pre>
+            <pre className="env-snippet">{`# backend/.env
+AI_PROVIDER=gemini
+AI_MODEL=gemini-2.5-flash
+GEMINI_API_KEY=AIza...`}</pre>
           </>
         )}
-      </div>
+      </section>
     </>
   );
 }

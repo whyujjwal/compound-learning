@@ -198,6 +198,11 @@ export type Stats = {
   current_streak: number;
   longest_streak: number;
   avg_review_seconds: number;
+  materials_started: number;
+  materials_mastered: number;
+  sessions_this_week: number;
+  days_active_30d: number;
+  total_minutes_invested: number;
   track_breakdown: {
     track_id: string;
     track_name: string;
@@ -214,12 +219,14 @@ export type User = {
   email: string;
   target_retention: number;
   daily_study_minutes: number;
+  paused_tracks: string[];
 };
 
 export const api = {
   getUser: () => request<User>("/user/me"),
-  updateUser: (data: Partial<Pick<User, "target_retention" | "daily_study_minutes">>) =>
-    request<User>("/user/me", { method: "PATCH", body: JSON.stringify(data) }),
+  updateUser: (
+    data: Partial<Pick<User, "target_retention" | "daily_study_minutes" | "paused_tracks">>
+  ) => request<User>("/user/me", { method: "PATCH", body: JSON.stringify(data) }),
 
   getTracks: () => request<Track[]>("/tracks"),
   getTrack: (id: string) => request<Track>(`/tracks/${id}`),

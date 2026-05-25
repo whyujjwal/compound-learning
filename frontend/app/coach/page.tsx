@@ -2,9 +2,16 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "@/components/Markdown";
-import { api, type ChatMessage, type CoachInsight, type Conversation } from "@/lib/api";
+import { useShell } from "@/components/ui/Shell";
+import { RightPanel, PanelSection } from "@/components/ui/RightPanel";
+import {
+  api,
+  type ChatMessage,
+  type CoachInsight,
+  type Conversation,
+} from "@/lib/api";
 
-const SUGGESTION_GROUPS: { label: string; items: string[] }[] = [
+const SUGGESTIONS: { label: string; items: string[] }[] = [
   {
     label: "Diagnose",
     items: [
@@ -25,8 +32,8 @@ const SUGGESTION_GROUPS: { label: string; items: string[] }[] = [
     label: "Deep dive",
     items: [
       "Walk me through my DSA progress in detail.",
-      "Am I retaining AI math well? What needs reinforcement?",
-      "Which system-design materials are overdue and why?",
+      "Am I retaining AI math well?",
+      "Which system-design materials feel weakest?",
     ],
   },
 ];
@@ -39,6 +46,7 @@ type ConvSummary = {
 };
 
 export default function CoachPage() {
+  const { setRightPanel } = useShell();
   const [aiStatus, setAIStatus] = useState<{ enabled: boolean; provider: string; model: string } | null>(null);
   const [conversations, setConversations] = useState<ConvSummary[]>([]);
   const [active, setActive] = useState<Conversation | null>(null);
@@ -57,7 +65,10 @@ export default function CoachPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [status, convs] = await Promise.all([api.getAIStatus(), api.listConversations()]);
+        const [status, convs] = await Promise.all([
+          api.getAIStatus(),
+          api.listConversations(),
+        ]);
         setAIStatus(status);
         setConversations(convs);
       } catch (e) {
@@ -72,9 +83,7 @@ export default function CoachPage() {
     let cancelled = false;
     api
       .getWeeklyInsight()
-      .then((w) => {
-        if (!cancelled) setWeekly(w);
-      })
+      .then((w) => !cancelled && setWeekly(w))
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -92,10 +101,63 @@ export default function CoachPage() {
   }, []);
 
   useEffect(() => {
-    if (messagesRef.current) {
-      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }
+    if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
   }, [active?.messages.length, sending]);
+
+  useEffect(() => {
+    setRightPanel(
+      <RightPanel>
+        <PanelSection label="Coach status">
+          <div style={{ fontSize: 13, color: "var(--fg-soft)", lineHeight: 1.5 }}>
+            {aiStatus?.enabled ? (
+              <>
+                <strong style={{ color: "var(--fg)" }}>Online</strong>
+                <div style={{ fontFamily: "var(--font-mono-stack)", fontSize: 11, color: "var(--fg-mute)", marginTop: 4 }}>
+                  {aiStatus.provider} · {aiStatus.model}
+                </div>
+              </>
+            ) : (
+              <>
+                <strong style={{ color: "var(--fg)" }}>Offline</strong>
+                <div style={{ marginTop: 4, color: "var(--fg-mute)" }}>
+                  Add an AI API key to your backend{" "}
+                  <code style={{ fontFamily: "var(--font-mono-stack)" }}>.env</code>.
+                </div>
+              </>
+            )}
+          </div>
+        </PanelSection>
+
+        {weekly && weekly.content ? (
+          <PanelSection
+            label="Weekly postmortem"
+            action={
+              <button
+                type="button"
+                className="appbar-icon-btn"
+                onClick={refreshWeekly}
+                disabled={weeklyLoading || !aiStatus?.enabled}
+                title="Regenerate"
+              >
+                ↺
+              </button>
+            }
+          >
+            <div className="weekly-card" style={{ margin: 0, padding: "var(--s-4)" }}>
+              <div className="weekly-card-eyebrow">{weekly.period_key}</div>
+              <div className="weekly-card-body" style={{ fontSize: 13, marginTop: 8 }}>
+                <Markdown>{weekly.content}</Markdown>
+              </div>
+              <div className="weekly-card-foot">
+                {new Date(weekly.generated_at).toLocaleDateString()} · {weekly.model}
+              </div>
+            </div>
+          </PanelSection>
+        ) : null}
+      </RightPanel>
+    );
+    return () => setRightPanel(null);
+  }, [aiStatus, weekly, weeklyLoading, refreshWeekly, setRightPanel]);
 
   async function openConversation(id: string) {
     setError(null);
@@ -108,9 +170,7 @@ export default function CoachPage() {
     const conv = await api.createConversation();
     setActive(conv);
     await refresh();
-    if (prefill) {
-      await send(prefill, conv.id);
-    }
+    if (prefill) await send(prefill, conv.id);
   }
 
   async function send(content: string, convId?: string) {
@@ -123,7 +183,6 @@ export default function CoachPage() {
     setError(null);
     setInput("");
 
-    // Optimistic user message
     const optimisticUser: ChatMessage = {
       id: `tmp-${Date.now()}`,
       role: "USER",
@@ -139,14 +198,12 @@ export default function CoachPage() {
     );
 
     try {
-      const res = await api.sendMessage(targetId, content);
+      await api.sendMessage(targetId, content);
       const fresh = await api.getConversation(targetId);
       setActive(fresh);
       await refresh();
-      void res;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to send");
-      // Roll back optimistic
       setActive((prev) =>
         prev && prev.id === targetId
           ? { ...prev, messages: prev.messages.filter((m) => m.id !== optimisticUser.id) }
@@ -159,9 +216,9 @@ export default function CoachPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const value = input.trim();
-    if (!value || sending) return;
-    await send(value);
+    const v = input.trim();
+    if (!v || sending) return;
+    await send(v);
   }
 
   async function handleDelete(id: string) {
@@ -171,209 +228,154 @@ export default function CoachPage() {
     await refresh();
   }
 
-  if (loading) return <div className="empty">Loading Coach…</div>;
+  if (loading) return <p style={{ color: "var(--fg-mute)" }}>Loading Coach…</p>;
 
   return (
-    <div className="coach-page">
-      <header className="roadmap-strip">
-        <div className="roadmap-strip-left">
-          <h1 className="roadmap-title">Coach</h1>
-          <span className="roadmap-summary">
-            {aiStatus?.enabled
-              ? `${aiStatus.provider} · ${aiStatus.model}`
-              : "Offline · add API key in backend .env"}
-          </span>
+    <>
+      <header className="page-head">
+        <div>
+          <h1 className="page-title">Coach</h1>
+          <p className="page-sub">Ask anything about your learning. Coach can see your real telemetry.</p>
         </div>
       </header>
 
-      {!aiStatus?.enabled && (
-        <div className="error-panel">
-          <p>
-            <strong>Coach is offline.</strong> Add an API key to your backend
-            <code style={{ marginLeft: "0.4rem", fontFamily: "var(--mono)" }}>.env</code>:
-          </p>
-          <pre style={{
-            fontFamily: "var(--mono)",
-            fontSize: "0.78rem",
-            background: "var(--ink-2)",
-            padding: "0.85rem",
-            borderRadius: "var(--radius)",
-            marginTop: "0.75rem",
-            color: "var(--text-soft)",
-          }}>
-ANTHROPIC_API_KEY=sk-ant-...{"\n"}
-# or OPENAI_API_KEY=sk-... with AI_PROVIDER=openai
-          </pre>
-          <p style={{ marginTop: "0.75rem", color: "var(--muted)", fontSize: "0.85rem" }}>
-            Then restart the backend. Conversations and message history will work without the AI active.
-          </p>
-        </div>
-      )}
-
-      {weekly && weekly.content && (
-        <section className="weekly-card">
-          <div className="weekly-card-header">
-            <div>
-              <div className="weekly-card-eyebrow">This week · {weekly.period_key}</div>
-              <h2 className="weekly-card-title">Postmortem</h2>
-            </div>
-            <button
-              type="button"
-              className="ghost"
-              onClick={refreshWeekly}
-              disabled={weeklyLoading || !aiStatus?.enabled}
-              title="Regenerate with latest data"
-            >
-              {weeklyLoading ? "…" : "Refresh"}
-            </button>
-          </div>
-          <div className="weekly-card-body">
-            <Markdown>{weekly.content}</Markdown>
-          </div>
-          <div className="weekly-card-foot">
-            generated {new Date(weekly.generated_at).toLocaleString()} · {weekly.model}
-          </div>
-        </section>
-      )}
-
       <div className="coach-shell">
-        <div className="convo-list">
+        <aside className="coach-sidebar">
           <button
+            type="button"
+            className="coach-new-btn"
             onClick={() => startNew()}
-            style={{ width: "100%", marginBottom: "0.5rem" }}
             disabled={sending}
           >
             + New conversation
           </button>
-
           {conversations.length === 0 ? (
-            <div className="muted" style={{ fontSize: "0.85rem", padding: "0.5rem" }}>
+            <div style={{ color: "var(--fg-mute)", fontSize: 12.5, padding: 8 }}>
               No conversations yet.
             </div>
           ) : (
             conversations.map((c) => (
-              <div
+              <button
                 key={c.id}
-                className={`convo-item ${active?.id === c.id ? "active" : ""}`}
+                type="button"
+                className={`coach-conv${active?.id === c.id ? " active" : ""}`}
                 onClick={() => openConversation(c.id)}
+                style={{ background: "transparent", border: "none", textAlign: "left" }}
               >
-                <div className="convo-title">{c.title}</div>
-                <div className="convo-meta">
+                <span className="coach-conv-title">{c.title}</span>
+                <span className="coach-conv-meta">
                   {new Date(c.updated_at).toLocaleDateString()} · {c.message_count} msg
-                </div>
-              </div>
+                </span>
+              </button>
             ))
           )}
-        </div>
+        </aside>
 
-        <div className="coach-main">
+        <section className="coach-main">
           {!active ? (
             <div className="coach-empty">
-              <h3>What would you like to know?</h3>
-              <p>
-                The Coach can see your real telemetry — reviews, retention, streak,
-                struggling cards, and per-track performance. Pick a prompt or write your own.
+              <h2>What would you like to know?</h2>
+              <p style={{ maxWidth: 460, margin: "0 auto", color: "var(--fg-mute)", fontSize: 13 }}>
+                Pick a starter or write your own. Coach reads stats, struggling cards, and per-track performance live.
               </p>
-              <div className="suggestion-groups">
-                {SUGGESTION_GROUPS.map((g) => (
-                  <div key={g.label} className="suggestion-group">
-                    <div className="suggestion-group-label">{g.label}</div>
-                    <div className="suggested-questions">
-                      {g.items.map((q) => (
-                        <button
-                          key={q}
-                          className="suggested-q"
-                          onClick={() => startNew(q)}
-                          disabled={!aiStatus?.enabled}
-                        >
-                          {q}
-                        </button>
-                      ))}
-                    </div>
+              <div className="suggestion-grid">
+                {SUGGESTIONS.map((g) => (
+                  <div key={g.label} className="suggestion-col">
+                    <h3>{g.label}</h3>
+                    {g.items.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        className="suggestion-btn"
+                        onClick={() => startNew(q)}
+                        disabled={!aiStatus?.enabled}
+                      >
+                        {q}
+                      </button>
+                    ))}
                   </div>
                 ))}
               </div>
             </div>
           ) : (
             <>
-              <div className="coach-header">
+              <header className="coach-chat-head">
                 <h2>{active.title}</h2>
-                <button className="ghost" onClick={() => handleDelete(active.id)}>Delete</button>
-              </div>
+                <button
+                  type="button"
+                  className="v2-btn ghost sm"
+                  onClick={() => handleDelete(active.id)}
+                >
+                  Delete
+                </button>
+              </header>
 
               <div className="coach-messages" ref={messagesRef}>
                 {active.messages.map((msg) => (
-                  <div key={msg.id} className={`message ${msg.role === "USER" ? "user" : ""}`}>
-                    <div className="message-avatar">
-                      {msg.role === "USER" ? "You" : "C"}
-                    </div>
-                    <div className="message-bubble">
-                      {msg.role === "ASSISTANT" && msg.tool_calls && msg.tool_calls.length > 0 && (
-                        <div className="tool-calls">
-                          {msg.tool_calls.map((tc) => (
-                            <span key={tc.id} className="tool-call-pill">
-                              {tc.name}
-                              {Object.keys(tc.input).length > 0 && (
-                                <span style={{ opacity: 0.7 }}>
-                                  ({Object.entries(tc.input).map(([k, v]) => `${k}=${v}`).join(", ")})
-                                </span>
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                  <div key={msg.id} className={`coach-msg${msg.role === "USER" ? " user" : ""}`}>
+                    <div className="coach-avatar">{msg.role === "USER" ? "You" : "C"}</div>
+                    <div className="coach-bubble">
+                      {msg.role === "ASSISTANT" &&
+                        msg.tool_calls &&
+                        msg.tool_calls.length > 0 && (
+                          <div className="tool-pills">
+                            {msg.tool_calls.map((tc) => (
+                              <span key={tc.id} className="tool-pill">
+                                {tc.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       {msg.content && <Markdown>{msg.content}</Markdown>}
                     </div>
                   </div>
                 ))}
-
                 {sending && (
-                  <div className="message">
-                    <div className="message-avatar">C</div>
-                    <div className="message-bubble">
-                      <div className="typing">
-                        <span></span><span></span><span></span>
-                      </div>
+                  <div className="coach-msg">
+                    <div className="coach-avatar">C</div>
+                    <div className="coach-bubble">
+                      <span className="typing">
+                        <span /><span /><span />
+                      </span>
                     </div>
                   </div>
                 )}
-
                 {error && (
-                  <div className="error-panel">
-                    <p>{error}</p>
+                  <div className="coach-msg">
+                    <div className="coach-avatar">!</div>
+                    <div className="coach-bubble" style={{ color: "var(--bad)" }}>{error}</div>
                   </div>
                 )}
               </div>
 
-              <div className="coach-input-wrap">
-                <form className="coach-input" onSubmit={handleSubmit}>
-                  <textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder={aiStatus?.enabled ? "Ask about your learning…" : "Set API key to enable Coach"}
-                    disabled={sending || !aiStatus?.enabled}
-                    rows={2}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSubmit(e as unknown as FormEvent);
-                      }
-                    }}
-                  />
-                  <button
-                    className="primary"
-                    type="submit"
-                    disabled={sending || !input.trim() || !aiStatus?.enabled}
-                    style={{ alignSelf: "stretch", padding: "0 1.25rem" }}
-                  >
-                    Send
-                  </button>
-                </form>
-              </div>
+              <form className="coach-input" onSubmit={handleSubmit}>
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={
+                    aiStatus?.enabled ? "Ask about your learning…" : "Set API key to enable Coach"
+                  }
+                  disabled={sending || !aiStatus?.enabled}
+                  rows={2}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit(e as unknown as FormEvent);
+                    }
+                  }}
+                />
+                <button
+                  type="submit"
+                  className="v2-btn primary"
+                  disabled={sending || !input.trim() || !aiStatus?.enabled}
+                >
+                  Send
+                </button>
+              </form>
             </>
           )}
-        </div>
+        </section>
       </div>
-    </div>
+    </>
   );
 }
