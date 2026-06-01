@@ -95,6 +95,24 @@ export type DailyQueue = {
   new_count: number;
 };
 
+export type BlockSession = {
+  id: string;
+  session_date: string;
+  slot: number;
+  slot_label: string;
+  track_slug: string;
+  track_name: string;
+  track_color: string;
+  planned_minutes: number;
+  current_index: number;
+  total_items: number;
+  status: "IN_PROGRESS" | "COMPLETED";
+  started_at: string;
+  completed_at: string | null;
+  items: QueueItem[];
+  active_card_id: string | null;
+};
+
 export type TrackProgressBlock = {
   label: string;
   material_count: number;
@@ -305,6 +323,14 @@ export const api = {
   getCard: (id: string) => request<CardDetail>(`/cards/${id}`),
 
   getDailyQueue: () => request<DailyQueue>("/queue/daily"),
+  startBlockSession: (slot: number) =>
+    request<BlockSession>(`/blocks/${slot}/start`, { method: "POST" }),
+  getBlockSession: (slot: number) => request<BlockSession>(`/blocks/${slot}`),
+  submitBlockReview: (slot: number, cardId: string, rating: string, elapsed: number) =>
+    request<BlockSession>(`/blocks/${slot}/items/${cardId}/review`, {
+      method: "POST",
+      body: JSON.stringify({ rating, elapsed_time_seconds: elapsed }),
+    }),
   submitReview: (cardId: string, rating: string, elapsed: number) =>
     request<{ card: { due_at: string; reps: number } }>(`/cards/${cardId}/review`, {
       method: "POST",

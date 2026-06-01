@@ -2235,7 +2235,7 @@
         {
           "title": "Count bits to flip A\u2192B",
           "url": "https://www.geeksforgeeks.org/count-number-of-bits-to-be-flipped-to-convert-a-to-b/",
-          "block_label": "DSA \u00b7 Bit manipulation (interview)",
+          "block_label": "DSA \u00b7 Bit manipulation (advanced)",
           "type": "practice",
           "estimated_minutes": 20,
           "priority_percent": 6,
@@ -2246,7 +2246,7 @@
         {
           "title": "Number appearing odd times",
           "url": "https://www.geeksforgeeks.org/find-the-number-occurring-odd-number-of-times/",
-          "block_label": "DSA \u00b7 Bit manipulation (interview)",
+          "block_label": "DSA \u00b7 Bit manipulation (advanced)",
           "type": "practice",
           "estimated_minutes": 15,
           "priority_percent": 6,
@@ -2257,7 +2257,7 @@
         {
           "title": "Power set via bits",
           "url": "https://leetcode.com/problems/subsets/",
-          "block_label": "DSA \u00b7 Bit manipulation (interview)",
+          "block_label": "DSA \u00b7 Bit manipulation (advanced)",
           "type": "practice",
           "estimated_minutes": 25,
           "priority_percent": 7,
@@ -2268,7 +2268,7 @@
         {
           "title": "XOR of L..R",
           "url": "https://www.geeksforgeeks.org/find-xor-of-numbers-from-l-to-r/",
-          "block_label": "DSA \u00b7 Bit manipulation (interview)",
+          "block_label": "DSA \u00b7 Bit manipulation (advanced)",
           "type": "practice",
           "estimated_minutes": 25,
           "priority_percent": 6,
@@ -2279,7 +2279,7 @@
         {
           "title": "Two numbers appearing odd times",
           "url": "https://leetcode.com/problems/single-number-iii/",
-          "block_label": "DSA \u00b7 Bit manipulation (interview)",
+          "block_label": "DSA \u00b7 Bit manipulation (advanced)",
           "type": "practice",
           "estimated_minutes": 35,
           "priority_percent": 7,
@@ -2290,7 +2290,7 @@
         {
           "title": "Single number II (one appears once, rest 3\u00d7)",
           "url": "https://leetcode.com/problems/single-number-ii/",
-          "block_label": "DSA \u00b7 Bit manipulation (interview)",
+          "block_label": "DSA \u00b7 Bit manipulation (advanced)",
           "type": "practice",
           "estimated_minutes": 35,
           "priority_percent": 7,
@@ -2301,7 +2301,7 @@
         {
           "title": "Reverse bits",
           "url": "https://leetcode.com/problems/reverse-bits/",
-          "block_label": "DSA \u00b7 Bit manipulation (interview)",
+          "block_label": "DSA \u00b7 Bit manipulation (advanced)",
           "type": "practice",
           "estimated_minutes": 25,
           "priority_percent": 6,
@@ -7408,7 +7408,7 @@
           "priority_percent": 10,
           "cognitive_cost_multiplier": 1.0,
           "sequence": 1,
-          "notes": "WATCH (~15 min skim)\n\u2022 Hello Interview \u2014 System Design in a Hurry (playlist)\n\u2022 Focus: Start here. Modern, interview-focused, sharp. Watch entire 'System Design in a Hurry' playlist.\n\nDO (this block)\n1. Read/skim with a pen \u2014 don't passively scroll.\n2. Write 3 bullet takeaways in your own words.\n3. Connect one idea to something you already know in this track.\n\nDELIVERABLE\n\u2022 3 takeaway bullets in your notes app\n\nRECALL (after Reveal)\n\u2022 Summarize Hello Interview \u2014 System Design in a Hurry (playlist) in 60 seconds without notes."
+          "notes": "WATCH (~15 min skim)\n\u2022 Hello Interview \u2014 System Design in a Hurry (playlist)\n\u2022 Focus: Start here. Modern, sharp overview of how large systems are designed. Watch the full playlist.\n\nDO (this block)\n1. Read/skim with a pen \u2014 don't passively scroll.\n2. Write 3 bullet takeaways in your own words.\n3. Connect one idea to something you already know in this track.\n\nDELIVERABLE\n\u2022 3 takeaway bullets in your notes app\n\nRECALL (after Reveal)\n\u2022 Summarize Hello Interview \u2014 System Design in a Hurry (playlist) in 60 seconds without notes."
         },
         {
           "title": "Hello Interview \u2014 Core Concepts: Scaling, Sharding, CAP",
@@ -7419,7 +7419,7 @@
           "priority_percent": 10,
           "cognitive_cost_multiplier": 1.0,
           "sequence": 2,
-          "notes": "WATCH (~15 min skim)\n\u2022 Hello Interview \u2014 Core Concepts: Scaling, Sharding, CAP\n\u2022 Focus: Foundational vocabulary every SD interview assumes you know cold.\n\nDO (this block)\n1. Read/skim with a pen \u2014 don't passively scroll.\n2. Write 3 bullet takeaways in your own words.\n3. Connect one idea to something you already know in this track.\n\nDELIVERABLE\n\u2022 3 takeaway bullets in your notes app\n\nRECALL (after Reveal)\n\u2022 Summarize Hello Interview \u2014 Core Concepts: Scaling, Sharding, CAP in 60 seconds without notes."
+          "notes": "WATCH (~15 min skim)\n\u2022 Hello Interview \u2014 Core Concepts: Scaling, Sharding, CAP\n\u2022 Focus: Foundational vocabulary for distributed systems \u2014 scaling, sharding, CAP tradeoffs.\n\nDO (this block)\n1. Read/skim with a pen \u2014 don't passively scroll.\n2. Write 3 bullet takeaways in your own words.\n3. Connect one idea to something you already know in this track.\n\nDELIVERABLE\n\u2022 3 takeaway bullets in your notes app\n\nRECALL (after Reveal)\n\u2022 Summarize Hello Interview \u2014 Core Concepts: Scaling, Sharding, CAP in 60 seconds without notes."
         },
         {
           "title": "Hello Interview \u2014 Key Technologies (DBs, Caches, Queues)",
@@ -7430,7 +7430,7 @@
           "priority_percent": 10,
           "cognitive_cost_multiplier": 1.0,
           "sequence": 3,
-          "notes": "WATCH (~15 min skim)\n\u2022 Hello Interview \u2014 Key Technologies (DBs, Caches, Queues)\n\u2022 Focus: The toolbox you compose answers from. Postgres vs Dynamo vs Cassandra; Redis vs Memcached; Kafka vs SQS.\n\nDO (this block)\n1. Read/skim with a pen \u2014 don't passively scroll.\n2. Write 3 bullet takeaways in your own words.\n3. Connect one idea to something you already know in this track.\n\nDELIVERABLE\n\u2022 3 takeaway bullets in your notes app\n\nRECALL (after Reveal)\n\u2022 Summarize Hello Interview \u2014 Key Technologies (DBs, Caches, Queues) in 60 seconds without notes."
+          "notes": "WATCH (~15 min skim)\n\u2022 Hello Interview \u2014 Key Technologies (DBs, Caches, Queues)\n\u2022 Focus: The toolbox you compose systems from. Postgres vs Dynamo vs Cassandra; Redis vs Memcached; Kafka vs SQS.\n\nDO (this block)\n1. Read/skim with a pen \u2014 don't passively scroll.\n2. Write 3 bullet takeaways in your own words.\n3. Connect one idea to something you already know in this track.\n\nDELIVERABLE\n\u2022 3 takeaway bullets in your notes app\n\nRECALL (after Reveal)\n\u2022 Summarize Hello Interview \u2014 Key Technologies (DBs, Caches, Queues) in 60 seconds without notes."
         },
         {
           "title": "Hello Interview \u2014 Common Patterns (Read/Write Heavy, Geo)",
@@ -7441,7 +7441,7 @@
           "priority_percent": 9,
           "cognitive_cost_multiplier": 1.0,
           "sequence": 4,
-          "notes": "WATCH (~15 min skim)\n\u2022 Hello Interview \u2014 Common Patterns (Read/Write Heavy, Geo)\n\u2022 Focus: Pattern recognition shortcuts. Most SD problems map to 5-6 archetypes.\n\nDO (this block)\n1. Read/skim with a pen \u2014 don't passively scroll.\n2. Write 3 bullet takeaways in your own words.\n3. Connect one idea to something you already know in this track.\n\nDELIVERABLE\n\u2022 3 takeaway bullets in your notes app\n\nRECALL (after Reveal)\n\u2022 Summarize Hello Interview \u2014 Common Patterns (Read/Write Heavy, Geo) in 60 seconds without notes."
+          "notes": "WATCH (~15 min skim)\n\u2022 Hello Interview \u2014 Common Patterns (Read/Write Heavy, Geo)\n\u2022 Focus: Pattern recognition \u2014 most real systems map to a handful of archetypes.\n\nDO (this block)\n1. Read/skim with a pen \u2014 don't passively scroll.\n2. Write 3 bullet takeaways in your own words.\n3. Connect one idea to something you already know in this track.\n\nDELIVERABLE\n\u2022 3 takeaway bullets in your notes app\n\nRECALL (after Reveal)\n\u2022 Summarize Hello Interview \u2014 Common Patterns (Read/Write Heavy, Geo) in 60 seconds without notes."
         },
         {
           "title": "Hello Interview \u2014 Delivery Framework",
@@ -7452,7 +7452,7 @@
           "priority_percent": 10,
           "cognitive_cost_multiplier": 1.0,
           "sequence": 5,
-          "notes": "WATCH (~15 min skim)\n\u2022 Hello Interview \u2014 Delivery Framework\n\u2022 Focus: Requirements \u2192 API \u2192 data model \u2192 high level \u2192 deep dives. The 4-step interview structure. Memorize this.\n\nDO (this block)\n1. Read/skim with a pen \u2014 don't passively scroll.\n2. Write 3 bullet takeaways in your own words.\n3. Connect one idea to something you already know in this track.\n\nDELIVERABLE\n\u2022 3 takeaway bullets in your notes app\n\nRECALL (after Reveal)\n\u2022 Summarize Hello Interview \u2014 Delivery Framework in 60 seconds without notes."
+          "notes": "WATCH (~15 min skim)\n\u2022 Hello Interview \u2014 Delivery Framework\n\u2022 Focus: Requirements \u2192 API \u2192 data model \u2192 high level \u2192 deep dives. A reusable structure for thinking through any system.\n\nDO (this block)\n1. Read/skim with a pen \u2014 don't passively scroll.\n2. Write 3 bullet takeaways in your own words.\n3. Connect one idea to something you already know in this track.\n\nDELIVERABLE\n\u2022 3 takeaway bullets in your notes app\n\nRECALL (after Reveal)\n\u2022 Summarize Hello Interview \u2014 Delivery Framework in 60 seconds without notes."
         },
         {
           "title": "Hello Interview \u2014 Design TicketMaster",

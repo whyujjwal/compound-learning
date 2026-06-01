@@ -64,7 +64,8 @@ export default function RoadmapPage() {
         <div>
           <h1 className="roadmap-title">Roadmap</h1>
           <p style={{ color: "var(--fg-mute)", fontSize: 13, marginTop: 4 }}>
-            Four tracks. {overview.total_materials} materials. Pick one and start.
+            Your library — {overview.total_materials} materials across {overview.tracks.length} tracks.
+            Finish one, add more anytime.
           </p>
         </div>
         <div className="roadmap-meta">

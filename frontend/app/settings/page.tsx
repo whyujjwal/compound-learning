@@ -21,8 +21,7 @@ export default function SettingsPage() {
   const [retention, setRetention] = useState(0.9);
   const [blockMinutes, setBlockMinutes] = useState(120);
   const [pausedTracks, setPausedTracks] = useState<string[]>([]);
-  const [milestoneTitle, setMilestoneTitle] = useState("");
-  const [milestoneDate, setMilestoneDate] = useState("");
+  const [learningFocus, setLearningFocus] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -41,8 +40,7 @@ export default function SettingsPage() {
         setRetention(u.target_retention);
         setBlockMinutes(u.daily_study_minutes);
         setPausedTracks(u.paused_tracks ?? []);
-        setMilestoneTitle(u.milestone_title ?? "");
-        setMilestoneDate(u.milestone_date ? u.milestone_date.slice(0, 10) : "");
+        setLearningFocus(u.milestone_title ?? "");
         setAIStatus(s);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
@@ -62,8 +60,8 @@ export default function SettingsPage() {
         target_retention: retention,
         daily_study_minutes: blockMinutes,
         paused_tracks: pausedTracks,
-        milestone_title: milestoneTitle || null,
-        milestone_date: milestoneDate ? new Date(milestoneDate).toISOString() : null,
+        milestone_title: learningFocus || null,
+        milestone_date: null,
       });
       setUser(updated);
       setMessage("Saved.");
@@ -131,26 +129,18 @@ export default function SettingsPage() {
         </section>
 
         <section className="settings-panel">
-          <h2>Milestone / exam mode</h2>
+          <h2>Current focus</h2>
           <p className="field-hint" style={{ marginBottom: 12 }}>
-            Set a target date (e.g. interview) to boost consolidation reviews as the date approaches.
+            Optional label for what you&apos;re exploring right now — no deadline, no rush.
+            Compound picks up wherever you left off, forever.
           </p>
           <div className="field">
-            <span className="field-label">Milestone title</span>
+            <span className="field-label">Focus (optional)</span>
             <input
               className="v2-input"
-              placeholder="Google interview"
-              value={milestoneTitle}
-              onChange={(e) => setMilestoneTitle(e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <span className="field-label">Target date</span>
-            <input
-              type="date"
-              className="v2-input"
-              value={milestoneDate}
-              onChange={(e) => setMilestoneDate(e.target.value)}
+              placeholder="e.g. Graph algorithms, transformers, distributed caches"
+              value={learningFocus}
+              onChange={(e) => setLearningFocus(e.target.value)}
             />
           </div>
         </section>
@@ -200,10 +190,11 @@ export default function SettingsPage() {
       <section className="settings-panel" style={{ marginTop: 24 }}>
         <h2>How sessions work</h2>
         <ul style={{ margin: 0, paddingLeft: 18, color: "var(--fg-soft)", fontSize: 13, lineHeight: 1.7 }}>
+          <li><strong style={{ color: "var(--fg)" }}>Your pace</strong> — no calendar, no finish line. Add tracks and materials anytime.</li>
           <li><strong style={{ color: "var(--fg)" }}>FSRS-6</strong> schedules each rep just before you forget.</li>
           <li><strong style={{ color: "var(--fg)" }}>Two blocks weekdays, four weekends</strong> — one track per block.</li>
-          <li><strong style={{ color: "var(--fg)" }}>Next-in-sequence</strong> — picks up wherever you left off.</li>
-          <li><strong style={{ color: "var(--fg)" }}>No streak penalty.</strong> Miss a week and tomorrow looks the same.</li>
+          <li><strong style={{ color: "var(--fg)" }}>Next-in-sequence</strong> — always resumes where you stopped.</li>
+          <li><strong style={{ color: "var(--fg)" }}>No penalty for gaps.</strong> Miss a month and tomorrow looks the same.</li>
         </ul>
       </section>
 

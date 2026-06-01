@@ -6,6 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import {
   SessionCard,
   SessionFooter,
+  SessionHeaderProgress,
+  SessionLogMenu,
   useSessionKeys,
   type Rating,
 } from "@/components/ui/SessionCard";
@@ -97,6 +99,15 @@ export default function SessionPage() {
   const params = useParams<{ cardId: string }>();
   const cardId = params?.cardId ?? "";
 
+  // Daily blocks now use /block/[slot] — redirect legacy session links.
+  useEffect(() => {
+    const cached = loadQueue();
+    const slot = cached?.slot ?? getActiveBlockSlot();
+    if (slot != null) {
+      router.replace(`/block/${slot}#item-${cardId}`);
+    }
+  }, [cardId, router]);
+
   const [queue, setQueue] = useState<Cached | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealed, setRevealed] = useState(false);
@@ -148,6 +159,7 @@ export default function SessionPage() {
 
   const current = index >= 0 ? queue?.items[index] : undefined;
   const total = queue?.items.length ?? 0;
+  const nextTitle = index >= 0 && queue ? queue.items[index + 1]?.material_title : null;
 
   useEffect(() => {
     setRevealed(false);
@@ -243,40 +255,40 @@ export default function SessionPage() {
 
   return (
     <>
-      <header className="session-bar">
-        <div className="session-bar-left">
-          <SessionExit />
-          <span className="session-bar-track" style={{ ["--track-color" as string]: accent }}>
-            <span className="track-dot" aria-hidden />
-            {queue?.context ?? current.track_name}
-          </span>
-        </div>
-        <div className="session-bar-meta">
-          <SessionTimer
-            seconds={elapsed}
-            paused={paused}
-            onTogglePause={togglePause}
-            title="Time in this block (pause excluded)"
-          />
-          <span className="session-bar-counter">
-            {index + 1} <span className="total">/ {total}</span>
-          </span>
-        </div>
-      </header>
+      <div className="session-header-wrap">
+        <header className="session-bar">
+          <div className="session-bar-left">
+            <SessionExit />
+            <span className="session-bar-track" style={{ ["--track-color" as string]: accent }}>
+              <span className="track-dot" aria-hidden />
+              {queue?.context ?? current.track_name}
+            </span>
+          </div>
+          <div className="session-bar-meta">
+            <SessionLogMenu
+              materialId={current.material_id}
+              materialTitle={current.material_title}
+            />
+            <SessionTimer
+              seconds={elapsed}
+              paused={paused}
+              onTogglePause={togglePause}
+              title="Time in this block (pause excluded)"
+            />
+            <span className="session-bar-counter">
+              {index + 1} <span className="total">/ {total}</span>
+            </span>
+          </div>
+        </header>
+        <SessionHeaderProgress index={index + 1} total={total} />
+      </div>
       <div className="session-card-wrap">
-        <SessionCard
-          item={current}
-          revealed={revealed}
-          onReveal={() => setRevealed(true)}
-          index={index + 1}
-          total={total}
-        />
+        <SessionCard item={current} revealed={revealed} nextTitle={nextTitle} />
       </div>
       <SessionFooter
-        materialId={current.material_id}
-        materialTitle={current.material_title}
         revealed={revealed}
         submitting={submitting}
+        onReveal={() => setRevealed(true)}
         onRate={submit}
       />
     </>
@@ -336,7 +348,7 @@ function SessionComplete({
         <div className="session-end-stats">
           <div className="session-end-stat">
             <strong>{streak}</strong>
-            <span>day streak</span>
+            <span>day rhythm</span>
           </div>
           <div className="session-end-stat">
             <strong>{reviewsToday}</strong>
@@ -351,10 +363,8 @@ function SessionComplete({
 
       <p className="session-end-sub">
         {nextBlock
-          ? "Nice work. One more block queued for today — keep the momentum."
-          : streak > 0
-            ? `${streak}-day streak alive. Show up tomorrow and it grows.`
-            : "Solid session. Come back tomorrow to start a streak."}
+          ? "Nice session. Another block is queued — or stop here, no pressure."
+          : "Knowledge compounds. Same time tomorrow, or whenever you're back."}
       </p>
 
       <div className="session-end-actions">

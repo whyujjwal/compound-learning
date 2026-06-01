@@ -12,7 +12,6 @@ import {
   countCompleted,
   getCompletedSlots,
   isBlockComplete,
-  setActiveBlockSlot,
 } from "@/lib/dailyProgress";
 
 const DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -82,36 +81,10 @@ export default function TodayPage() {
 
   // ── Block actions ────────────────────────────────────────
   const startBlock = useCallback(
-    async (block: BlockEntry) => {
-      let active = block;
-      try {
-        const daily = await api.getDailyQueue();
-        const fresh = daily.blocks.find((b) => b.slot === block.slot);
-        if (fresh) active = fresh;
-      } catch {
-        /* use cached block if refresh fails */
-      }
-      const extra = extraByTrack[active.track_slug] ?? [];
-      const items = [...active.reviews, ...active.new_items, ...extra];
-      if (items.length === 0) return;
-      if (typeof window !== "undefined") {
-        try {
-          setActiveBlockSlot(active.slot);
-          window.sessionStorage.removeItem("compound:session-clock");
-          window.sessionStorage.setItem(
-            "compound:session-queue",
-            JSON.stringify({
-              ts: Date.now(),
-              context: `${active.slot_label} · ${active.track_name}`,
-              slot: active.slot,
-              items,
-            })
-          );
-        } catch {}
-      }
-      router.push(`/session/${items[0].card_id}`);
+    (block: BlockEntry) => {
+      router.push(`/block/${block.slot}`);
     },
-    [extraByTrack, router]
+    [router]
   );
 
   const pushMore = useCallback(
@@ -268,11 +241,14 @@ export default function TodayPage() {
         minutesToday={minutesToday}
         minutesGoal={minutesGoal}
         minutesPct={minutesPct}
-        milestoneTitle={user?.milestone_title}
-        milestoneDate={user?.milestone_date}
+        learningFocus={user?.milestone_title}
         onStart={() => firstOpenBlock && startBlock(firstOpenBlock)}
         canStart={Boolean(firstOpenBlock)}
       />
+
+      {firstOpenBlock && !allBlocksDone && (
+        <BlockChecklistPreview block={firstOpenBlock} onOpen={() => startBlock(firstOpenBlock)} />
+      )}
 
       {blocks.length === 0 ? (
         <div className="empty-today">
@@ -323,8 +299,7 @@ function PracticeHero({
   minutesToday,
   minutesGoal,
   minutesPct,
-  milestoneTitle,
-  milestoneDate,
+  learningFocus,
   onStart,
   canStart,
 }: {
@@ -337,34 +312,35 @@ function PracticeHero({
   minutesToday: number;
   minutesGoal: number;
   minutesPct: number;
-  milestoneTitle?: string | null;
-  milestoneDate?: string | null;
+  learningFocus?: string | null;
   onStart: () => void;
   canStart: boolean;
 }) {
   const streak = stats?.current_streak ?? 0;
   const reviewsToday = stats?.reviews_today ?? 0;
-  const daysUntilMilestone = milestoneDate
-    ? Math.ceil((new Date(milestoneDate).getTime() - Date.now()) / 86400000)
-    : null;
+  const mastered = stats?.materials_mastered ?? 0;
+  const totalMaterials = stats?.total_materials ?? 0;
 
   const ctaLabel = allBlocksDone
-    ? "Review extra cards"
+    ? "Review completed blocks"
     : blocksDone > 0
-      ? "Continue today's practice"
-      : "Start today's practice";
+      ? "Continue block"
+      : "Open block";
 
   return (
     <section className="practice-hero">
       <div className="practice-hero-top">
         <div>
-          <p className="practice-hero-eyebrow">{date.meta}</p>
+          <p className="practice-hero-eyebrow">Lifelong learning · {date.meta}</p>
           <h1 className="practice-hero-title">{date.day}</h1>
+          {learningFocus && (
+            <p className="practice-hero-focus">Exploring · {learningFocus}</p>
+          )}
           {nudge?.content && <p className="practice-hero-nudge">{nudge.content}</p>}
         </div>
-        <div className="practice-hero-streak" title={`Longest: ${stats?.longest_streak ?? 0} days`}>
+        <div className="practice-hero-streak" title={`Best rhythm: ${stats?.longest_streak ?? 0} days`}>
           <span className="practice-hero-streak-num">{streak}</span>
-          <span className="practice-hero-streak-label">day streak</span>
+          <span className="practice-hero-streak-label">day rhythm</span>
         </div>
       </div>
 
@@ -388,7 +364,7 @@ function PracticeHero({
           <div className="practice-hero-stat">
             <strong>{minutesToday}</strong>
             <span>min today</span>
-            <span className="muted">goal {minutesGoal}m</span>
+            <span className="muted">{minutesGoal}m planned</span>
           </div>
           <div className="practice-hero-stat">
             <strong>{reviewsToday}</strong>
@@ -396,12 +372,13 @@ function PracticeHero({
           </div>
           <div className="practice-hero-stat">
             <strong>{blocksDone}/{blocksTotal || "—"}</strong>
-            <span>blocks done</span>
+            <span>blocks today</span>
           </div>
-          {milestoneTitle && daysUntilMilestone != null && daysUntilMilestone >= 0 && (
-            <div className="practice-hero-stat practice-hero-milestone">
-              <strong>{daysUntilMilestone}d</strong>
-              <span>{milestoneTitle}</span>
+          {totalMaterials > 0 && (
+            <div className="practice-hero-stat">
+              <strong>{mastered}</strong>
+              <span>mastered</span>
+              <span className="muted">of {totalMaterials} total</span>
             </div>
           )}
         </div>
@@ -413,8 +390,50 @@ function PracticeHero({
         onClick={onStart}
         disabled={!canStart}
       >
-        {allBlocksDone ? "✓ All blocks done — " : ""}{ctaLabel} <span aria-hidden>→</span>
+        {ctaLabel} <span aria-hidden>→</span>
       </button>
+
+      <p className="practice-hero-foot">
+        Finish a track?{" "}
+        <Link href="/curriculum/edit">Add more to your library</Link>
+        {" "}— Compound grows with you.
+      </p>
+    </section>
+  );
+}
+
+function BlockChecklistPreview({
+  block,
+  onOpen,
+}: {
+  block: BlockEntry;
+  onOpen: () => void;
+}) {
+  const accent = trackAccent(block.track_slug, block.track_color);
+  const items = [...block.reviews, ...block.new_items];
+
+  return (
+    <section className="block-preview" style={{ ["--track-color" as string]: accent }}>
+      <div className="block-preview-head">
+        <div>
+          <p className="block-preview-eyebrow">
+            {block.slot_label} · ~{block.planned_minutes}m
+          </p>
+          <h2 className="block-preview-title">{block.track_name}</h2>
+        </div>
+        <button type="button" className="v2-btn primary" onClick={onOpen}>
+          Open block →
+        </button>
+      </div>
+      <ol className="block-preview-list">
+        {items.map((item, i) => (
+          <li key={item.card_id} className="block-preview-item">
+            <span className="block-preview-num">{i + 1}</span>
+            <span className="block-preview-item-title">{item.material_title}</span>
+            <span className="block-preview-item-meta">{item.estimated_minutes}m</span>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }
@@ -476,7 +495,7 @@ function BlockRow({
           onClick={onStart}
           disabled={isEmpty}
         >
-          {completed ? "Again" : "Start"} <span aria-hidden>›</span>
+          {completed ? "Again" : "Open"} <span aria-hidden>›</span>
         </button>
       </div>
     </article>

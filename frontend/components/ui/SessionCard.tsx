@@ -1,110 +1,161 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { resourceAction } from "@/lib/resourceAction";
-import { parseMaterialNotes } from "@/lib/parseMaterialNotes";
+import { briefForItem, type BriefItem } from "@/lib/parseMaterialNotes";
 import { trackAccent } from "@/lib/trackColors";
 import { api, type QueueItem } from "@/lib/api";
 
 const RATINGS = [
-  { key: "AGAIN", label: "Again", shortcut: "1", className: "again" },
-  { key: "HARD", label: "Hard", shortcut: "2", className: "hard" },
-  { key: "GOOD", label: "Good", shortcut: "3", className: "good" },
-  { key: "EASY", label: "Easy", shortcut: "4", className: "easy" },
+  { key: "AGAIN", label: "Again", shortcut: "1", className: "again", hint: "Forgot — review soon" },
+  { key: "HARD", label: "Hard", shortcut: "2", className: "hard", hint: "Struggled" },
+  { key: "GOOD", label: "Good", shortcut: "3", className: "good", hint: "Got it" },
+  { key: "EASY", label: "Easy", shortcut: "4", className: "easy", hint: "Effortless" },
 ] as const;
 
 export type Rating = (typeof RATINGS)[number]["key"];
 
-function MaterialBrief({
-  content,
-  revealed,
-}: {
-  content: string | null;
-  revealed: boolean;
-}) {
-  const parsed = parseMaterialNotes(content);
-
-  if (!parsed.structured) {
-    if (!parsed.legacy) return null;
-    return (
-      <div className="session-brief">
-        <div className="session-section">
-          <div className="session-section-label">About</div>
-          <p className="session-section-body">{parsed.legacy}</p>
-        </div>
-      </div>
-    );
-  }
+function SessionPhaseBar({ revealed }: { revealed: boolean }) {
+  const steps = [
+    { id: "work" as const, label: "Work", num: 1 },
+    { id: "recall" as const, label: "Recall", num: 2 },
+    { id: "rate" as const, label: "Rate", num: 3 },
+  ];
 
   return (
-    <div className="session-brief">
-      {parsed.sections.map((section) => {
-        if (section.key === "recall" && !revealed) {
-          return (
-            <div key={section.key} className="session-section session-section-muted">
-              <div className="session-section-label">{section.title}</div>
-              <p className="session-section-hint">
-                Finish deliverables, then Reveal to unlock self-test questions.
-              </p>
-            </div>
-          );
-        }
-        if (section.key === "recall" && !section.lines.length) return null;
-
-        const ordered = section.key === "do";
-        const ListTag = ordered ? "ol" : "ul";
+    <nav className="session-phase" aria-label="Session steps">
+      {steps.map((step, i) => {
+        const done = revealed ? i === 0 : false;
+        const active = revealed ? i >= 1 : i === 0;
 
         return (
           <div
-            key={section.key}
-            className={`session-section session-section-${section.key}${section.key === "recall" && revealed ? " session-section-recall-open" : ""}`}
+            key={step.id}
+            className={`session-phase-step${done ? " done" : ""}${active ? " active" : ""}`}
           >
-            <div className="session-section-label">{section.title}</div>
-            <ListTag className="session-section-list">
-              {section.lines.map((line, i) => (
-                <li key={i}>{line}</li>
-              ))}
-            </ListTag>
+            <span className="session-phase-num" aria-hidden>
+              {done ? "✓" : step.num}
+            </span>
+            <span className="session-phase-label">{step.label}</span>
+            {i < steps.length - 1 && <span className="session-phase-connector" aria-hidden />}
           </div>
         );
       })}
+    </nav>
+  );
+}
+
+function MaterialBrief({
+  item,
+  revealed,
+}: {
+  item: BriefItem;
+  revealed: boolean;
+}) {
+  const parsed = briefForItem(item);
+  const workSections = parsed.sections.filter((s) => s.key !== "recall");
+  const recallSection = parsed.sections.find((s) => s.key === "recall");
+
+  return (
+    <div className="session-brief">
+      <div className="session-work-grid">
+        {workSections.map((section) => {
+          const ordered = section.key === "do";
+          const ListTag = ordered ? "ol" : "ul";
+          return (
+            <div
+              key={section.key}
+              className={`session-section session-section-${section.key}`}
+            >
+              <div className="session-section-label">{section.title}</div>
+              <ListTag className="session-section-list">
+                {section.lines.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ListTag>
+            </div>
+          );
+        })}
+      </div>
+
+      {recallSection && (
+        <div
+          className={`session-section session-section-recall${
+            revealed ? " session-section-recall-open" : " session-section-muted"
+          }`}
+        >
+          <div className="session-section-label">
+            {recallSection.title}
+            {!revealed && <span className="session-section-lock"> · locked</span>}
+          </div>
+          {revealed ? (
+            <ul className="session-section-list">
+              {recallSection.lines.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="session-section-hint">
+              Finish the deliverables above, then reveal to unlock self-test prompts.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-/** Body of the active session card — title, content, FSRS metadata. */
+function SessionPrimaryAction({ item }: { item: QueueItem }) {
+  if (!item.material_url) return null;
+  const a = resourceAction(item.resource_type);
+
+  return (
+    <a
+      href={item.material_url}
+      target="_blank"
+      rel="noreferrer"
+      className="session-action-hero"
+    >
+      <span className="session-action-icon" aria-hidden>
+        {a.icon}
+      </span>
+      <span className="session-action-copy">
+        <span className="session-action-label">{a.label}</span>
+        <span className="session-action-meta">
+          ~{item.estimated_minutes} min · opens in new tab
+        </span>
+      </span>
+      <span className="session-action-arrow" aria-hidden>
+        ↗
+      </span>
+    </a>
+  );
+}
+
+/** Body of the active session card — title, brief, primary action. */
 export function SessionCard({
   item,
   revealed,
-  onReveal,
-  index,
-  total,
+  nextTitle,
 }: {
   item: QueueItem;
   revealed: boolean;
-  onReveal: () => void;
-  index?: number;
-  total?: number;
+  nextTitle?: string | null;
 }) {
   const accent = trackAccent(item.track_slug, item.track_color);
-  const a = resourceAction(item.resource_type);
-  const showProgress = index != null && total != null && total > 0;
+  const briefItem: BriefItem = {
+    material_title: item.material_title,
+    material_content: item.material_content,
+    material_url: item.material_url,
+    resource_type: item.resource_type,
+    kind: item.kind,
+    estimated_minutes: item.estimated_minutes,
+  };
 
   return (
     <section className="session-card" style={{ ["--track-color" as string]: accent }}>
-      {showProgress && (
-        <div className="session-progress" aria-label={`Card ${index} of ${total}`}>
-          <div className="session-progress-bar">
-            <div
-              className="session-progress-fill"
-              style={{ width: `${Math.round((index / total) * 100)}%` }}
-            />
-          </div>
-          <span className="session-progress-label">
-            {index} / {total}
-          </span>
-        </div>
-      )}
+      <SessionPhaseBar revealed={revealed} />
+
       <div className="session-meta">
         <span className="pill track">
           <span className="track-dot" aria-hidden /> {item.track_name}
@@ -116,72 +167,98 @@ export function SessionCard({
 
       <h1 className="session-card-title">{item.material_title}</h1>
 
-      <MaterialBrief content={item.material_content} revealed={revealed} />
+      <SessionPrimaryAction item={item} />
+      <MaterialBrief item={briefItem} revealed={revealed} />
 
-      {item.material_url && (
-        <div>
-          <a
-            href={item.material_url}
-            target="_blank"
-            rel="noreferrer"
-            className="v2-btn primary"
-          >
-            <span aria-hidden style={{ fontSize: 11 }}>{a.icon}</span>
-            {a.label} ↗
-          </a>
+      {revealed && (item.stability != null || item.retrievability != null) && (
+        <div className="session-fsrs">
+          {item.stability != null && (
+            <span>
+              <strong>S</strong>
+              {item.stability.toFixed(1)}d
+            </span>
+          )}
+          {item.retrievability != null && (
+            <span>
+              <strong>R</strong>
+              {(item.retrievability * 100).toFixed(0)}%
+            </span>
+          )}
+          {item.difficulty != null && (
+            <span>
+              <strong>D</strong>
+              {item.difficulty.toFixed(1)}
+            </span>
+          )}
         </div>
       )}
 
-      {!revealed ? (
-        <>
-          <p className="session-prompt">
-            Complete the deliverables above, then self-test with Reveal. Press{" "}
-            <kbd>Space</kbd>.
-          </p>
-          <button type="button" className="v2-btn session-reveal" onClick={onReveal}>
-            Show recall <kbd style={{ marginLeft: 6, fontSize: 10 }}>Space</kbd>
-          </button>
-        </>
-      ) : (
-        <div className="session-fsrs">
-          {item.stability != null && (
-            <span><strong>S</strong>{item.stability.toFixed(1)}d</span>
-          )}
-          {item.retrievability != null && (
-            <span><strong>R</strong>{(item.retrievability * 100).toFixed(0)}%</span>
-          )}
-          {item.difficulty != null && (
-            <span><strong>D</strong>{item.difficulty.toFixed(1)}</span>
-          )}
-        </div>
+      {nextTitle && (
+        <p className="session-up-next">
+          Up next · <span>{nextTitle}</span>
+        </p>
       )}
     </section>
   );
 }
 
-/** Sticky session footer — practice log + FSRS rating dock. */
+/** Thin progress bar for the session header. */
+export function SessionHeaderProgress({ index, total }: { index: number; total: number }) {
+  if (total <= 0) return null;
+  const pct = Math.round((index / total) * 100);
+  return (
+    <div
+      className="session-bar-progress"
+      role="progressbar"
+      aria-valuenow={index}
+      aria-valuemin={0}
+      aria-valuemax={total}
+      aria-label={`Card ${index} of ${total}`}
+    >
+      <div className="session-bar-progress-fill" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+/** Sticky session footer — reveal CTA or FSRS ratings. */
 export function SessionFooter({
-  materialId,
-  materialTitle,
   revealed,
   submitting,
+  onReveal,
   onRate,
 }: {
-  materialId: string;
-  materialTitle: string;
   revealed: boolean;
   submitting: boolean;
+  onReveal: () => void;
   onRate: (r: Rating) => void;
 }) {
+  if (!revealed) {
+    return (
+      <footer className="session-footer session-footer-work">
+        <div className="session-footer-inner">
+          <p className="session-footer-hint">Done with deliverables?</p>
+          <button
+            type="button"
+            className="v2-btn primary session-reveal-btn"
+            onClick={onReveal}
+          >
+            Show recall
+            <kbd>Space</kbd>
+          </button>
+        </div>
+      </footer>
+    );
+  }
+
   return (
-    <footer className="session-footer">
-      <SessionLogPanel materialId={materialId} materialTitle={materialTitle} />
-      <SessionDock enabled={revealed} submitting={submitting} onRate={onRate} />
+    <footer className="session-footer session-footer-rate">
+      <SessionDock enabled submitting={submitting} onRate={onRate} />
     </footer>
   );
 }
 
-function SessionLogPanel({
+/** Optional time log — lives in the header, not the footer. */
+export function SessionLogMenu({
   materialId,
   materialTitle,
 }: {
@@ -194,6 +271,18 @@ function SessionLogPanel({
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
 
   async function logSession() {
     setSaving(true);
@@ -212,22 +301,22 @@ function SessionLogPanel({
   }
 
   return (
-    <div className={`session-log${open ? " session-log-open" : ""}${saved ? " session-log-saved" : ""}`}>
+    <div className={`session-log-menu${open ? " open" : ""}${saved ? " saved" : ""}`} ref={panelRef}>
       <button
         type="button"
-        className="session-log-toggle"
+        className="session-log-menu-btn"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
+        title="Log time on external resources"
       >
-        <span className="session-log-toggle-label">Log practice</span>
-        <span className="session-log-toggle-meta">{materialTitle}</span>
-        <span className="session-log-chevron" aria-hidden>{open ? "▾" : "▸"}</span>
+        {saved ? "Logged ✓" : "Log time"}
       </button>
 
       {open && (
-        <div className="session-log-body">
+        <div className="session-log-menu-panel">
+          <p className="session-log-menu-title">{materialTitle}</p>
           <p className="session-log-hint">
-            Track time spent on external resources (LeetCode, videos, docs) for this material.
+            Track minutes spent on LeetCode, videos, or docs for this card.
           </p>
           <div className="session-log-fields">
             <label className="session-log-field">
@@ -263,22 +352,13 @@ function SessionLogPanel({
                 ))}
               </div>
             </div>
-
-            <button
-              type="button"
-              className="v2-btn primary sm session-log-submit"
-              disabled={saving}
-              onClick={logSession}
-            >
-              {saved ? "Logged ✓" : saving ? "Saving…" : "Log session"}
-            </button>
           </div>
 
           <label className="session-log-notes">
             <span className="session-log-field-label">Notes (optional)</span>
             <textarea
               rows={2}
-              placeholder="What did you finish? Link or brief summary."
+              placeholder="What did you finish?"
               value={notes}
               onChange={(e) => {
                 setSaved(false);
@@ -286,6 +366,15 @@ function SessionLogPanel({
               }}
             />
           </label>
+
+          <button
+            type="button"
+            className="v2-btn primary sm session-log-submit"
+            disabled={saving}
+            onClick={logSession}
+          >
+            {saved ? "Saved" : saving ? "Saving…" : "Save log"}
+          </button>
         </div>
       )}
     </div>
@@ -304,9 +393,7 @@ export function SessionDock({
 }) {
   return (
     <div className="session-dock">
-      <p className="session-dock-label">
-        {enabled ? "Rate your recall" : "Reveal to unlock ratings"}
-      </p>
+      <p className="session-dock-label">How well did you recall?</p>
       <div className="session-dock-inner">
         {RATINGS.map((r) => (
           <button
@@ -315,6 +402,7 @@ export function SessionDock({
             className={`rating-btn ${r.className}`}
             disabled={!enabled || submitting}
             onClick={() => onRate(r.key)}
+            title={r.hint}
           >
             <span>{r.label}</span>
             <span className="rating-btn-key">{r.shortcut}</span>
@@ -334,11 +422,7 @@ export function useSessionKeys(
 ) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      )
-        return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === " " && !revealed) {
         e.preventDefault();
         onReveal();

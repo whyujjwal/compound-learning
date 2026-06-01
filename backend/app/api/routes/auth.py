@@ -35,7 +35,6 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthRes
             display_name=payload.display_name,
             password_hash=hash_password(payload.password),
             daily_study_minutes=120,
-            milestone_title="Interview-ready",
             target_retention=0.90,
         )
         db.add(user)

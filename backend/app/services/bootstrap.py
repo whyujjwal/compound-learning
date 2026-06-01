@@ -16,7 +16,7 @@ SYSTEM_TRACKS = [
     {
         "slug": "dsa",
         "name": "Data Structures & Algorithms",
-        "description": "Striver A2Z — patterns + spaced re-solving for interview mastery",
+        "description": "Striver A2Z — patterns + spaced re-solving, at your own pace",
         "color": "#22c55e",
         "cognitive_multiplier": 1.2,
     },
@@ -50,7 +50,6 @@ def get_default_user(db: Session) -> User:
         return user
     user = User(email="learner@compound.local", display_name="Learner")
     user.daily_study_minutes = 120
-    user.milestone_title = "Interview-ready"
     user.target_retention = 0.90
     db.add(user)
     db.flush()

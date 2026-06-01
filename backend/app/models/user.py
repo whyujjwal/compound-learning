@@ -32,6 +32,7 @@ class User(Base):
         "SchedulerParameters", back_populates="user", cascade="all, delete-orphan"
     )
     study_sessions = relationship("StudySession", back_populates="user", cascade="all, delete-orphan")
+    block_sessions = relationship("BlockSession", back_populates="user", cascade="all, delete-orphan")
     material_completions = relationship(
         "MaterialCompletion", back_populates="user", cascade="all, delete-orphan"
     )

@@ -6,6 +6,7 @@ from app.models.material_completion import CompletionState, MaterialCompletion
 from app.models.organization import MemberRole, Organization, OrganizationMember, SharedCurriculum
 from app.models.review_log import ReviewLog, ReviewRating
 from app.models.scheduler_params import SchedulerParameters
+from app.models.block_session import BlockSession, BlockSessionStatus
 from app.models.study_session import CompletionStatus, StudySession
 from app.models.track import Track
 from app.models.user import User
@@ -25,6 +26,8 @@ __all__ = [
     "MessageRole",
     "CoachInsight",
     "CoachInsightKind",
+    "BlockSession",
+    "BlockSessionStatus",
     "StudySession",
     "CompletionStatus",
     "MaterialCompletion",

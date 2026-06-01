@@ -13,7 +13,7 @@ import { Shell, BareShell } from "./Shell";
  */
 export function ShellGate({ children }: { children: ReactNode }) {
   const pathname = usePathname() || "/";
-  if (pathname === "/login" || pathname.startsWith("/session")) {
+  if (pathname === "/login" || pathname.startsWith("/session") || pathname.startsWith("/block")) {
     return <BareShell>{children}</BareShell>;
   }
   return <Shell>{children}</Shell>;

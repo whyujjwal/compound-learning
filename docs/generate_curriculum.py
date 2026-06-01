@@ -695,7 +695,7 @@ def add_dsa():
     ]
 
     # ═══ Step 8.2: Bit Manipulation interview (7) ═══
-    BIT2 = "DSA · Bit manipulation (interview)"
+    BIT2 = "DSA · Bit manipulation (advanced)"
     items += [
         m("Count bits to flip A→B", gfg("count-number-of-bits-to-be-flipped-to-convert-a-to-b"), BIT2, minutes=20, priority=6, notes="popcount(a^b)."),
         m("Number appearing odd times", gfg("find-the-number-occurring-odd-number-of-times"), BIT2, minutes=15, priority=6),
@@ -1472,11 +1472,11 @@ def add_sd():
     # Phase 0 — Foundational video courses (in this order for max signal)
     VID = "System Design · Phase 0 · Video Course"
     items += [
-        m("Hello Interview — System Design in a Hurry (playlist)", "https://www.youtube.com/@hello_interview/playlists", VID, minutes=20, priority=10, type="video", notes="Start here. Modern, interview-focused, sharp. Watch entire 'System Design in a Hurry' playlist."),
-        m("Hello Interview — Core Concepts: Scaling, Sharding, CAP", "https://www.youtube.com/watch?v=ZgdS0EUmn70", VID, minutes=45, priority=10, type="video", notes="Foundational vocabulary every SD interview assumes you know cold."),
-        m("Hello Interview — Key Technologies (DBs, Caches, Queues)", "https://www.youtube.com/watch?v=Vyc8lezaa9k", VID, minutes=60, priority=10, type="video", notes="The toolbox you compose answers from. Postgres vs Dynamo vs Cassandra; Redis vs Memcached; Kafka vs SQS."),
-        m("Hello Interview — Common Patterns (Read/Write Heavy, Geo)", "https://www.youtube.com/watch?v=cKbmDIeAVj8", VID, minutes=45, priority=9, type="video", notes="Pattern recognition shortcuts. Most SD problems map to 5-6 archetypes."),
-        m("Hello Interview — Delivery Framework", "https://www.youtube.com/watch?v=iYIjJ7utdDI", VID, minutes=45, priority=10, type="video", notes="Requirements → API → data model → high level → deep dives. The 4-step interview structure. Memorize this."),
+        m("Hello Interview — System Design in a Hurry (playlist)", "https://www.youtube.com/@hello_interview/playlists", VID, minutes=20, priority=10, type="video", notes="Start here. Modern, sharp overview of how large systems are designed. Watch the full playlist."),
+        m("Hello Interview — Core Concepts: Scaling, Sharding, CAP", "https://www.youtube.com/watch?v=ZgdS0EUmn70", VID, minutes=45, priority=10, type="video", notes="Foundational vocabulary for distributed systems — scaling, sharding, CAP tradeoffs."),
+        m("Hello Interview — Key Technologies (DBs, Caches, Queues)", "https://www.youtube.com/watch?v=Vyc8lezaa9k", VID, minutes=60, priority=10, type="video", notes="The toolbox you compose systems from. Postgres vs Dynamo vs Cassandra; Redis vs Memcached; Kafka vs SQS."),
+        m("Hello Interview — Common Patterns (Read/Write Heavy, Geo)", "https://www.youtube.com/watch?v=cKbmDIeAVj8", VID, minutes=45, priority=9, type="video", notes="Pattern recognition — most real systems map to a handful of archetypes."),
+        m("Hello Interview — Delivery Framework", "https://www.youtube.com/watch?v=iYIjJ7utdDI", VID, minutes=45, priority=10, type="video", notes="Requirements → API → data model → high level → deep dives. A reusable structure for thinking through any system."),
         m("Hello Interview — Design TicketMaster", "https://www.youtube.com/watch?v=fhdPyoO6aXI", VID, minutes=60, priority=9, type="video", notes="High-contention seat reservation. Optimistic vs pessimistic locking. Redis distributed locks."),
         m("Hello Interview — Design Uber", "https://www.youtube.com/watch?v=lsKU38RKQSo", VID, minutes=75, priority=10, type="video", notes="Geo-spatial indexing (S2/H3/Quadtree). Driver location streams. Matching algorithm."),
         m("Hello Interview — Design Top K (Leaderboard)", "https://www.youtube.com/watch?v=4abuO0wGcF8", VID, minutes=45, priority=8, type="video", notes="Count-min sketch + heap. Approximate algorithms for scale."),
