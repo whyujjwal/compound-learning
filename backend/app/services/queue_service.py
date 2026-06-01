@@ -112,6 +112,37 @@ def _due_review_cards(db: Session, user: User, track_id, now: datetime) -> list[
     return [_Card(card=c, material=c.material, track=c.material.track) for c in rows]
 
 
+def _due_review_cards_all_tracks(
+    db: Session,
+    user: User,
+    now: datetime,
+    *,
+    paused_slugs: set[str],
+    exclude_ids: set,
+) -> list[_Card]:
+    """Cross-track review pull for Sunday review block."""
+    q = (
+        db.query(Card)
+        .join(StudyMaterial, Card.material_id == StudyMaterial.id)
+        .join(Track, StudyMaterial.track_id == Track.id)
+        .options(joinedload(Card.material).joinedload(StudyMaterial.track))
+        .filter(
+            Card.user_id == user.id,
+            Card.reps > 0,
+            Card.due_at <= now,
+        )
+    )
+    if paused_slugs:
+        q = q.filter(Track.slug.notin_(list(paused_slugs)))
+    rows = q.order_by(Card.due_at.asc()).limit(80).all()
+    out: list[_Card] = []
+    for c in rows:
+        if c.id in exclude_ids:
+            continue
+        out.append(_Card(card=c, material=c.material, track=c.material.track))
+    return out
+
+
 def _eligible_new_cards(
     db: Session,
     user: User,
@@ -198,6 +229,46 @@ def build_daily_queue(db: Session, user: User) -> DailyQueueResponse:
     total_slots = len(track_slugs)
 
     for idx, slug in enumerate(track_slugs):
+        if slug == "review":
+            reviews = _due_review_cards_all_tracks(
+                db, user, now, paused_slugs=paused, exclude_ids=seen_card_ids
+            )
+            review_minutes = 0
+            picked: list[_Card] = []
+            for r in reviews:
+                mins = max(r.material.estimated_minutes or 20, 5)
+                if review_minutes + mins > block_minutes and picked:
+                    break
+                picked.append(r)
+                review_minutes += mins
+
+            review_items = [_to_item(c, kind="review", now=now) for c in picked]
+            for c in picked:
+                seen_card_ids.add(c.card.id)
+
+            anchor = picked[0].track if picked else next(iter(tracks_by_slug.values()), None)
+            if anchor is None:
+                continue
+
+            all_items.extend(review_items)
+            blocks.append(
+                BlockEntry(
+                    slot=idx,
+                    slot_label=_slot_label(idx, total_slots),
+                    track_id=anchor.id,
+                    track_slug="review",
+                    track_name="Review Pass",
+                    track_color="#94a3b8",
+                    block_minutes=block_minutes,
+                    planned_minutes=review_minutes,
+                    review_count=len(review_items),
+                    new_count=0,
+                    reviews=review_items,
+                    new_items=[],
+                )
+            )
+            continue
+
         track = tracks_by_slug.get(slug)
         if track is None:
             continue

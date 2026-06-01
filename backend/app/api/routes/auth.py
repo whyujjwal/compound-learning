@@ -8,6 +8,10 @@ from app.models.user import User
 from app.schemas.auth import AuthResponse, LoginRequest, RegisterRequest
 from app.services.auth_service import authenticate_user, create_access_token, hash_password
 from app.services.bootstrap import get_default_user, seed_default_organization
+from app.services.curriculum_loader import import_curriculum, load_file
+from pathlib import Path
+
+_CURRICULUM = Path(__file__).resolve().parents[4] / "docs" / "curriculum.json"
 
 router = APIRouter(tags=["auth"])
 
@@ -30,10 +34,15 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthRes
             email=payload.email,
             display_name=payload.display_name,
             password_hash=hash_password(payload.password),
+            daily_study_minutes=120,
+            milestone_title="Interview-ready",
+            target_retention=0.90,
         )
         db.add(user)
     db.flush()
     seed_default_organization(db, user)
+    if _CURRICULUM.exists():
+        import_curriculum(db, user, load_file(_CURRICULUM), prune_orphans=False)
     db.commit()
     token = create_access_token(user.id, user.email)
     return AuthResponse(

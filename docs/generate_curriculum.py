@@ -84,6 +84,71 @@ def _brief(
     return "\n".join(lines)
 
 
+def _practice_brief(title: str, pattern: str) -> str:
+    """Structured session brief for LeetCode / coding practice."""
+    pattern = pattern.strip() or "Identify the core invariant before coding."
+    return "\n".join([
+        "WATCH (~3 min read)",
+        f"• Open the problem: {title}",
+        "• Read constraints twice. Note input size → required complexity.",
+        f"• Pattern: {pattern}",
+        "",
+        "DO (this block — no solution peeking)",
+        "1. Write the approach in plain English (2–3 sentences).",
+        "2. State time and space complexity before coding.",
+        "3. Code from scratch. Run at least 2 tests including one edge case.",
+        "4. If stuck >15 min, read ONE hint only, then retry.",
+        "",
+        "DELIVERABLE (before you rate Good)",
+        "• Accepted submission (green check on LeetCode/GFG)",
+        "• One-line pattern tag saved in your notes",
+        "",
+        "RECALL (after Reveal — no notes)",
+        f"• Explain the {title} pattern in 30 seconds.",
+        "• Name one problem where this same pattern applies.",
+    ])
+
+
+def _reading_brief(title: str, focus: str) -> str:
+    focus = focus.strip() or "Extract the key idea and one example."
+    return "\n".join([
+        "WATCH (~15 min skim)",
+        f"• {title}",
+        f"• Focus: {focus}",
+        "",
+        "DO (this block)",
+        "1. Read/skim with a pen — don't passively scroll.",
+        "2. Write 3 bullet takeaways in your own words.",
+        "3. Connect one idea to something you already know in this track.",
+        "",
+        "DELIVERABLE",
+        "• 3 takeaway bullets in your notes app",
+        "",
+        "RECALL (after Reveal)",
+        f"• Summarize {title} in 60 seconds without notes.",
+    ])
+
+
+def _enrich_material_notes(item: dict[str, Any]) -> None:
+    """Upgrade legacy one-line notes to structured WATCH/DO/DELIVERABLE/RECALL briefs."""
+    notes = (item.get("notes") or "").strip()
+    if notes.startswith("WATCH"):
+        return
+
+    title = item["title"]
+    url = item.get("url") or ""
+    rtype = item.get("type") or "practice"
+
+    if "leetcode.com/problems/" in url or "geeksforgeeks.org" in url or "spoj.com" in url:
+        item["notes"] = _practice_brief(title, notes)
+    elif rtype in ("reading", "paper") and notes:
+        item["notes"] = _reading_brief(title, notes)
+    elif rtype == "video" and notes:
+        item["notes"] = _reading_brief(title, notes)
+    elif rtype == "practice" and notes:
+        item["notes"] = _practice_brief(title, notes)
+
+
 def _session_material(
     creator: str,
     session_num: int,
@@ -349,12 +414,12 @@ def add_dsa():
     B = "DSA · Basics"
     items += [
         m("Striver A2Z sheet — official syllabus", SHEET, B, minutes=20, priority=2, type="reading", notes="Bookmark. Single source of truth for the 450."),
-        m("User I/O in your language", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=20, priority=3, type="video", notes="Pick ONE language. Speed-read syntax."),
-        m("Data types & operators", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=20, priority=3, type="video", notes="int/long ranges, overflow gotchas."),
-        m("If/else & switch", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=15, priority=3, type="video"),
-        m("Arrays & strings primer", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=20, priority=4, type="video"),
-        m("For/while loops", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=15, priority=3, type="video"),
-        m("Functions & pass-by-value/reference", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=20, priority=4, type="video"),
+        m("User I/O in your language", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=20, priority=85, type="video", notes="Optional if you already code daily. Pick ONE language. Speed-read syntax only."),
+        m("Data types & operators", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=20, priority=85, type="video", notes="Optional. int/long ranges, overflow gotchas."),
+        m("If/else & switch", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=15, priority=85, type="video", notes="Optional syntax refresh."),
+        m("Arrays & strings primer", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=20, priority=85, type="video", notes="Optional. Skip if comfortable with arrays."),
+        m("For/while loops", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=15, priority=85, type="video", notes="Optional syntax refresh."),
+        m("Functions & pass-by-value/reference", "https://www.youtube.com/watch?v=8jLOx1hD3_o", B, minutes=20, priority=85, type="video", notes="Optional. Know pass-by-value vs reference for your language."),
         m("Time & space complexity primer", "https://www.youtube.com/watch?v=FPu9Uld7W-E", B, minutes=45, priority=6, type="video", notes="Big-O/Theta/Omega. Recognize O(1), O(log n), O(n), O(n log n), O(n²), O(2^n)."),
         m("Star patterns (15+ classics)", gfg("printing-pattern-using-loops"), B, minutes=60, priority=5, notes="Pyramids, half-pyramids, hollow, diamond. Build loop intuition."),
         m("C++ STL or Java Collections", "https://www.youtube.com/watch?v=RRVWBrofHFs", B, minutes=120, priority=8, type="video", cost=1.2, notes="vector/list, pair, map/set, queue/stack, priority_queue, sort/lower_bound. Memorize."),
@@ -1531,6 +1596,7 @@ def build() -> dict[str, Any]:
                 item["sequence"] = i
             if item.get("block_label"):
                 item["block_label"] = _clean_label(item["block_label"])
+            _enrich_material_notes(item)
 
     return {
         "version": "1.0",

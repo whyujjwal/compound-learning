@@ -99,10 +99,11 @@ export function Shell({ children }: { children: ReactNode }) {
     reloadAll();
   }, [reloadAll]);
 
-  // Refresh queue/activity when pathname returns to "/"
+  // Refresh queue/stats when returning to Today
   useEffect(() => {
     if (pathname === "/") {
       reloadQueue();
+      api.getStats().then(setStats).catch(() => {});
     }
   }, [pathname, reloadQueue]);
 

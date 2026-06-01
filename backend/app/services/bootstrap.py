@@ -16,21 +16,28 @@ SYSTEM_TRACKS = [
     {
         "slug": "dsa",
         "name": "Data Structures & Algorithms",
-        "description": "Striver A2Z / NeetCode 150 pattern-based progression",
+        "description": "Striver A2Z — patterns + spaced re-solving for interview mastery",
         "color": "#22c55e",
         "cognitive_multiplier": 1.2,
     },
     {
         "slug": "ai-math",
-        "name": "AI Foundations & LLM Engineering",
-        "description": "Deisenroth math, transformers, alignment, RAG, agents",
+        "name": "Mathematics for AI",
+        "description": "Linear algebra, probability, optimization — the math behind ML",
         "color": "#8b5cf6",
         "cognitive_multiplier": 1.4,
     },
     {
+        "slug": "llm-ml",
+        "name": "LLM & Machine Learning",
+        "description": "Karpathy builds, transformers, RAG, alignment",
+        "color": "#6366f1",
+        "cognitive_multiplier": 1.3,
+    },
+    {
         "slug": "system-design",
-        "name": "Distributed System Design",
-        "description": "LLD/HLD, caching, async, CAP, GenAI infrastructure",
+        "name": "System Design",
+        "description": "LLD/HLD, distributed systems, GenAI infrastructure",
         "color": "#f59e0b",
         "cognitive_multiplier": 1.1,
     },
@@ -42,6 +49,9 @@ def get_default_user(db: Session) -> User:
     if user:
         return user
     user = User(email="learner@compound.local", display_name="Learner")
+    user.daily_study_minutes = 120
+    user.milestone_title = "Interview-ready"
+    user.target_retention = 0.90
     db.add(user)
     db.flush()
     seed_system_tracks(db, user)

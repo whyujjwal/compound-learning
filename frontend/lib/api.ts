@@ -213,6 +213,8 @@ export type Stats = {
   sessions_this_week: number;
   days_active_30d: number;
   total_minutes_invested: number;
+  minutes_today: number;
+  daily_goal_minutes: number;
   track_breakdown: {
     track_id: string;
     track_name: string;

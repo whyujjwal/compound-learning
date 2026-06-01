@@ -19,7 +19,7 @@ TRACK_NAMES = {
     "ai-math": "Mathematics for AI",
     "llm-ml": "LLM & Machine Learning",
     "system-design": "System Design",
-    "review": "Review & Projects",
+    "review": "Review Pass",
 }
 
 # Fallback when curriculum.json is missing (matches bundled curriculum).

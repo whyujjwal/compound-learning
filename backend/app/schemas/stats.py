@@ -26,6 +26,8 @@ class StatsResponse(BaseModel):
     sessions_this_week: int = 0
     days_active_30d: int = 0
     total_minutes_invested: int = 0
+    minutes_today: int = 0
+    daily_goal_minutes: int = 120
     retention_rate: float
     current_streak: int
     longest_streak: int

@@ -5,16 +5,22 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   SessionCard,
-  SessionDock,
+  SessionFooter,
   useSessionKeys,
   type Rating,
 } from "@/components/ui/SessionCard";
 import { trackAccent } from "@/lib/trackColors";
-import { api, type CardDetail, type QueueItem } from "@/lib/api";
+import { api, type BlockEntry, type CardDetail, type QueueItem, type Stats } from "@/lib/api";
+import {
+  clearActiveBlockSlot,
+  getActiveBlockSlot,
+  markBlockComplete,
+} from "@/lib/dailyProgress";
 
 type Cached = {
   ts: number;
   context: string;
+  slot?: number;
   items: QueueItem[];
 };
 
@@ -97,6 +103,8 @@ export default function SessionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [startTs, setStartTs] = useState(Date.now());
   const [done, setDone] = useState(false);
+  const [endStats, setEndStats] = useState<Stats | null>(null);
+  const [nextBlock, setNextBlock] = useState<BlockEntry | null>(null);
   const { elapsed, paused, togglePause } = useBlockClock(queue?.ts ?? null, !done);
 
   // Resolve queue from sessionStorage, then refresh every item from the API so
@@ -152,6 +160,19 @@ export default function SessionPage() {
     if (next) {
       router.push(`/session/${next.card_id}`);
     } else {
+      const slot = queue.slot ?? getActiveBlockSlot();
+      if (slot != null) markBlockComplete(slot);
+      clearActiveBlockSlot();
+      api.getStats().then(setEndStats).catch(() => {});
+      api.getDailyQueue().then((daily) => {
+        const completed = slot ?? -1;
+        const open = daily.blocks.find(
+          (b) =>
+            b.slot !== completed &&
+            b.reviews.length + b.new_items.length > 0
+        );
+        setNextBlock(open ?? null);
+      }).catch(() => {});
       setDone(true);
     }
   }, [queue, index, router]);
@@ -205,19 +226,15 @@ export default function SessionPage() {
             </span>
           </div>
         </header>
-        <div className="session-end">
-          <h1 className="session-end-title" style={accent ? { color: accent } : undefined}>
-            Block complete.
-          </h1>
-          <p className="session-end-sub">
-            {total} card{total === 1 ? "" : "s"} in {formatDuration(elapsed)}. Heatmap will catch up shortly.
-          </p>
-          <div style={{ display: "inline-flex", gap: 8 }}>
-            <Link href="/" className="v2-btn primary">Back to Today</Link>
-            <Link href="/curriculum" className="v2-btn ghost">Roadmap</Link>
-          </div>
-        </div>
-        <div />
+        <SessionComplete
+          total={total}
+          elapsed={elapsed}
+          accent={accent}
+          context={queue?.context}
+          stats={endStats}
+          nextBlock={nextBlock}
+          onStartNext={(block) => startNextBlock(block, router)}
+        />
       </>
     );
   }
@@ -251,58 +268,114 @@ export default function SessionPage() {
           item={current}
           revealed={revealed}
           onReveal={() => setRevealed(true)}
+          index={index + 1}
+          total={total}
         />
       </div>
-      <SessionDock
-        enabled={revealed}
+      <SessionFooter
+        materialId={current.material_id}
+        materialTitle={current.material_title}
+        revealed={revealed}
         submitting={submitting}
         onRate={submit}
       />
-      <SessionLogPanel materialId={current.material_id} materialTitle={current.material_title} />
     </>
   );
 }
 
-function SessionLogPanel({
-  materialId,
-  materialTitle,
-}: {
-  materialId: string;
-  materialTitle: string;
-}) {
-  const [minutes, setMinutes] = useState(25);
-  const [rating, setRating] = useState(3);
-  const [notes, setNotes] = useState("");
-  const [saved, setSaved] = useState(false);
-
-  async function logSession() {
-    await api.logSession({
-      material_id: materialId,
-      duration_minutes: minutes,
-      self_rating: rating,
-      notes: notes || undefined,
-      completion_status: "COMPLETED",
-    });
-    setSaved(true);
+function startNextBlock(block: BlockEntry, router: { push: (path: string) => void }) {
+  const items = [...block.reviews, ...block.new_items];
+  if (items.length === 0) return;
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem("compound:session-block-slot", String(block.slot));
+      window.sessionStorage.removeItem("compound:session-clock");
+      window.sessionStorage.setItem(
+        "compound:session-queue",
+        JSON.stringify({
+          ts: Date.now(),
+          context: `${block.slot_label} · ${block.track_name}`,
+          slot: block.slot,
+          items,
+        })
+      );
+    } catch {}
   }
+  router.push(`/session/${items[0].card_id}`);
+}
+
+function SessionComplete({
+  total,
+  elapsed,
+  accent,
+  context,
+  stats,
+  nextBlock,
+  onStartNext,
+}: {
+  total: number;
+  elapsed: number;
+  accent?: string;
+  context?: string;
+  stats: Stats | null;
+  nextBlock: BlockEntry | null;
+  onStartNext: (block: BlockEntry) => void;
+}) {
+  const streak = stats?.current_streak ?? 0;
+  const reviewsToday = stats?.reviews_today ?? 0;
 
   return (
-    <aside className="session-log-panel">
-      <p className="session-log-title">Log practice · {materialTitle}</p>
-      <div className="session-log-row">
-        <label>
-          Minutes
-          <input type="number" min={1} max={240} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} />
-        </label>
-        <label>
-          Confidence
-          <input type="number" min={1} max={5} value={rating} onChange={(e) => setRating(Number(e.target.value))} />
-        </label>
-        <button type="button" className="v2-btn ghost sm" onClick={logSession}>
-          {saved ? "Logged ✓" : "Log session"}
-        </button>
+    <div className="session-end">
+      <p className="session-end-badge">Block complete</p>
+      <h1 className="session-end-title" style={accent ? { color: accent } : undefined}>
+        {total} card{total === 1 ? "" : "s"} · {formatDuration(elapsed)}
+      </h1>
+      {context && <p className="session-end-context">{context}</p>}
+
+      {stats && (
+        <div className="session-end-stats">
+          <div className="session-end-stat">
+            <strong>{streak}</strong>
+            <span>day streak</span>
+          </div>
+          <div className="session-end-stat">
+            <strong>{reviewsToday}</strong>
+            <span>reviews today</span>
+          </div>
+          <div className="session-end-stat">
+            <strong>{stats.minutes_today}m</strong>
+            <span>invested today</span>
+          </div>
+        </div>
+      )}
+
+      <p className="session-end-sub">
+        {nextBlock
+          ? "Nice work. One more block queued for today — keep the momentum."
+          : streak > 0
+            ? `${streak}-day streak alive. Show up tomorrow and it grows.`
+            : "Solid session. Come back tomorrow to start a streak."}
+      </p>
+
+      <div className="session-end-actions">
+        {nextBlock && (
+          <button
+            type="button"
+            className="v2-btn primary"
+            onClick={() => onStartNext(nextBlock)}
+          >
+            Next block · {nextBlock.track_name} →
+          </button>
+        )}
+        <Link href="/" className="v2-btn ghost" onClick={() => {
+          if (typeof window !== "undefined") {
+            window.sessionStorage.setItem("compound:skip-auto-start", "1");
+          }
+        }}>
+          {nextBlock ? "Back to Today" : "Done for today"}
+        </Link>
       </div>
-    </aside>
+    </div>
   );
 }
 

@@ -1,13 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useShell } from "@/components/ui/Shell";
 import { RightPanel, PanelSection } from "@/components/ui/RightPanel";
 import { Heatmap } from "@/components/Heatmap";
 import { trackAccent } from "@/lib/trackColors";
-import { api, type BlockEntry, type CoachInsight, type QueueItem } from "@/lib/api";
+import { api, type BlockEntry, type CoachInsight, type QueueItem, type User } from "@/lib/api";
+import {
+  countCompleted,
+  getCompletedSlots,
+  isBlockComplete,
+  setActiveBlockSlot,
+} from "@/lib/dailyProgress";
 
 const DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -29,6 +35,13 @@ export default function TodayPage() {
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [extraByTrack, setExtraByTrack] = useState<Record<string, QueueItem[]>>({});
   const [pushingTrack, setPushingTrack] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [completedSlots, setCompletedSlots] = useState<number[]>([]);
+
+  useEffect(() => {
+    api.getUser().then(setUser).catch(() => {});
+    setCompletedSlots(getCompletedSlots());
+  }, [queue, stats]);
 
   const trackBySlug = useMemo(
     () => Object.fromEntries(tracks.map((t) => [t.slug, t])),
@@ -83,12 +96,14 @@ export default function TodayPage() {
       if (items.length === 0) return;
       if (typeof window !== "undefined") {
         try {
+          setActiveBlockSlot(active.slot);
           window.sessionStorage.removeItem("compound:session-clock");
           window.sessionStorage.setItem(
             "compound:session-queue",
             JSON.stringify({
               ts: Date.now(),
               context: `${active.slot_label} · ${active.track_name}`,
+              slot: active.slot,
               items,
             })
           );
@@ -214,25 +229,50 @@ export default function TodayPage() {
 
   const date = dateLabel();
   const blocks = queue?.blocks ?? [];
+  const activeBlocks = blocks.filter(
+    (b) => b.reviews.length + b.new_items.length + (extraByTrack[b.track_slug]?.length ?? 0) > 0
+  );
+  const blocksDone = countCompleted(blocks.map((b) => b.slot));
+  const firstOpenBlock = activeBlocks.find((b) => !isBlockComplete(b.slot)) ?? activeBlocks[0];
+  const allBlocksDone = activeBlocks.length > 0 && blocksDone >= activeBlocks.length;
+  const minutesGoal = queue?.total_minutes ?? stats?.daily_goal_minutes ?? 120;
+  const minutesToday = stats?.minutes_today ?? 0;
+  const minutesPct = minutesGoal > 0 ? Math.min(100, Math.round((minutesToday / minutesGoal) * 100)) : 0;
+  const autoStarted = useRef(false);
+  const [showSchedule, setShowSchedule] = useState(false);
+
+  // Once per day: open Today → land in practice immediately (zero decisions).
+  useEffect(() => {
+    if (autoStarted.current || !queue || !firstOpenBlock || allBlocksDone) return;
+    if (typeof window === "undefined") return;
+    const day = new Date().toISOString().slice(0, 10);
+    if (window.localStorage.getItem(`compound:auto-started-${day}`)) return;
+    if (window.sessionStorage.getItem("compound:skip-auto-start")) {
+      window.sessionStorage.removeItem("compound:skip-auto-start");
+      return;
+    }
+    autoStarted.current = true;
+    window.localStorage.setItem(`compound:auto-started-${day}`, "1");
+    startBlock(firstOpenBlock);
+  }, [queue, firstOpenBlock, allBlocksDone, startBlock]);
 
   return (
     <>
-      <header className="today-head">
-        <div className="today-date">
-          <span className="today-date-day">{date.day}</span>
-          <span className="today-date-meta">{date.meta}</span>
-        </div>
-        <div className="today-metrics">
-          <div className="stat today-metric">
-            <span className="stat-num">{stats?.sessions_this_week ?? 0}</span>
-            <span className="stat-label">sessions / wk</span>
-          </div>
-          <div className="stat today-metric">
-            <span className="stat-num">{stats?.reviews_total ?? 0}</span>
-            <span className="stat-label">reviews</span>
-          </div>
-        </div>
-      </header>
+      <PracticeHero
+        date={date}
+        stats={stats}
+        nudge={!nudgeDismissed ? nudge : null}
+        blocksDone={blocksDone}
+        blocksTotal={activeBlocks.length}
+        allBlocksDone={allBlocksDone}
+        minutesToday={minutesToday}
+        minutesGoal={minutesGoal}
+        minutesPct={minutesPct}
+        milestoneTitle={user?.milestone_title}
+        milestoneDate={user?.milestone_date}
+        onStart={() => firstOpenBlock && startBlock(firstOpenBlock)}
+        canStart={Boolean(firstOpenBlock)}
+      />
 
       {blocks.length === 0 ? (
         <div className="empty-today">
@@ -244,35 +284,151 @@ export default function TodayPage() {
           </p>
         </div>
       ) : (
-        <div className="today-blocks">
-          {blocks.map((block) => (
-            <BlockRow
-              key={block.slot}
-              block={block}
-              extra={extraByTrack[block.track_slug] ?? []}
-              onStart={() => startBlock(block)}
-              onPush={() => pushMore(block.track_slug)}
-              pushing={pushingTrack === block.track_slug}
-            />
-          ))}
-        </div>
+        <>
+          <button
+            type="button"
+            className="today-schedule-toggle"
+            onClick={() => setShowSchedule((v) => !v)}
+            aria-expanded={showSchedule}
+          >
+            {showSchedule ? "Hide schedule" : `Today's schedule · ${activeBlocks.length} block${activeBlocks.length === 1 ? "" : "s"}`}
+            <span aria-hidden>{showSchedule ? " ▾" : " ▸"}</span>
+          </button>
+          {showSchedule && (
+            <div className="today-blocks">
+              {blocks.map((block) => (
+                <BlockRow
+                  key={block.slot}
+                  block={block}
+                  extra={extraByTrack[block.track_slug] ?? []}
+                  completed={completedSlots.includes(block.slot)}
+                  onStart={() => startBlock(block)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </>
+  );
+}
+
+function PracticeHero({
+  date,
+  stats,
+  nudge,
+  blocksDone,
+  blocksTotal,
+  allBlocksDone,
+  minutesToday,
+  minutesGoal,
+  minutesPct,
+  milestoneTitle,
+  milestoneDate,
+  onStart,
+  canStart,
+}: {
+  date: { day: string; meta: string };
+  stats: import("@/lib/api").Stats | null;
+  nudge: CoachInsight | null;
+  blocksDone: number;
+  blocksTotal: number;
+  allBlocksDone: boolean;
+  minutesToday: number;
+  minutesGoal: number;
+  minutesPct: number;
+  milestoneTitle?: string | null;
+  milestoneDate?: string | null;
+  onStart: () => void;
+  canStart: boolean;
+}) {
+  const streak = stats?.current_streak ?? 0;
+  const reviewsToday = stats?.reviews_today ?? 0;
+  const daysUntilMilestone = milestoneDate
+    ? Math.ceil((new Date(milestoneDate).getTime() - Date.now()) / 86400000)
+    : null;
+
+  const ctaLabel = allBlocksDone
+    ? "Review extra cards"
+    : blocksDone > 0
+      ? "Continue today's practice"
+      : "Start today's practice";
+
+  return (
+    <section className="practice-hero">
+      <div className="practice-hero-top">
+        <div>
+          <p className="practice-hero-eyebrow">{date.meta}</p>
+          <h1 className="practice-hero-title">{date.day}</h1>
+          {nudge?.content && <p className="practice-hero-nudge">{nudge.content}</p>}
+        </div>
+        <div className="practice-hero-streak" title={`Longest: ${stats?.longest_streak ?? 0} days`}>
+          <span className="practice-hero-streak-num">{streak}</span>
+          <span className="practice-hero-streak-label">day streak</span>
+        </div>
+      </div>
+
+      <div className="practice-hero-progress">
+        <div className="practice-hero-ring" style={{ ["--pct" as string]: String(minutesPct) }}>
+          <svg viewBox="0 0 36 36" aria-hidden>
+            <path
+              className="practice-hero-ring-bg"
+              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+            />
+            <path
+              className="practice-hero-ring-fill"
+              strokeDasharray={`${minutesPct}, 100`}
+              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+            />
+          </svg>
+          <span className="practice-hero-ring-label">{minutesPct}%</span>
+        </div>
+
+        <div className="practice-hero-stats">
+          <div className="practice-hero-stat">
+            <strong>{minutesToday}</strong>
+            <span>min today</span>
+            <span className="muted">goal {minutesGoal}m</span>
+          </div>
+          <div className="practice-hero-stat">
+            <strong>{reviewsToday}</strong>
+            <span>reviews today</span>
+          </div>
+          <div className="practice-hero-stat">
+            <strong>{blocksDone}/{blocksTotal || "—"}</strong>
+            <span>blocks done</span>
+          </div>
+          {milestoneTitle && daysUntilMilestone != null && daysUntilMilestone >= 0 && (
+            <div className="practice-hero-stat practice-hero-milestone">
+              <strong>{daysUntilMilestone}d</strong>
+              <span>{milestoneTitle}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="v2-btn primary practice-hero-cta"
+        onClick={onStart}
+        disabled={!canStart}
+      >
+        {allBlocksDone ? "✓ All blocks done — " : ""}{ctaLabel} <span aria-hidden>→</span>
+      </button>
+    </section>
   );
 }
 
 function BlockRow({
   block,
   extra,
+  completed,
   onStart,
-  onPush,
-  pushing,
 }: {
   block: BlockEntry;
   extra: QueueItem[];
+  completed: boolean;
   onStart: () => void;
-  onPush: () => void;
-  pushing: boolean;
 }) {
   const accent = trackAccent(block.track_slug, block.track_color);
   const allItems = [...block.reviews, ...block.new_items, ...extra];
@@ -282,11 +438,12 @@ function BlockRow({
 
   return (
     <article
-      className={`block-row${isEmpty ? " empty" : ""}`}
+      className={`block-row${isEmpty ? " empty" : ""}${completed ? " done" : ""}`}
       style={{ ["--track-color" as string]: accent }}
     >
       <div className="block-row-main">
         <div className="block-row-eyebrow">
+          {completed && <span className="block-row-check" aria-label="Completed">✓</span>}
           <span className="slot">{block.slot_label}</span>
           <span className="sep">·</span>
           <span>{block.track_name}</span>
@@ -319,16 +476,7 @@ function BlockRow({
           onClick={onStart}
           disabled={isEmpty}
         >
-          Start <span aria-hidden>›</span>
-        </button>
-        <button
-          type="button"
-          className="v2-btn ghost sm"
-          onClick={onPush}
-          disabled={pushing}
-          title="Pull 5 more new items"
-        >
-          {pushing ? "…" : "+5"}
+          {completed ? "Again" : "Start"} <span aria-hidden>›</span>
         </button>
       </div>
     </article>

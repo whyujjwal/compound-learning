@@ -145,6 +145,18 @@ def get_stats(db: Session, user: User) -> StatsResponse:
         .count()
     )
 
+    review_seconds_today = (
+        db.query(func.coalesce(func.sum(ReviewLog.elapsed_time_seconds), 0))
+        .filter(ReviewLog.card_id.in_(user_card_ids), ReviewLog.reviewed_at >= today_start)
+        .scalar()
+    ) or 0
+    session_minutes_today = (
+        db.query(func.coalesce(func.sum(StudySession.duration_minutes), 0))
+        .filter(StudySession.user_id == user.id, StudySession.created_at >= today_start)
+        .scalar()
+    ) or 0
+    minutes_today = int(round(float(review_seconds_today) / 60)) + int(session_minutes_today)
+
     tracks = db.query(Track).filter(Track.user_id == user.id).all()
     track_breakdown: list[TrackStats] = []
     for track in tracks:
@@ -190,6 +202,8 @@ def get_stats(db: Session, user: User) -> StatsResponse:
         sessions_this_week=max(len(week_days), study_sessions_week),
         days_active_30d=len(month_days),
         total_minutes_invested=total_minutes_invested,
+        minutes_today=minutes_today,
+        daily_goal_minutes=user.daily_study_minutes,
         retention_rate=retention_rate,
         current_streak=current_streak,
         longest_streak=longest_streak,
