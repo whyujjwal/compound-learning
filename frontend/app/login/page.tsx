@@ -5,9 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { setAuthToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
-
 type Mode = "signin" | "register";
+type GoogleStatus = "loading" | "enabled" | "disabled" | "unknown";
 
 function LoginForm() {
   const router = useRouter();
@@ -21,15 +20,22 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(urlError);
   const [loading, setLoading] = useState(false);
-  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [googleStatus, setGoogleStatus] = useState<GoogleStatus>("loading");
 
   useEffect(() => {
-    api.getGoogleAuthStatus().then((s) => setGoogleEnabled(s.enabled)).catch(() => {});
+    api
+      .getGoogleAuthStatus()
+      .then((s) => setGoogleStatus(s.enabled ? "enabled" : "disabled"))
+      .catch(() => setGoogleStatus("unknown"));
   }, []);
 
   function startGoogleLogin() {
+    if (googleStatus === "disabled") {
+      setError("Google sign-in is not configured on this server.");
+      return;
+    }
     const params = new URLSearchParams({ next });
-    window.location.href = `${API_BASE}/auth/google?${params.toString()}`;
+    window.location.href = `/api/auth/google?${params.toString()}`;
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -53,103 +59,132 @@ function LoginForm() {
   }
 
   const isRegister = mode === "register";
+  const showGoogle = !isRegister;
+  const googleDisabled = googleStatus === "disabled" || googleStatus === "loading";
 
   return (
-    <form className="login-form" onSubmit={handleSubmit}>
-      {googleEnabled && !isRegister && (
-        <>
-          <button
-            type="button"
-            className="login-google-btn"
-            onClick={startGoogleLogin}
-            disabled={loading}
-          >
-            <GoogleIcon />
-            Continue with Google
-          </button>
-          <p className="login-divider">
-            <span>or</span>
-          </p>
-        </>
-      )}
-
-      {isRegister && (
-        <>
-          <label className="login-label" htmlFor="displayName">
-            Name
-          </label>
-          <input
-            id="displayName"
-            type="text"
-            className="login-input"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            autoComplete="name"
-            placeholder="Your name"
-          />
-        </>
-      )}
-
-      <label className="login-label" htmlFor="email">
-        Email
-      </label>
-      <input
-        id="email"
-        type="email"
-        className="login-input"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        autoComplete="email"
-        placeholder="you@example.com"
-        required={isRegister}
-      />
-
-      <label className="login-label" htmlFor="password">
-        Password
-      </label>
-      <input
-        id="password"
-        type="password"
-        className="login-input"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        autoComplete={isRegister ? "new-password" : "current-password"}
-        minLength={isRegister ? 8 : undefined}
-        required
-      />
-
-      {error && <p className="login-error">{error}</p>}
-
-      <button type="submit" className="v2-btn login-submit" disabled={loading}>
-        {loading
-          ? isRegister
-            ? "Creating account…"
-            : "Signing in…"
-          : isRegister
-            ? "Create account"
-            : "Sign in"}
-      </button>
-
-      <p className="login-sub" style={{ marginTop: 16, fontSize: 13 }}>
-        {isRegister ? "Already have an account? " : "New to Compound? "}
+    <>
+      <div className="login-mode-tabs" role="tablist" aria-label="Sign in or register">
         <button
           type="button"
-          className="login-link-btn"
+          role="tab"
+          aria-selected={!isRegister}
+          className={`login-mode-tab${!isRegister ? " active" : ""}`}
           onClick={() => {
-            setMode(isRegister ? "signin" : "register");
+            setMode("signin");
             setError(null);
           }}
         >
-          {isRegister ? "Sign in" : "Create an account"}
+          Sign in
         </button>
-      </p>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={isRegister}
+          className={`login-mode-tab${isRegister ? " active" : ""}`}
+          onClick={() => {
+            setMode("register");
+            setError(null);
+          }}
+        >
+          Create account
+        </button>
+      </div>
 
-      {!isRegister && (
-        <p className="login-sub" style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
-          Leave email blank to use the shared workspace password instead.
-        </p>
-      )}
-    </form>
+      <form className="login-form" onSubmit={handleSubmit}>
+        {showGoogle && (
+          <>
+            <button
+              type="button"
+              className="login-google-btn"
+              onClick={startGoogleLogin}
+              disabled={googleDisabled}
+              aria-busy={googleStatus === "loading"}
+            >
+              {googleStatus === "loading" ? (
+                <span className="login-google-loading" aria-hidden />
+              ) : (
+                <GoogleIcon />
+              )}
+              Continue with Google
+            </button>
+            {googleStatus === "unknown" && (
+              <p className="login-hint">Google sign-in may still work — try the button above.</p>
+            )}
+            <p className="login-divider">
+              <span>or</span>
+            </p>
+          </>
+        )}
+
+        {isRegister && (
+          <>
+            <label className="login-label" htmlFor="displayName">
+              Name
+            </label>
+            <input
+              id="displayName"
+              type="text"
+              className="login-input"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              autoComplete="name"
+              placeholder="Your name"
+            />
+          </>
+        )}
+
+        <label className="login-label" htmlFor="email">
+          Email
+        </label>
+        <input
+          id="email"
+          type="email"
+          className="login-input"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          placeholder="you@example.com"
+          required={isRegister}
+        />
+
+        <label className="login-label" htmlFor="password">
+          Password
+        </label>
+        <input
+          id="password"
+          type="password"
+          className="login-input"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete={isRegister ? "new-password" : "current-password"}
+          minLength={isRegister ? 8 : undefined}
+          required
+        />
+
+        {error && (
+          <p className="login-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <button type="submit" className="v2-btn login-submit" disabled={loading}>
+          {loading
+            ? isRegister
+              ? "Creating account…"
+              : "Signing in…"
+            : isRegister
+              ? "Create account"
+              : "Sign in"}
+        </button>
+
+        {!isRegister && (
+          <p className="login-footnote">
+            Leave email blank to use the shared workspace password instead.
+          </p>
+        )}
+      </form>
+    </>
   );
 }
 
@@ -176,13 +211,39 @@ function GoogleIcon() {
   );
 }
 
+function LampMark() {
+  return (
+    <svg className="login-lamp" width="32" height="32" viewBox="0 0 32 32" aria-hidden>
+      <defs>
+        <radialGradient id="lamp-glow" cx="50%" cy="40%" r="60%">
+          <stop offset="0%" stopColor="#e6b787" stopOpacity="0.9" />
+          <stop offset="100%" stopColor="#c89b6b" stopOpacity="0.2" />
+        </radialGradient>
+      </defs>
+      <ellipse cx="16" cy="14" rx="10" ry="9" fill="url(#lamp-glow)" opacity="0.55" />
+      <path
+        d="M16 4c-4.4 0-8 3.1-8 7.5 0 2.8 1.4 5.2 3.5 6.7V20h9v-1.8c2.1-1.5 3.5-3.9 3.5-6.7C24 7.1 20.4 4 16 4z"
+        fill="none"
+        stroke="#c89b6b"
+        strokeWidth="1.25"
+        strokeLinejoin="round"
+      />
+      <path d="M12 22h8v1.5a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V22z" fill="#c89b6b" opacity="0.85" />
+      <line x1="16" y1="25.5" x2="16" y2="28" stroke="#c89b6b" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <p className="login-eyebrow">Compound</p>
-        <h1 className="login-title">Sign in</h1>
-        <p className="login-sub">Your personal learning workspace.</p>
+        <div className="login-brand">
+          <LampMark />
+          <p className="login-eyebrow">Compound</p>
+        </div>
+        <h1 className="login-title">Welcome back</h1>
+        <p className="login-sub">Your personal learning workspace — lit for deep study.</p>
         <Suspense fallback={<p className="login-sub">Loading…</p>}>
           <LoginForm />
         </Suspense>

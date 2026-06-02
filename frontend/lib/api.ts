@@ -1,6 +1,12 @@
 import { getAuthToken } from "./auth";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+/** Same-origin /api in the browser (proxied by Next.js); absolute URL for any server-side use. */
+export function getApiBase(): string {
+  if (typeof window !== "undefined") return "/api";
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+}
+
+const API_BASE = getApiBase();
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? getAuthToken() : null;
