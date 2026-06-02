@@ -60,7 +60,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [activity, setActivity] = useState<{ date: string; count: number }[]>([]);
   const [cmdkOpen, setCmdkOpen] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [rightPanelNode, setRightPanelNode] = useState<ReactNode | null>(null);
   const [actions, setActionsState] = useState<{
@@ -182,33 +182,42 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 
   const showPanel = panelOpen && Boolean(rightPanelNode);
-  const bodyClass = `shell-body${showPanel ? "" : " no-panel"}${
-    mobileNavOpen ? " nav-open" : ""
-  }`;
+  const bodyClass = `shell-body${mobileNavOpen ? " nav-open" : ""}`;
 
   return (
     <Ctx.Provider value={ctx}>
-      <div className="shell">
+      <div className={`shell${showPanel ? " panel-open" : ""}`}>
         <AppBar
           onOpenCmdk={openCmdk}
           onTogglePanel={togglePanel}
           panelOpen={panelOpen}
           onToggleNav={toggleMobileNav}
           navOpen={mobileNavOpen}
+          hasPanel={Boolean(rightPanelNode)}
         />
         <div className={bodyClass}>
           <LeftRail tracks={tracks} overview={overview} />
           <main className="shell-main">{children}</main>
-          {showPanel ? rightPanelNode : null}
-          {mobileNavOpen && (
-            <div
-              className="nav-backdrop"
-              role="button"
-              aria-label="Close menu"
-              onClick={closeMobileNav}
-            />
-          )}
         </div>
+        {showPanel && (
+          <>
+            <button
+              type="button"
+              className="panel-backdrop"
+              aria-label="Close sidebar"
+              onClick={togglePanel}
+            />
+            {rightPanelNode}
+          </>
+        )}
+        {mobileNavOpen && (
+          <button
+            type="button"
+            className="nav-backdrop"
+            aria-label="Close menu"
+            onClick={closeMobileNav}
+          />
+        )}
       </div>
 
       <CommandPalette

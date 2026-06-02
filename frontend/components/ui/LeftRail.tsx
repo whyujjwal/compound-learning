@@ -5,24 +5,17 @@ import { usePathname } from "next/navigation";
 import { trackAccent } from "@/lib/trackColors";
 import type { Track, CurriculumOverview } from "@/lib/api";
 
-const VIEWS = [
-  { href: "/", label: "Today", icon: "◐", match: (p: string) => p === "/" },
-  { href: "/coach", label: "Coach", icon: "◇", match: (p: string) => p.startsWith("/coach") },
-  { href: "/stats", label: "Stats", icon: "▤", match: (p: string) => p.startsWith("/stats") },
-];
-
-const FOOTER = [
-  { href: "/curriculum", label: "Roadmap", icon: "▦", match: (p: string) => p === "/curriculum" },
-  { href: "/curriculum/build", label: "Build roadmap", icon: "✦", match: (p: string) => p.startsWith("/curriculum/build") },
-  { href: "/curriculum/edit", label: "Editor", icon: "✎", match: (p: string) => p.startsWith("/curriculum/edit") },
-  { href: "/team", label: "Team", icon: "◈", match: (p: string) => p.startsWith("/team") },
-  { href: "/settings", label: "Settings", icon: "⚙", match: (p: string) => p.startsWith("/settings") },
-];
-
 const LIBRARY = [
   { href: "/tracks", label: "Tracks", match: (p: string) => p === "/tracks" },
   { href: "/materials", label: "Materials", match: (p: string) => p.startsWith("/materials") },
   { href: "/cards", label: "Cards", match: (p: string) => p.startsWith("/cards") },
+];
+
+const FOOTER = [
+  { href: "/curriculum/build", label: "Build roadmap", match: (p: string) => p.startsWith("/curriculum/build") },
+  { href: "/curriculum/edit", label: "Editor", match: (p: string) => p.startsWith("/curriculum/edit") },
+  { href: "/team", label: "Team", match: (p: string) => p.startsWith("/team") },
+  { href: "/settings", label: "Settings", match: (p: string) => p.startsWith("/settings") },
 ];
 
 export function LeftRail({
@@ -44,44 +37,32 @@ export function LeftRail({
 
   return (
     <aside className="rail">
-      <div className="rail-section">
-        {VIEWS.map((v) => (
-          <Link
-            key={v.href}
-            href={v.href}
-            className={`rail-link${v.match(pathname) ? " active" : ""}`}
-          >
-            <span className="rail-link-icon" aria-hidden>{v.icon}</span>
-            <span className="rail-link-label">{v.label}</span>
-          </Link>
-        ))}
-      </div>
-
       <div className="rail-section" aria-label="Tracks">
-        <div className="rail-label">Tracks</div>
-        {tracks.map((t) => {
-          const accent = trackAccent(t.slug, t.color);
-          const pct = trackProgress[t.slug]?.pct ?? 0;
-          const isActive = pathname === `/track/${t.slug}`;
-          return (
-            <Link
-              key={t.id}
-              href={`/track/${t.slug}`}
-              className={`rail-track${isActive ? " active" : ""}`}
-              style={{ ["--track-color" as string]: accent }}
-              title={t.name}
-            >
-              <span className="rail-track-dot" aria-hidden />
-              <span className="rail-track-name">{t.name}</span>
-              <span className="rail-track-bar" aria-hidden>
-                <span
-                  className="rail-track-bar-fill"
-                  style={{ ["--pct" as string]: String(pct) }}
-                />
-              </span>
-            </Link>
-          );
-        })}
+        <div className="rail-label">Your tracks</div>
+        {tracks.length === 0 ? (
+          <p className="rail-empty">No tracks yet — build a roadmap to get started.</p>
+        ) : (
+          tracks.map((t) => {
+            const accent = trackAccent(t.slug, t.color);
+            const pct = trackProgress[t.slug]?.pct ?? 0;
+            const isActive = pathname === `/track/${t.slug}`;
+            return (
+              <Link
+                key={t.id}
+                href={`/track/${t.slug}`}
+                className={`rail-track${isActive ? " active" : ""}`}
+                style={{ ["--track-color" as string]: accent }}
+                title={t.name}
+              >
+                <span className="rail-track-dot" aria-hidden />
+                <span className="rail-track-name">{t.name}</span>
+                <span className="rail-track-pct" aria-hidden>
+                  {Math.round(pct * 100)}%
+                </span>
+              </Link>
+            );
+          })
+        )}
       </div>
 
       <div className="rail-section" aria-label="Library">
@@ -92,8 +73,7 @@ export function LeftRail({
             href={l.href}
             className={`rail-link${l.match(pathname) ? " active" : ""}`}
           >
-            <span className="rail-link-icon" aria-hidden>·</span>
-            <span className="rail-link-label">{l.label}</span>
+            {l.label}
           </Link>
         ))}
       </div>
@@ -103,10 +83,9 @@ export function LeftRail({
           <Link
             key={v.href}
             href={v.href}
-            className={`rail-link${v.match(pathname) ? " active" : ""}`}
+            className={`rail-link rail-link-muted${v.match(pathname) ? " active" : ""}`}
           >
-            <span className="rail-link-icon" aria-hidden>{v.icon}</span>
-            <span className="rail-link-label">{v.label}</span>
+            {v.label}
           </Link>
         ))}
       </div>
