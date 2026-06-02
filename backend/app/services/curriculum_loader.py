@@ -35,6 +35,7 @@ def import_curriculum(
     user: User,
     data: dict[str, Any],
     prune_orphans: bool = False,
+    set_schedule: bool = True,
 ) -> dict[str, int]:
     """Apply a curriculum to the user.
 
@@ -49,6 +50,12 @@ def import_curriculum(
         "materials_updated": 0,
         "materials_pruned": 0,
     }
+
+    # Persist a personalized weekly schedule on the user when provided.
+    # Skip on the default boot sync so a user's custom schedule isn't clobbered.
+    schedule = data.get("weekly_schedule")
+    if schedule and set_schedule:
+        user.weekly_schedule = schedule
 
     for track_data in data.get("tracks", []):
         track = (

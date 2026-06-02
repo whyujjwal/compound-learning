@@ -101,6 +101,10 @@ export function CommandPalette({
             <span className="cmdk-item-icon">▦</span>
             Roadmap
           </Command.Item>
+          <Command.Item value="build roadmap ai generate" onSelect={() => go("/curriculum/build")}>
+            <span className="cmdk-item-icon">✦</span>
+            Build roadmap with AI
+          </Command.Item>
           <Command.Item value="settings" onSelect={() => go("/settings")}>
             <span className="cmdk-item-icon">⚙</span>
             Settings

@@ -13,6 +13,8 @@ class UserResponse(BaseModel):
     paused_tracks: list[str] = []
     milestone_title: str | None = None
     milestone_date: datetime | None = None
+    learning_goals: str | None = None
+    onboarded: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -25,3 +27,5 @@ class UserUpdate(BaseModel):
     display_name: str | None = None
     milestone_title: str | None = None
     milestone_date: datetime | None = None
+    learning_goals: str | None = None
+    onboarded: bool | None = None

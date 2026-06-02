@@ -510,7 +510,7 @@ class ToolExecutor:
         stats = get_stats(self.db, self.user)
         lagging = sorted(stats.track_breakdown, key=lambda t: t.reviews_total)[:2]
         weekday = datetime.now(UTC).weekday()
-        today = track_slugs_for_weekday(weekday)
+        today = track_slugs_for_weekday(weekday, self.user)
         return {
             "today_blocks": today,
             "focus_tracks": [t.track_name for t in lagging],

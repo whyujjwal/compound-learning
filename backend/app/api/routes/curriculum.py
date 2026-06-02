@@ -22,10 +22,10 @@ from app.schemas.curriculum import (
 from app.schemas.reschedule import RescheduleRequest, RescheduleResponse
 from app.services.curriculum_loader import import_curriculum, load_file
 from app.services.mastery import is_mastered
+from app.services.roadmap_generator import RoadmapError, generate_roadmap
 from app.services.weekly_schedule import (
-    load_weekly_schedule_model,
+    schedule_for_user,
     today_block_items,
-    track_slugs_for_weekday,
 )
 
 router = APIRouter(prefix="/curriculum", tags=["curriculum"])
@@ -33,21 +33,23 @@ router = APIRouter(prefix="/curriculum", tags=["curriculum"])
 DEFAULT_PATH = Path(__file__).resolve().parents[3].parent / "docs" / "curriculum.json"
 
 
-def _load_schedule() -> WeeklySchedule | None:
-    return load_weekly_schedule_model()
-
-
 @router.get("/schedule", response_model=WeeklySchedule)
-def get_weekly_schedule() -> WeeklySchedule:
-    schedule = _load_schedule()
+def get_weekly_schedule(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> WeeklySchedule:
+    schedule = schedule_for_user(user)
     if not schedule:
         raise HTTPException(status_code=404, detail="Weekly schedule not found")
     return schedule
 
 
 @router.get("/schedule/today", response_model=list[BlockScheduleItem])
-def get_today_schedule() -> list[BlockScheduleItem]:
-    return today_block_items()
+def get_today_schedule(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[BlockScheduleItem]:
+    return today_block_items(user)
 
 
 @router.post("/reschedule", response_model=RescheduleResponse)
@@ -88,8 +90,8 @@ def curriculum_overview(
     user: User = Depends(get_current_user),
 ) -> CurriculumOverview:
     now = datetime.now(UTC)
-    schedule = _load_schedule()
-    today = today_block_items()
+    schedule = schedule_for_user(user)
+    today = today_block_items(user)
 
     tracks = db.query(Track).filter(Track.user_id == user.id).order_by(Track.name).all()
     track_summaries: list[TrackCurriculumSummary] = []
@@ -200,6 +202,7 @@ class ImportFromPathRequest(BaseModel):
 
 class ImportFromJSONRequest(BaseModel):
     data: dict[str, Any]
+    replace: bool = False
 
 
 @router.post("/import/default", response_model=dict[str, int])
@@ -236,6 +239,53 @@ def import_inline(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict[str, int]:
-    return import_curriculum(db, user, payload.data)
+    return import_curriculum(
+        db, user, payload.data, prune_orphans=payload.replace, set_schedule=True
+    )
+
+
+class GenerateRoadmapRequest(BaseModel):
+    goals: str
+    weekly_hours: int = 10
+    level: str | None = None
+    apply: bool = False
+    replace: bool = False
+
+
+class GenerateRoadmapResponse(BaseModel):
+    curriculum: dict[str, Any]
+    applied: bool
+    stats: dict[str, int] | None = None
+
+
+@router.post("/generate", response_model=GenerateRoadmapResponse)
+def generate_curriculum_roadmap(
+    payload: GenerateRoadmapRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> GenerateRoadmapResponse:
+    """Generate a personalized roadmap from free-text goals.
+
+    When ``apply`` is true the roadmap is imported immediately (and the user's
+    weekly schedule + goals are saved). When ``replace`` is also true, existing
+    materials in matching tracks are pruned so the new roadmap is authoritative.
+    """
+    try:
+        curriculum = generate_roadmap(
+            payload.goals, weekly_hours=payload.weekly_hours, level=payload.level
+        )
+    except RoadmapError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+    if not payload.apply:
+        return GenerateRoadmapResponse(curriculum=curriculum, applied=False)
+
+    stats = import_curriculum(
+        db, user, curriculum, prune_orphans=payload.replace, set_schedule=True
+    )
+    user.learning_goals = payload.goals[:2000]
+    user.onboarded = True
+    db.commit()
+    return GenerateRoadmapResponse(curriculum=curriculum, applied=True, stats=stats)
 
 

@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
+from app.models.user import User
 from app.schemas.curriculum import BlockScheduleItem, WeeklySchedule
 from app.services.curriculum_loader import load_file
 
@@ -45,9 +46,19 @@ def load_weekly_schedule_model() -> WeeklySchedule | None:
     return WeeklySchedule.model_validate(raw)
 
 
-def track_slugs_for_weekday(weekday: int) -> list[str]:
+def schedule_for_user(user: User | None) -> WeeklySchedule | None:
+    """Prefer the user's personalized schedule, else the bundled/default one."""
+    if user is not None and getattr(user, "weekly_schedule", None):
+        try:
+            return WeeklySchedule.model_validate(user.weekly_schedule)
+        except Exception:
+            pass
+    return load_weekly_schedule_model()
+
+
+def track_slugs_for_weekday(weekday: int, user: User | None = None) -> list[str]:
     """Return ordered track slugs for a weekday (Mon=0 … Sun=6)."""
-    schedule = load_weekly_schedule_model()
+    schedule = schedule_for_user(user)
     if schedule is None:
         return _FALLBACK_TEMPLATE.get(weekday, [])
     key = DAY_KEYS[weekday]
@@ -55,8 +66,8 @@ def track_slugs_for_weekday(weekday: int) -> list[str]:
     return [b.track for b in blocks]
 
 
-def today_block_items() -> list[BlockScheduleItem]:
-    schedule = load_weekly_schedule_model()
+def today_block_items(user: User | None = None) -> list[BlockScheduleItem]:
+    schedule = schedule_for_user(user)
     if schedule is None:
         weekday = datetime.now(UTC).weekday()
         return [
@@ -73,7 +84,7 @@ def today_block_items() -> list[BlockScheduleItem]:
         BlockScheduleItem(
             block=b.block,
             track=b.track,
-            track_name=TRACK_NAMES.get(b.track, b.track),
+            track_name=b.track_name or TRACK_NAMES.get(b.track, b.track),
         )
         for b in blocks
     ]

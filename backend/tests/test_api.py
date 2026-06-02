@@ -13,7 +13,7 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 
 @pytest.fixture()
 def client(monkeypatch):
-    monkeypatch.setattr("app.auth.settings.app_password", None)
+    monkeypatch.setattr("app.services.auth_service.settings.app_password", None)
     monkeypatch.setattr("app.config.settings.app_password", None)
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
@@ -117,6 +117,14 @@ def test_health(client):
     res = client.get("/health")
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
+
+
+def test_http_errors_not_swallowed_as_500(client):
+    # The catch-all exception handler must preserve real HTTP status codes
+    # (e.g. 404), not turn every error into a generic 500.
+    missing = "00000000-0000-0000-0000-000000000000"
+    res = client.get(f"/api/tracks/{missing}")
+    assert res.status_code == 404
 
 
 def test_system_tracks_seeded(client):
@@ -340,3 +348,76 @@ def test_chat_send_without_api_key(client, monkeypatch):
         json={"content": "How am I doing?"},
     )
     assert res.status_code == 503
+
+
+def test_generate_roadmap_without_api_key(client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "openai_api_key", None)
+    monkeypatch.setattr(settings, "gemini_api_key", None)
+    res = client.post(
+        "/api/curriculum/generate",
+        json={"goals": "Learn Rust", "weekly_hours": 8},
+    )
+    assert res.status_code == 503
+
+
+def test_generate_roadmap_applies_personalized_schedule(client, monkeypatch):
+    """A generated roadmap (mocked model) imports tracks and sets the user's schedule."""
+    fake_curriculum = {
+        "version": "1.0",
+        "tracks": [
+            {
+                "slug": "rust",
+                "name": "Rust Programming",
+                "description": "Systems programming in Rust.",
+                "color": "#f59e0b",
+                "cognitive_multiplier": 1.2,
+                "materials": [
+                    {
+                        "title": "The Rust Book",
+                        "url": "https://doc.rust-lang.org/book/",
+                        "type": "reading",
+                        "estimated_minutes": 30,
+                        "priority_percent": 5,
+                        "sequence": 1,
+                    }
+                ],
+            }
+        ],
+        "weekly_schedule": {
+            "monday": [{"block": 1, "track": "rust"}],
+            "tuesday": [],
+            "wednesday": [],
+            "thursday": [],
+            "friday": [],
+            "saturday": [],
+            "sunday": [{"block": 1, "track": "review"}],
+        },
+    }
+
+    monkeypatch.setattr(
+        "app.api.routes.curriculum.generate_roadmap",
+        lambda goals, weekly_hours=10, level=None: fake_curriculum,
+    )
+
+    res = client.post(
+        "/api/curriculum/generate",
+        json={"goals": "Learn Rust deeply", "weekly_hours": 8, "apply": True},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["applied"] is True
+    assert body["stats"]["tracks_created"] >= 1
+
+    # The track now exists and the personalized schedule is in effect.
+    tracks = {t["slug"] for t in client.get("/api/tracks").json()}
+    assert "rust" in tracks
+
+    schedule = client.get("/api/curriculum/schedule").json()
+    assert any(b["track"] == "rust" for b in schedule["monday"])
+
+    me = client.get("/api/user/me").json()
+    assert me["onboarded"] is True
+    assert me["learning_goals"] == "Learn Rust deeply"

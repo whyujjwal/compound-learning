@@ -252,11 +252,16 @@ export default function TodayPage() {
 
       {blocks.length === 0 ? (
         <div className="empty-today">
-          <h2 className="empty-today-title">No blocks today.</h2>
+          <h2 className="empty-today-title">Let&apos;s build your roadmap.</h2>
           <p className="empty-today-sub">
-            Either every assigned track is paused, or you haven&apos;t imported a
-            curriculum yet.{" "}
-            <Link href="/curriculum">Open the roadmap</Link>.
+            Tell Compound what you want to master and it designs personalized tracks
+            with real materials from the web and a weekly schedule.
+          </p>
+          <Link href="/curriculum/build" className="v2-btn primary" style={{ marginTop: 12 }}>
+            Build my roadmap →
+          </Link>
+          <p className="empty-today-sub" style={{ marginTop: 10, fontSize: 12 }}>
+            Or <Link href="/curriculum">browse the bundled roadmap</Link>.
           </p>
         </div>
       ) : (

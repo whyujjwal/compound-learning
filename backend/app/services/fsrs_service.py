@@ -94,7 +94,8 @@ def review_card(
             if card.last_reviewed_at.tzinfo is None
             else card.last_reviewed_at
         )
-        actual_days = max(0, (now - last).days)
+        # Round to nearest day so sub-day learning steps aren't silently truncated to 0.
+        actual_days = max(0, round((now - last).total_seconds() / 86400))
 
     updated_fsrs, _ = scheduler.review_card(
         fsrs_card,
@@ -111,7 +112,9 @@ def review_card(
     else:
         card.reps += 1
 
-    new_scheduled_days = max(0, (updated_fsrs.due.replace(tzinfo=UTC) - now).days)
+    new_scheduled_days = max(
+        0, round((updated_fsrs.due.replace(tzinfo=UTC) - now).total_seconds() / 86400)
+    )
 
     log = ReviewLog(
         card_id=card.id,

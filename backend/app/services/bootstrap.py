@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.models.card import Card
@@ -124,13 +125,36 @@ def _sync_curriculum(db: Session, user: User) -> None:
 
     from app.services.curriculum_loader import import_curriculum, load_file
 
-    import_curriculum(db, user, load_file(curriculum_path), prune_orphans=True)
+    import_curriculum(
+        db, user, load_file(curriculum_path), prune_orphans=True, set_schedule=False
+    )
     from app.services.weekly_schedule import invalidate_schedule_cache
 
     invalidate_schedule_cache()
 
 
+def _ensure_user_roadmap_columns(db: Session) -> None:
+    """Idempotently add per-user roadmap columns for DBs created before 0004."""
+    try:
+        cols = {c["name"] for c in inspect(db.bind).get_columns("users")}
+    except Exception:
+        return
+    statements = []
+    if "weekly_schedule" not in cols:
+        statements.append("ALTER TABLE users ADD COLUMN weekly_schedule JSONB")
+    if "learning_goals" not in cols:
+        statements.append("ALTER TABLE users ADD COLUMN learning_goals VARCHAR(2000)")
+    if "onboarded" not in cols:
+        statements.append("ALTER TABLE users ADD COLUMN onboarded BOOLEAN NOT NULL DEFAULT false")
+    for stmt in statements:
+        db.execute(text(stmt))
+    if statements:
+        db.commit()
+        logger.info("Applied %d boot-time user roadmap column migration(s)", len(statements))
+
+
 def bootstrap(db: Session) -> None:
+    _ensure_user_roadmap_columns(db)
     user = get_default_user(db)
     tracks = db.query(Track).filter(Track.user_id == user.id).all()
     for track in tracks:

@@ -217,7 +217,7 @@ def build_daily_queue(db: Session, user: User) -> DailyQueueResponse:
 
     weekday = now.weekday()
     paused = set(user.paused_tracks or [])
-    track_slugs = [s for s in track_slugs_for_weekday(weekday) if s not in paused]
+    track_slugs = [s for s in track_slugs_for_weekday(weekday, user) if s not in paused]
 
     tracks_by_slug: dict[str, Track] = {
         t.slug: t for t in db.query(Track).filter(Track.user_id == user.id).all()

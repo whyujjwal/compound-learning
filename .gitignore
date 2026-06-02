@@ -11,5 +11,8 @@ node_modules/
 .DS_Store
 
 # Local tooling artifacts
+.playwright-cli/
 frontend/.playwright-cli/
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
 output/

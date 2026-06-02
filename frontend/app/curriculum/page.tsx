@@ -77,8 +77,24 @@ export default function RoadmapPage() {
             <span className="stat-num">{overview.due_reviews}</span>
             <span className="stat-label">queued</span>
           </div>
+          <Link href="/curriculum/build" className="v2-btn primary">
+            ✦ Build with AI
+          </Link>
         </div>
       </header>
+
+      {overview.tracks.length === 0 && (
+        <div className="empty-today">
+          <h2 className="empty-today-title">No tracks yet.</h2>
+          <p className="empty-today-sub">
+            Generate a personalized roadmap from your goals — Compound finds real
+            materials from the web and schedules your week.
+          </p>
+          <Link href="/curriculum/build" className="v2-btn primary" style={{ marginTop: 12 }}>
+            Build my roadmap →
+          </Link>
+        </div>
+      )}
 
       <div className="roadmap-grid">
         {overview.tracks.map((t) => {

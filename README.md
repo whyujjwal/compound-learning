@@ -2,7 +2,9 @@
 
 > An adaptive learning platform for advanced technical mastery — FSRS-6 spaced repetition, HEFT daily planning, and an AI coach with read-only access to your real progress.
 
-Compound treats learning as a scheduling problem. Three engines collaborate:
+Compound treats learning as a scheduling problem. Tell it what you want to master and it
+**generates a personalized roadmap** — real tracks, curated internet resources, and a weekly
+schedule — then keeps you on pace. Three engines collaborate:
 
 | Engine | Role |
 |---|---|
@@ -11,6 +13,23 @@ Compound treats learning as a scheduling problem. Three engines collaborate:
 | **HEFT planner** | Orders the daily session across morning/midday/afternoon/evening focus windows using upward-rank heuristics and cognitive cost. |
 
 A fourth layer — **Coach** — is an AI advisor with tool access to your stats, recent reviews, struggling cards, and per-track breakdowns. Ask it natural questions about your progress.
+
+---
+
+## Personalized roadmaps
+
+New users start with an empty library and build their own. On **Build roadmap**
+(`/curriculum/build`) you describe your goals ("master backend engineering: Go, databases,
+system design, distributed systems") and weekly hours. Compound asks the configured AI provider
+to design a complete curriculum:
+
+- **One track per goal** — ordered, beginner → advanced.
+- **Real resources** — official docs, MIT OCW, freeCodeCamp, 3Blue1Brown, arXiv, etc. (no invented URLs).
+- **A weekly schedule** — denser tracks earlier in the week, a light Sunday review block.
+- **FSRS-aware priorities** — foundational items get lower `priority_percent` so they surface first.
+
+The roadmap is previewed before you apply it ("Add to my library" or "Replace & start"), and the
+generated weekly schedule is stored **per user** — the daily queue and HEFT planner read it directly.
 
 ---
 
@@ -127,10 +146,11 @@ All settings via env vars (see `backend/.env.example`):
 | `DATABASE_URL` | `postgresql://compound:compound@localhost:5432/compound` | Postgres connection |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated allowed origins |
 | `LOG_LEVEL` | `INFO` | Python logger level |
-| `AI_PROVIDER` | `anthropic` | `anthropic` or `openai` |
-| `AI_MODEL` | `claude-3-5-sonnet-20241022` | Model identifier for the chosen provider |
+| `AI_PROVIDER` | `gemini` | `gemini`, `anthropic`, or `openai` |
+| `AI_MODEL` | `gemini-2.5-flash` | Model identifier for the chosen provider |
 | `ANTHROPIC_API_KEY` | _(empty)_ | Required if `AI_PROVIDER=anthropic` |
 | `OPENAI_API_KEY` | _(empty)_ | Required if `AI_PROVIDER=openai` |
+| `GEMINI_API_KEY` | _(empty)_ | Required if `AI_PROVIDER=gemini` |
 | `AI_MAX_TOKENS` | `2048` | Max tokens per Coach response |
 
 ---
