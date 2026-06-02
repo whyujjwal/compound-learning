@@ -1,0 +1,446 @@
+from datetime import UTC, datetime
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.dependencies import get_current_user
+from app.models.catalog_collection import CatalogCollection, CatalogCollectionItem
+from app.models.card import Card
+from app.models.material import StudyMaterial
+from app.models.track import Track
+from app.models.track_rating import TrackRating
+from app.models.track_star import TrackStar
+from app.models.user import User
+from app.services.catalog_quality import quality_breakdown, rank_score, refresh_track_quality, refresh_track_rating
+from app.services.bootstrap import ensure_scheduler_params
+
+router = APIRouter(prefix="/catalog", tags=["catalog"])
+
+
+class CatalogTrackResponse(BaseModel):
+    id: UUID
+    slug: str
+    name: str
+    description: str | None
+    color: str
+    creator_name: str | None = None
+    creator_id: UUID
+    material_count: int
+    module_count: int
+    star_count: int
+    adoption_count: int
+    rating_count: int
+    rating_avg: float
+    quality_score: float
+    is_featured: bool
+    is_starred: bool
+    rank_score: float
+    source_track_id: UUID | None = None
+    created_at: datetime
+    published_at: datetime | None = None
+
+
+class CatalogMaterialPreview(BaseModel):
+    id: UUID
+    title: str
+    external_url: str | None
+    block_label: str | None
+    resource_type: str | None
+    estimated_minutes: int
+    sequence: int
+    resource_health_status: str = "UNKNOWN"
+    resource_quality_score: float = 0.0
+
+
+class CatalogTrackDetail(CatalogTrackResponse):
+    materials: list[CatalogMaterialPreview]
+    quality: dict
+
+
+class AdoptTrackResponse(BaseModel):
+    track_id: UUID
+    slug: str
+    materials_created: int
+
+
+class RateTrackRequest(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class CatalogCollectionResponse(BaseModel):
+    id: UUID
+    slug: str
+    title: str
+    description: str | None
+    tracks: list[CatalogTrackResponse]
+
+
+class CreatorProfileResponse(BaseModel):
+    id: UUID
+    display_name: str | None
+    track_count: int
+    total_stars: int
+    total_adoptions: int
+    avg_rating: float
+    tracks: list[CatalogTrackResponse]
+
+
+class LeaderboardResponse(BaseModel):
+    tracks: list[CatalogTrackResponse]
+    creators: list[CreatorProfileResponse]
+
+
+def _unique_slug(db: Session, user: User, base: str) -> str:
+    slug = base
+    i = 2
+    while db.query(Track).filter(Track.user_id == user.id, Track.slug == slug).first():
+        slug = f"{base}-{i}"
+        i += 1
+    return slug
+
+
+def _catalog_response(db: Session, track: Track, user: User) -> CatalogTrackResponse:
+    materials = db.query(StudyMaterial).filter(StudyMaterial.track_id == track.id).all()
+    modules = {m.block_label or "Core" for m in materials}
+    refresh_track_quality(db, track)
+    starred = (
+        db.query(TrackStar)
+        .filter(TrackStar.track_id == track.id, TrackStar.user_id == user.id)
+        .first()
+        is not None
+    )
+    creator = db.query(User).filter(User.id == track.user_id).first()
+    return CatalogTrackResponse(
+        id=track.id,
+        slug=track.slug,
+        name=track.name,
+        description=track.description,
+        color=track.color,
+        creator_name=creator.display_name if creator else None,
+        creator_id=track.user_id,
+        material_count=len(materials),
+        module_count=len(modules),
+        star_count=track.star_count,
+        adoption_count=track.adoption_count,
+        rating_count=track.rating_count,
+        rating_avg=track.rating_avg,
+        quality_score=track.quality_score,
+        is_featured=track.is_featured,
+        is_starred=starred,
+        rank_score=rank_score(track, len(materials)),
+        source_track_id=track.source_track_id,
+        created_at=track.created_at,
+        published_at=track.published_at,
+    )
+
+
+@router.get("/tracks", response_model=list[CatalogTrackResponse])
+def list_catalog_tracks(
+    q: str | None = Query(default=None),
+    featured: bool = False,
+    sort: str = Query(default="ranking", pattern="^(ranking|stars|new)$"),
+    limit: int = Query(default=50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[CatalogTrackResponse]:
+    query = db.query(Track).filter(Track.is_public.is_(True))
+    if featured:
+        query = query.filter(Track.is_featured.is_(True))
+    if q:
+        needle = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                Track.name.ilike(needle),
+                Track.description.ilike(needle),
+                Track.generation_prompt.ilike(needle),
+                Track.id.in_(
+                    db.query(StudyMaterial.track_id).filter(
+                        or_(
+                            StudyMaterial.title.ilike(needle),
+                            StudyMaterial.block_label.ilike(needle),
+                            StudyMaterial.resource_type.ilike(needle),
+                        )
+                    )
+                ),
+            )
+        )
+
+    if sort == "stars":
+        query = query.order_by(Track.star_count.desc(), Track.created_at.desc())
+    elif sort == "new":
+        query = query.order_by(Track.created_at.desc())
+    else:
+        query = query.order_by(
+            Track.is_featured.desc(),
+            Track.quality_score.desc(),
+            Track.star_count.desc(),
+            Track.adoption_count.desc(),
+            Track.created_at.desc(),
+        )
+
+    tracks = query.limit(limit).all()
+    return [_catalog_response(db, track, user) for track in tracks]
+
+
+@router.get("/tracks/{track_id}", response_model=CatalogTrackDetail)
+def get_catalog_track(
+    track_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CatalogTrackDetail:
+    track = db.query(Track).filter(Track.id == track_id, Track.is_public.is_(True)).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Public track not found")
+    base = _catalog_response(db, track, user)
+    materials = (
+        db.query(StudyMaterial)
+        .filter(StudyMaterial.track_id == track.id)
+        .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
+        .all()
+    )
+    return CatalogTrackDetail(
+        **base.model_dump(),
+        materials=[
+            CatalogMaterialPreview(
+                id=m.id,
+                title=m.title,
+                external_url=m.external_url,
+                block_label=m.block_label,
+                resource_type=m.resource_type,
+                estimated_minutes=m.estimated_minutes,
+                sequence=m.sequence,
+                resource_health_status=m.resource_health_status,
+                resource_quality_score=m.resource_quality_score,
+            )
+            for m in materials
+        ],
+        quality=quality_breakdown(materials),
+    )
+
+
+@router.post("/tracks/{track_id}/star", response_model=CatalogTrackResponse)
+def star_track(
+    track_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CatalogTrackResponse:
+    track = db.query(Track).filter(Track.id == track_id, Track.is_public.is_(True)).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Public track not found")
+    existing = db.query(TrackStar).filter(TrackStar.track_id == track.id, TrackStar.user_id == user.id).first()
+    if not existing:
+        db.add(TrackStar(track_id=track.id, user_id=user.id))
+        track.star_count += 1
+        db.commit()
+        db.refresh(track)
+    return _catalog_response(db, track, user)
+
+
+@router.delete("/tracks/{track_id}/star", response_model=CatalogTrackResponse)
+def unstar_track(
+    track_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CatalogTrackResponse:
+    track = db.query(Track).filter(Track.id == track_id, Track.is_public.is_(True)).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Public track not found")
+    existing = db.query(TrackStar).filter(TrackStar.track_id == track.id, TrackStar.user_id == user.id).first()
+    if existing:
+        db.delete(existing)
+        track.star_count = max(0, track.star_count - 1)
+        db.commit()
+        db.refresh(track)
+    return _catalog_response(db, track, user)
+
+
+@router.post("/tracks/{track_id}/rate", response_model=CatalogTrackResponse)
+def rate_track(
+    track_id: UUID,
+    payload: RateTrackRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CatalogTrackResponse:
+    track = db.query(Track).filter(Track.id == track_id, Track.is_public.is_(True)).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Public track not found")
+    rating = db.query(TrackRating).filter(TrackRating.track_id == track.id, TrackRating.user_id == user.id).first()
+    if not rating:
+        rating = TrackRating(track_id=track.id, user_id=user.id, rating=payload.rating, note=payload.note)
+        db.add(rating)
+    else:
+        rating.rating = payload.rating
+        rating.note = payload.note
+    refresh_track_rating(db, track)
+    db.commit()
+    db.refresh(track)
+    return _catalog_response(db, track, user)
+
+
+@router.post("/tracks/{track_id}/adopt", response_model=AdoptTrackResponse, status_code=201)
+def adopt_track(
+    track_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AdoptTrackResponse:
+    source = db.query(Track).filter(Track.id == track_id, Track.is_public.is_(True)).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Public track not found")
+
+    slug = _unique_slug(db, user, source.slug)
+    track = Track(
+        user_id=user.id,
+        slug=slug,
+        name=source.name,
+        description=source.description,
+        color=source.color,
+        cognitive_multiplier=source.cognitive_multiplier,
+        is_system=False,
+        is_public=False,
+        is_featured=False,
+        source_track_id=source.id,
+        generation_prompt=source.generation_prompt,
+    )
+    db.add(track)
+    db.flush()
+    ensure_scheduler_params(db, user, track)
+
+    source_materials = (
+        db.query(StudyMaterial)
+        .filter(StudyMaterial.track_id == source.id)
+        .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
+        .all()
+    )
+    created = 0
+    for material in source_materials:
+        copy = StudyMaterial(
+            track_id=track.id,
+            title=material.title,
+            raw_content=material.raw_content,
+            external_url=material.external_url,
+            block_label=material.block_label,
+            resource_type=material.resource_type,
+            sequence=material.sequence,
+            cognitive_cost_multiplier=material.cognitive_cost_multiplier,
+            estimated_minutes=material.estimated_minutes,
+            priority_percent=material.priority_percent,
+        )
+        db.add(copy)
+        db.flush()
+        db.add(Card(user_id=user.id, material_id=copy.id))
+        created += 1
+
+    track.published_at = None
+    source.adoption_count += 1
+    db.commit()
+    db.refresh(track)
+    return AdoptTrackResponse(track_id=track.id, slug=track.slug, materials_created=created)
+
+
+def _collection_tracks(db: Session, collection: CatalogCollection, user: User) -> list[CatalogTrackResponse]:
+    rows = (
+        db.query(CatalogCollectionItem)
+        .join(Track, CatalogCollectionItem.track_id == Track.id)
+        .filter(CatalogCollectionItem.collection_id == collection.id, Track.is_public.is_(True))
+        .order_by(CatalogCollectionItem.sort_order.asc(), Track.star_count.desc())
+        .all()
+    )
+    return [_catalog_response(db, row.track, user) for row in rows]
+
+
+def _ensure_default_collections(db: Session) -> None:
+    if db.query(CatalogCollection).first():
+        return
+    specs = [
+        ("best-roadmaps", "Best Roadmaps", "Highest-signal public tracks ranked by stars, quality, and adoption.", None),
+        ("system-design", "System Design", "Scalable systems, architecture tradeoffs, databases, queues, and case studies.", "system"),
+        ("ai-engineering", "AI Engineering", "ML, LLMs, RAG, evals, deployment, and AI foundations.", "ai"),
+        ("interview-prep", "Interview Prep", "DSA, system design, behavioral prep, and high-signal practice loops.", "interview"),
+    ]
+    public_tracks = db.query(Track).filter(Track.is_public.is_(True)).all()
+    for order, (slug, title, description, needle) in enumerate(specs):
+        collection = CatalogCollection(slug=slug, title=title, description=description, sort_order=order)
+        db.add(collection)
+        db.flush()
+        candidates = public_tracks
+        if needle:
+            n = needle.lower()
+            candidates = [
+                t for t in public_tracks
+                if n in f"{t.name} {t.description or ''} {t.generation_prompt or ''}".lower()
+            ]
+        candidates = sorted(candidates, key=lambda t: (t.star_count, t.quality_score, t.created_at), reverse=True)[:8]
+        for item_order, track in enumerate(candidates):
+            db.add(CatalogCollectionItem(collection_id=collection.id, track_id=track.id, sort_order=item_order))
+    db.commit()
+
+
+@router.get("/collections", response_model=list[CatalogCollectionResponse])
+def list_collections(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[CatalogCollectionResponse]:
+    _ensure_default_collections(db)
+    collections = db.query(CatalogCollection).order_by(CatalogCollection.sort_order.asc(), CatalogCollection.title.asc()).all()
+    return [
+        CatalogCollectionResponse(
+            id=c.id,
+            slug=c.slug,
+            title=c.title,
+            description=c.description,
+            tracks=_collection_tracks(db, c, user),
+        )
+        for c in collections
+    ]
+
+
+@router.get("/creators/{creator_id}", response_model=CreatorProfileResponse)
+def get_creator_profile(
+    creator_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> CreatorProfileResponse:
+    creator = db.query(User).filter(User.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    tracks = db.query(Track).filter(Track.user_id == creator.id, Track.is_public.is_(True)).order_by(Track.star_count.desc()).all()
+    responses = [_catalog_response(db, track, user) for track in tracks]
+    ratings = [track.rating_avg for track in tracks if track.rating_count > 0]
+    return CreatorProfileResponse(
+        id=creator.id,
+        display_name=creator.display_name,
+        track_count=len(tracks),
+        total_stars=sum(t.star_count for t in tracks),
+        total_adoptions=sum(t.adoption_count for t in tracks),
+        avg_rating=round(sum(ratings) / len(ratings), 2) if ratings else 0.0,
+        tracks=responses,
+    )
+
+
+@router.get("/leaderboards", response_model=LeaderboardResponse)
+def get_leaderboards(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> LeaderboardResponse:
+    tracks = db.query(Track).filter(Track.is_public.is_(True)).order_by(
+        Track.is_featured.desc(),
+        Track.quality_score.desc(),
+        Track.star_count.desc(),
+        Track.adoption_count.desc(),
+    ).limit(20).all()
+    creators: list[CreatorProfileResponse] = []
+    creator_ids = []
+    for track in tracks:
+        if track.user_id not in creator_ids:
+            creator_ids.append(track.user_id)
+    for creator_id in creator_ids[:10]:
+        creators.append(get_creator_profile(creator_id, db, user))
+    return LeaderboardResponse(
+        tracks=[_catalog_response(db, track, user) for track in tracks],
+        creators=creators,
+    )

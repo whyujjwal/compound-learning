@@ -2,11 +2,13 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.card import Card
+from app.models.track_ai_update import TrackAIUpdate
 from app.models.material import StudyMaterial
 from app.models.track import Track
 from app.models.user import User
@@ -20,6 +22,7 @@ from app.schemas.track import (
 from app.services.bootstrap import ensure_scheduler_params
 from app.services.fsrs_optimizer import optimize_track_weights
 from app.services.mastery import is_mastered
+from app.services.roadmap_generator import RoadmapError, generate_track_update
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 
@@ -46,6 +49,15 @@ def _track_response(db: Session, track: Track) -> TrackResponse:
         color=track.color,
         cognitive_multiplier=track.cognitive_multiplier,
         is_system=track.is_system,
+        is_public=track.is_public,
+        is_featured=track.is_featured,
+        star_count=track.star_count,
+        adoption_count=track.adoption_count,
+        rating_count=track.rating_count,
+        rating_avg=track.rating_avg,
+        quality_score=track.quality_score,
+        source_track_id=track.source_track_id,
+        generation_prompt=track.generation_prompt,
         created_at=track.created_at,
         material_count=material_count,
         due_card_count=due_count,
@@ -83,6 +95,8 @@ def create_track(
         color=payload.color,
         cognitive_multiplier=payload.cognitive_multiplier,
         is_system=False,
+        is_public=payload.is_public,
+        published_at=datetime.now(UTC) if payload.is_public else None,
     )
     db.add(track)
     db.commit()
@@ -233,3 +247,110 @@ def optimize_fsrs(
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
     return optimize_track_weights(db, user, track.id)
+
+
+class TrackAIUpdateRequest(BaseModel):
+    instruction: str = Field(min_length=3, max_length=4000)
+    apply: bool = True
+
+
+class TrackAIUpdateResponse(BaseModel):
+    id: UUID
+    track_id: UUID
+    status: str
+    added_materials: int = 0
+    result: dict | None = None
+    error: str | None = None
+    created_at: datetime
+
+
+@router.post("/{track_id}/ai-updates", response_model=TrackAIUpdateResponse, status_code=201)
+def request_track_ai_update(
+    track_id: UUID,
+    payload: TrackAIUpdateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> TrackAIUpdateResponse:
+    track = db.query(Track).filter(Track.id == track_id, Track.user_id == user.id).first()
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    materials = (
+        db.query(StudyMaterial)
+        .filter(StudyMaterial.track_id == track.id)
+        .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
+        .all()
+    )
+    try:
+        result = generate_track_update(track, materials, payload.instruction)
+    except RoadmapError as e:
+        row = TrackAIUpdate(
+            track_id=track.id,
+            user_id=user.id,
+            instruction=payload.instruction,
+            status="FAILED",
+            error=str(e),
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return TrackAIUpdateResponse(
+            id=row.id,
+            track_id=track.id,
+            status=row.status,
+            result=None,
+            error=row.error,
+            created_at=row.created_at,
+        )
+
+    added = 0
+    if payload.apply:
+        next_sequence = max([m.sequence for m in materials], default=0) + 1
+        for i, item in enumerate(result.get("materials") or []):
+            title = item.get("title")
+            if not title:
+                continue
+            existing = (
+                db.query(StudyMaterial)
+                .filter(StudyMaterial.track_id == track.id, StudyMaterial.title == title)
+                .first()
+            )
+            if existing:
+                continue
+            material = StudyMaterial(
+                track_id=track.id,
+                title=title,
+                raw_content=item.get("notes"),
+                external_url=item.get("url"),
+                block_label=item.get("block_label") or f"{track.name} · AI update",
+                resource_type=item.get("type"),
+                sequence=item.get("sequence") or next_sequence + i,
+                estimated_minutes=item.get("estimated_minutes", 20),
+                priority_percent=item.get("priority_percent", 50),
+                cognitive_cost_multiplier=item.get("cognitive_cost_multiplier", 1.0),
+            )
+            db.add(material)
+            db.flush()
+            db.add(Card(user_id=user.id, material_id=material.id))
+            added += 1
+
+    row = TrackAIUpdate(
+        track_id=track.id,
+        user_id=user.id,
+        instruction=payload.instruction,
+        status="APPLIED" if payload.apply else "PREVIEW",
+        result=result,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    return TrackAIUpdateResponse(
+        id=row.id,
+        track_id=track.id,
+        status=row.status,
+        added_materials=added,
+        result=row.result,
+        error=row.error,
+        created_at=row.created_at,
+    )

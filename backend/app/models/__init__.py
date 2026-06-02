@@ -1,4 +1,5 @@
 from app.models.card import Card, CardState
+from app.models.catalog_collection import CatalogCollection, CatalogCollectionItem
 from app.models.chat import Conversation, Message, MessageRole
 from app.models.coach_insight import CoachInsight, CoachInsightKind
 from app.models.material import StudyMaterial
@@ -10,12 +11,20 @@ from app.models.scheduler_params import SchedulerParameters
 from app.models.block_session import BlockSession, BlockSessionStatus
 from app.models.study_session import CompletionStatus, StudySession
 from app.models.track import Track
+from app.models.track_ai_update import TrackAIUpdate
+from app.models.track_rating import TrackRating
+from app.models.track_star import TrackStar
 from app.models.user import User
 from app.models.xapi_statement import XapiStatement
 
 __all__ = [
     "User",
     "Track",
+    "TrackAIUpdate",
+    "TrackRating",
+    "TrackStar",
+    "CatalogCollection",
+    "CatalogCollectionItem",
     "StudyMaterial",
     "Card",
     "CardState",

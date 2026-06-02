@@ -7,9 +7,11 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 
 const PRIMARY_NAV = [
   { href: "/", label: "Today", match: (p: string) => p === "/" },
+  { href: "/explore", label: "Explore", match: (p: string) => p.startsWith("/explore") },
+  { href: "/curriculum", label: "Library", match: (p: string) => p === "/curriculum" },
+  { href: "/curriculum/build", label: "Studio", match: (p: string) => p.startsWith("/curriculum/build") },
   { href: "/coach", label: "Coach", match: (p: string) => p.startsWith("/coach") },
   { href: "/stats", label: "Stats", match: (p: string) => p.startsWith("/stats") },
-  { href: "/curriculum", label: "Roadmap", match: (p: string) => p === "/curriculum" || p.startsWith("/curriculum/build") },
 ];
 
 export function AppBar({
@@ -54,7 +56,7 @@ export function AppBar({
 
       <Link href="/" className="appbar-brand" aria-label="Compound home">
         <span className="appbar-brand-mark" aria-hidden />
-        Compound
+        Compound OS
       </Link>
 
       <nav className="appbar-nav" aria-label="Primary">

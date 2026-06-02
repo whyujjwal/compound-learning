@@ -5,13 +5,13 @@ Loaded from docs/curriculum.json weekly_schedule. Used by queue builder and API.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
 from app.models.user import User
 from app.schemas.curriculum import BlockScheduleItem, WeeklySchedule
 from app.services.curriculum_loader import load_file
+from app.services.timezone import local_weekday
 
 DEFAULT_PATH = Path(__file__).resolve().parents[3] / "docs" / "curriculum.json"
 DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
@@ -85,10 +85,13 @@ def blocks_for_weekday(weekday: int, user: User | None = None) -> list[BlockSche
     return list(getattr(schedule, key, []))
 
 
-def today_block_items(user: User | None = None) -> list[BlockScheduleItem]:
+def today_block_items(
+    user: User | None = None,
+    timezone_name: str | None = None,
+) -> list[BlockScheduleItem]:
     schedule = schedule_for_user(user)
+    weekday = local_weekday(timezone_name, user)
     if schedule is None:
-        weekday = datetime.now(UTC).weekday()
         return [
             BlockScheduleItem(
                 block=i + 1,
@@ -97,7 +100,7 @@ def today_block_items(user: User | None = None) -> list[BlockScheduleItem]:
             )
             for i, slug in enumerate(_FALLBACK_TEMPLATE.get(weekday, []))
         ]
-    key = DAY_KEYS[datetime.now(UTC).weekday()]
+    key = DAY_KEYS[weekday]
     blocks = getattr(schedule, key, [])
     return [
         BlockScheduleItem(

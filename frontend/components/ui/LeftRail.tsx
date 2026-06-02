@@ -5,17 +5,23 @@ import { usePathname } from "next/navigation";
 import { trackAccent } from "@/lib/trackColors";
 import type { Track, CurriculumOverview } from "@/lib/api";
 
-const LIBRARY = [
-  { href: "/tracks", label: "Tracks", match: (p: string) => p === "/tracks" },
-  { href: "/materials", label: "Materials", match: (p: string) => p.startsWith("/materials") },
-  { href: "/cards", label: "Cards", match: (p: string) => p.startsWith("/cards") },
+const WORKSPACE = [
+  { href: "/", label: "Today", match: (p: string) => p === "/" },
+  { href: "/explore", label: "Explore", match: (p: string) => p.startsWith("/explore") },
+  { href: "/curriculum", label: "My Library", match: (p: string) => p === "/curriculum" },
+  {
+    href: "/curriculum/build",
+    label: "AI Studio",
+    match: (p: string) => p.startsWith("/curriculum/build"),
+  },
+  { href: "/schedule", label: "My Week", match: (p: string) => p.startsWith("/schedule") },
 ];
 
 const FOOTER = [
-  { href: "/curriculum/build", label: "Build roadmap", match: (p: string) => p.startsWith("/curriculum/build") },
-  { href: "/schedule", label: "My week", match: (p: string) => p.startsWith("/schedule") },
+  { href: "/tracks", label: "Track Admin", match: (p: string) => p === "/tracks" },
+  { href: "/materials", label: "Materials", match: (p: string) => p.startsWith("/materials") },
+  { href: "/cards", label: "Cards", match: (p: string) => p.startsWith("/cards") },
   { href: "/curriculum/edit", label: "Editor", match: (p: string) => p.startsWith("/curriculum/edit") },
-  { href: "/team", label: "Team", match: (p: string) => p.startsWith("/team") },
   { href: "/settings", label: "Settings", match: (p: string) => p.startsWith("/settings") },
 ];
 
@@ -38,10 +44,23 @@ export function LeftRail({
 
   return (
     <aside className="rail">
+      <div className="rail-section" aria-label="Workspace">
+        <div className="rail-label">Workspace</div>
+        {WORKSPACE.map((l) => (
+          <Link
+            key={l.href}
+            href={l.href}
+            className={`rail-link${l.match(pathname) ? " active" : ""}`}
+          >
+            {l.label}
+          </Link>
+        ))}
+      </div>
+
       <div className="rail-section" aria-label="Tracks">
-        <div className="rail-label">Your tracks</div>
+        <div className="rail-label">Active tracks</div>
         {tracks.length === 0 ? (
-          <p className="rail-empty">No tracks yet — build a roadmap to get started.</p>
+          <p className="rail-empty">No tracks yet. Generate one in AI Studio or explore public roadmaps.</p>
         ) : (
           tracks.map((t) => {
             const accent = trackAccent(t.slug, t.color);
@@ -66,20 +85,8 @@ export function LeftRail({
         )}
       </div>
 
-      <div className="rail-section" aria-label="Library">
-        <div className="rail-label">Library</div>
-        {LIBRARY.map((l) => (
-          <Link
-            key={l.href}
-            href={l.href}
-            className={`rail-link${l.match(pathname) ? " active" : ""}`}
-          >
-            {l.label}
-          </Link>
-        ))}
-      </div>
-
       <div className="rail-footer">
+        <div className="rail-label">Tools</div>
         {FOOTER.map((v) => (
           <Link
             key={v.href}

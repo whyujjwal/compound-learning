@@ -2,10 +2,10 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, type GeneratedRoadmap, type RoadmapGenerationSummary } from "@/lib/api";
+import { api, type GeneratedRoadmap, type RoadmapGenerationSummary, type WeekdayKey } from "@/lib/api";
 import { trackAccent } from "@/lib/trackColors";
 
-const DAY_LABELS: [string, string][] = [
+const DAY_LABELS: [WeekdayKey, string][] = [
   ["monday", "Mon"],
   ["tuesday", "Tue"],
   ["wednesday", "Wed"],
@@ -16,10 +16,10 @@ const DAY_LABELS: [string, string][] = [
 ];
 
 const EXAMPLES = [
-  "Become a strong backend engineer: master Go, system design, databases, and distributed systems.",
-  "Learn machine learning from scratch — the math, classic ML, deep learning, and building LLMs.",
-  "Prep for FAANG interviews: data structures & algorithms, system design, and behavioral.",
-  "Get fluent in modern web dev: TypeScript, React, Next.js, and product design.",
+  "Create a complete System Design track for backend interviews with modules, projects, and case studies.",
+  "Build a 12-week AI Engineering track from math foundations to RAG, evals, and deployment.",
+  "Turn FAANG interview prep into a daily roadmap with DSA, system design, and behavioral practice.",
+  "Make a project-based Rust backend track with networking, databases, observability, and a capstone.",
 ];
 
 function formatWhen(iso: string) {
@@ -33,6 +33,21 @@ function formatWhen(iso: string) {
   } catch {
     return iso;
   }
+}
+
+type PreviewMaterial = GeneratedRoadmap["curriculum"]["tracks"][number]["materials"][number];
+
+function groupByModule(materials: PreviewMaterial[]): [string, PreviewMaterial[]][] {
+  const groups = new Map<string, PreviewMaterial[]>();
+  for (const material of materials) {
+    const label = material.block_label || "Core module";
+    groups.set(label, [...(groups.get(label) ?? []), material]);
+  }
+  return Array.from(groups.entries());
+}
+
+function countByIntent(materials: PreviewMaterial[], pattern: RegExp): number {
+  return materials.filter((m) => pattern.test(`${m.title} ${m.type ?? ""} ${m.notes ?? ""}`)).length;
 }
 
 function RoadmapPreview({
@@ -63,7 +78,7 @@ function RoadmapPreview({
             onClick={() => onApply(false)}
             disabled={applying}
           >
-            Add to my library
+            Save to my library
           </button>
           <button
             type="button"
@@ -99,44 +114,77 @@ function RoadmapPreview({
       </div>
 
       <div className="roadmap-tracks">
-        {curriculum.tracks.map((t) => (
-          <article
-            key={t.slug}
-            className="roadmap-track card"
-            style={{ ["--track-color" as string]: colorBySlug[t.slug] }}
-          >
-            <header className="roadmap-track-head">
-              <span className="roadmap-track-dot" aria-hidden />
-              <div>
-                <h3 className="roadmap-track-name">{t.name}</h3>
-                {t.description && <p className="roadmap-track-desc">{t.description}</p>}
+        {curriculum.tracks.map((t) => {
+          const modules = groupByModule(t.materials);
+          const quizzes = countByIntent(t.materials, /\b(quiz|checkpoint|test)\b/i);
+          const hard = countByIntent(t.materials, /\b(hard|challenge|capstone|project)\b/i);
+          const easy = countByIntent(t.materials, /\b(easy|warmup|beginner|foundation)\b/i);
+
+          return (
+            <article
+              key={t.slug}
+              className="roadmap-track card"
+              style={{ ["--track-color" as string]: colorBySlug[t.slug] }}
+            >
+              <header className="roadmap-track-head">
+                <span className="roadmap-track-dot" aria-hidden />
+                <div>
+                  <h3 className="roadmap-track-name">{t.name}</h3>
+                  {t.description && <p className="roadmap-track-desc">{t.description}</p>}
+                </div>
+                <span className="pill muted">{modules.length} modules</span>
+              </header>
+
+              <div className="roadmap-quality">
+                <span>{t.materials.length} free-resource items</span>
+                <span>{quizzes} quizzes/checkpoints</span>
+                <span>{easy} easy drills</span>
+                <span>{hard} hard challenges</span>
               </div>
-              <span className="pill muted">{t.materials.length} items</span>
-            </header>
-            <ol className="roadmap-track-list">
-              {t.materials.slice(0, 8).map((m) => (
-                <li key={m.sequence + m.title} className="roadmap-mat">
-                  <span className="roadmap-mat-title">
-                    {m.url ? (
-                      <a href={m.url} target="_blank" rel="noreferrer">
-                        {m.title}
-                      </a>
-                    ) : (
-                      m.title
-                    )}
-                  </span>
-                  <span className="roadmap-mat-meta">
-                    {m.type && <span className="pill tiny">{m.type}</span>}
-                    <span>{m.estimated_minutes}m</span>
-                  </span>
-                </li>
-              ))}
-              {t.materials.length > 8 && (
-                <li className="roadmap-mat more">+{t.materials.length - 8} more…</li>
-              )}
-            </ol>
-          </article>
-        ))}
+
+              <div className="roadmap-module-preview">
+                {modules.slice(0, 5).map(([label, items]) => (
+                  <div key={label} className="roadmap-module-preview-row">
+                    <div>
+                      <strong>{label}</strong>
+                      <span>
+                        {items.length} items · {items.reduce((sum, m) => sum + m.estimated_minutes, 0)}m
+                      </span>
+                    </div>
+                    <span className="pill tiny">
+                      {items.some((m) => /\b(quiz|checkpoint|project)\b/i.test(m.type ?? m.title))
+                        ? "checked"
+                        : "module"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <ol className="roadmap-track-list">
+                {t.materials.slice(0, 6).map((m) => (
+                  <li key={m.sequence + m.title} className="roadmap-mat">
+                    <span className="roadmap-mat-title">
+                      {m.url ? (
+                        <a href={m.url} target="_blank" rel="noreferrer">
+                          {m.title}
+                        </a>
+                      ) : (
+                        m.title
+                      )}
+                    </span>
+                    <span className="roadmap-mat-meta">
+                      {m.type && <span className="pill tiny">{m.type}</span>}
+                      <span>{m.estimated_minutes}m</span>
+                    </span>
+                  </li>
+                ))}
+                {t.materials.length > 6 && (
+                  <li className="roadmap-mat more">+{t.materials.length - 6} more…</li>
+                )}
+              </ol>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -216,24 +264,46 @@ export default function RoadmapBuilderPage() {
   return (
     <div className="roadmap-build">
       <header className="page-header">
-        <h1 className="page-title">Build your roadmap</h1>
+        <h1 className="page-title">AI Studio</h1>
         <p className="page-sub">
-          Tell Compound what you want to master. It researches GitHub and the web, then
-          designs personalized tracks with real resources and a weekly study schedule.
+          Generate a serious learning track, remix an existing roadmap, or ask Compound to add
+          focused modules and materials around a specific skill.
         </p>
       </header>
 
       <div className="roadmap-build-layout">
         <div className="roadmap-build-main">
+          <section className="studio-modes" aria-label="Studio modes">
+            <span className="studio-mode active">Generate track</span>
+            <span className="studio-mode">Add module</span>
+            <span className="studio-mode">Improve roadmap</span>
+            <span className="studio-mode">Create projects</span>
+          </section>
+
+          <section className="studio-standards" aria-label="Generation standards">
+            <div>
+              <strong>Free-first resources</strong>
+              <span>Official docs, open courses, GitHub repos, university pages, and reputable videos.</span>
+            </div>
+            <div>
+              <strong>Module checkpoints</strong>
+              <span>Each module should end with a quiz, project, or measurable checkpoint.</span>
+            </div>
+            <div>
+              <strong>Easy to hard practice</strong>
+              <span>Warmups build confidence, hard tasks force transfer, reviews keep it alive.</span>
+            </div>
+          </section>
+
           <form className="roadmap-form card" onSubmit={handleGenerate}>
             <label className="roadmap-label" htmlFor="goals">
-              What do you want to learn?
+              What should this learning track help someone become capable of?
             </label>
             <textarea
               id="goals"
               className="v2-input roadmap-goals"
               rows={5}
-              placeholder="e.g. I want to master backend engineering: Go, databases, system design, and distributed systems."
+              placeholder="e.g. I want a complete system design track that takes a backend engineer from fundamentals to confidently designing feeds, chat, search, payments, and distributed systems."
               value={goals}
               onChange={(e) => setGoals(e.target.value)}
               required
@@ -254,7 +324,7 @@ export default function RoadmapBuilderPage() {
 
             <div className="roadmap-controls">
               <label className="roadmap-field">
-                <span>Hours per week</span>
+                <span>Weekly time</span>
                 <input
                   type="number"
                   className="v2-input"
@@ -265,7 +335,7 @@ export default function RoadmapBuilderPage() {
                 />
               </label>
               <label className="roadmap-field">
-                <span>Current level</span>
+                <span>Learner level</span>
                 <select
                   className="v2-input"
                   value={level}
@@ -281,12 +351,12 @@ export default function RoadmapBuilderPage() {
             {error && <p className="login-error">{error}</p>}
 
             <button type="submit" className="v2-btn primary roadmap-generate" disabled={loading}>
-              {loading ? "Designing your roadmap…" : "Generate roadmap"}
+              {loading ? "Designing the track..." : "Generate learning track"}
             </button>
             {loading && (
               <p className="roadmap-hint">
-                Large roadmaps are built track-by-track with GitHub research — this can
-                take 1–3 minutes for ambitious goals.
+                Compound researches real resources, sequences modules, estimates effort, and prepares
+                a weekly learning loop. Ambitious tracks can take 1-3 minutes.
               </p>
             )}
           </form>

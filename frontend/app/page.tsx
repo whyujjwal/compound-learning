@@ -13,6 +13,7 @@ import {
   getCompletedSlots,
   isBlockComplete,
 } from "@/lib/dailyProgress";
+import { getLocalDateKey } from "@/lib/time";
 
 const DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -49,7 +50,7 @@ export default function TodayPage() {
 
   // ── Nudge ────────────────────────────────────────────────
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateKey();
     if (typeof window !== "undefined") {
       if (window.localStorage.getItem("compound:nudge-dismiss") === today) {
         setNudgeDismissed(true);
@@ -67,7 +68,7 @@ export default function TodayPage() {
   }, []);
 
   const dismissNudge = useCallback(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateKey();
     if (typeof window !== "undefined") {
       window.localStorage.setItem("compound:nudge-dismiss", today);
     }
@@ -218,7 +219,7 @@ export default function TodayPage() {
   useEffect(() => {
     if (autoStarted.current || !queue || !firstOpenBlock || allBlocksDone) return;
     if (typeof window === "undefined") return;
-    const day = new Date().toISOString().slice(0, 10);
+    const day = getLocalDateKey();
     if (window.localStorage.getItem(`compound:auto-started-${day}`)) return;
     if (window.sessionStorage.getItem("compound:skip-auto-start")) {
       window.sessionStorage.removeItem("compound:skip-auto-start");
@@ -252,16 +253,17 @@ export default function TodayPage() {
 
       {blocks.length === 0 ? (
         <div className="empty-today">
-          <h2 className="empty-today-title">Let&apos;s build your roadmap.</h2>
+          <h2 className="empty-today-title">Your canvas is empty.</h2>
           <p className="empty-today-sub">
-            Tell Compound what you want to master and it designs personalized tracks
-            with real materials from the web and a weekly schedule.
+            Create tracks from scratch, generate a personalized roadmap, or import
+            the four example tracks when you want a starting point.
           </p>
           <Link href="/curriculum/build" className="v2-btn primary" style={{ marginTop: 12 }}>
             Build my roadmap →
           </Link>
           <p className="empty-today-sub" style={{ marginTop: 10, fontSize: 12 }}>
-            Or <Link href="/curriculum">browse the bundled roadmap</Link>.
+            Or open the <Link href="/curriculum">roadmap canvas</Link> and{" "}
+            <Link href="/schedule">weekly calendar</Link>.
           </p>
         </div>
       ) : (

@@ -12,6 +12,7 @@ from app.models.study_session import StudySession
 from app.models.track import Track
 from app.models.user import User
 from app.schemas.stats import StatsResponse, TrackStats
+from app.services.timezone import local_date_for, local_day_bounds, local_today, utc_now
 
 
 def _aware(dt: datetime) -> datetime:
@@ -20,12 +21,19 @@ def _aware(dt: datetime) -> datetime:
     return dt.astimezone(UTC)
 
 
-def _compute_streaks(review_dates: list[datetime]) -> tuple[int, int]:
+def _compute_streaks(
+    review_dates: list[datetime],
+    timezone_name: str | None = None,
+    user: User | None = None,
+) -> tuple[int, int]:
     if not review_dates:
         return 0, 0
 
-    unique_days = sorted({_aware(d).date() for d in review_dates}, reverse=True)
-    today = datetime.now(UTC).date()
+    unique_days = sorted(
+        {local_date_for(d, timezone_name, user) for d in review_dates},
+        reverse=True,
+    )
+    today = local_today(timezone_name, user, now)
 
     current = 0
     expected = today
@@ -52,11 +60,16 @@ def _compute_streaks(review_dates: list[datetime]) -> tuple[int, int]:
     return current, longest
 
 
-def get_stats(db: Session, user: User) -> StatsResponse:
-    now = datetime.now(UTC)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    week_start = today_start - timedelta(days=7)
-    month_start = today_start - timedelta(days=30)
+def get_stats(
+    db: Session,
+    user: User,
+    timezone_name: str | None = None,
+) -> StatsResponse:
+    now = utc_now()
+    today = local_today(timezone_name, user)
+    today_start, tomorrow_start = local_day_bounds(today, timezone_name, user)
+    week_start, _ = local_day_bounds(today - timedelta(days=6), timezone_name, user)
+    month_start, _ = local_day_bounds(today - timedelta(days=29), timezone_name, user)
 
     total_cards = db.query(Card).filter(Card.user_id == user.id).count()
     # "Due" now means FSRS-due reviews only (reps > 0) — new unstarted items aren't "due".
@@ -86,7 +99,11 @@ def get_stats(db: Session, user: User) -> StatsResponse:
     reviews_total = db.query(ReviewLog).filter(ReviewLog.card_id.in_(user_card_ids)).count()
     reviews_today = (
         db.query(ReviewLog)
-        .filter(ReviewLog.card_id.in_(user_card_ids), ReviewLog.reviewed_at >= today_start)
+        .filter(
+            ReviewLog.card_id.in_(user_card_ids),
+            ReviewLog.reviewed_at >= today_start,
+            ReviewLog.reviewed_at < tomorrow_start,
+        )
         .count()
     )
     reviews_this_week = (
@@ -118,14 +135,14 @@ def get_stats(db: Session, user: User) -> StatsResponse:
         .order_by(ReviewLog.reviewed_at.desc())
         .all()
     ]
-    current_streak, longest_streak = _compute_streaks(review_dates)
+    current_streak, longest_streak = _compute_streaks(review_dates, timezone_name, user)
 
     # Friendlier session-based metrics (no streak pressure)
     week_days = {
-        _aware(d).date() for d in review_dates if _aware(d) >= week_start
+        local_date_for(d, timezone_name, user) for d in review_dates if _aware(d) >= week_start
     }
     month_days = {
-        _aware(d).date() for d in review_dates if _aware(d) >= month_start
+        local_date_for(d, timezone_name, user) for d in review_dates if _aware(d) >= month_start
     }
     total_seconds = (
         db.query(func.coalesce(func.sum(ReviewLog.elapsed_time_seconds), 0))
@@ -147,12 +164,20 @@ def get_stats(db: Session, user: User) -> StatsResponse:
 
     review_seconds_today = (
         db.query(func.coalesce(func.sum(ReviewLog.elapsed_time_seconds), 0))
-        .filter(ReviewLog.card_id.in_(user_card_ids), ReviewLog.reviewed_at >= today_start)
+        .filter(
+            ReviewLog.card_id.in_(user_card_ids),
+            ReviewLog.reviewed_at >= today_start,
+            ReviewLog.reviewed_at < tomorrow_start,
+        )
         .scalar()
     ) or 0
     session_minutes_today = (
         db.query(func.coalesce(func.sum(StudySession.duration_minutes), 0))
-        .filter(StudySession.user_id == user.id, StudySession.created_at >= today_start)
+        .filter(
+            StudySession.user_id == user.id,
+            StudySession.created_at >= today_start,
+            StudySession.created_at < tomorrow_start,
+        )
         .scalar()
     ) or 0
     minutes_today = int(round(float(review_seconds_today) / 60)) + int(session_minutes_today)

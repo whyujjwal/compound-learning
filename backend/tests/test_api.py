@@ -1,8 +1,11 @@
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+import app.models  # noqa: F401 - ensure Base.metadata knows every table before drop_all/create_all.
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app
@@ -141,6 +144,46 @@ def test_system_tracks_seeded(client):
 def test_demo_materials_seeded(client):
     materials = client.get("/api/materials").json()
     assert len(materials) >= 5
+
+
+def test_blank_canvas_then_example_import(monkeypatch):
+    monkeypatch.setattr("app.services.auth_service.settings.app_password", None)
+    monkeypatch.setattr("app.config.settings.app_password", None)
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    db = TestingSessionLocal()
+
+    def override_get_db():
+        try:
+            yield db
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        from app.services import bootstrap
+
+        bootstrap.bootstrap(db)
+        with TestClient(app) as c:
+            tracks = c.get("/api/tracks")
+            assert tracks.status_code == 200
+            assert tracks.json() == []
+
+            schedule = c.get("/api/curriculum/schedule")
+            assert schedule.status_code == 200
+            assert all(blocks == [] for blocks in schedule.json().values())
+
+            examples = c.get("/api/curriculum/examples")
+            assert examples.status_code == 200
+            assert len(examples.json()["tracks"]) == 4
+
+            imported = c.post("/api/curriculum/import/examples")
+            assert imported.status_code == 200
+            assert imported.json()["tracks_created"] == 4
+            assert len(c.get("/api/tracks").json()) == 4
+    finally:
+        app.dependency_overrides.clear()
+        db.close()
 
 
 def test_create_custom_track(client):
@@ -286,6 +329,55 @@ def test_curriculum_schedule(client):
     res = client.get("/api/curriculum/schedule/today")
     assert res.status_code == 200
     assert isinstance(res.json(), list)
+
+
+def test_today_paths_use_client_timezone(client, monkeypatch):
+    fixed_now = datetime(2026, 6, 1, 1, 0, tzinfo=UTC)
+    for target in [
+        "app.services.timezone.utc_now",
+        "app.services.queue_service.utc_now",
+        "app.services.block_service.utc_now",
+        "app.services.stats_service.utc_now",
+        "app.services.coach_insights.utc_now",
+    ]:
+        monkeypatch.setattr(target, lambda: fixed_now)
+
+    schedule = {
+        "monday": [{"block": 1, "track": "dsa", "minutes": 30}],
+        "tuesday": [],
+        "wednesday": [],
+        "thursday": [],
+        "friday": [],
+        "saturday": [],
+        "sunday": [{"block": 1, "track": "ai-math", "minutes": 30}],
+    }
+    assert client.put("/api/curriculum/schedule", json=schedule).status_code == 200
+
+    kolkata = {"X-Compound-Timezone": "Asia/Kolkata"}
+    los_angeles = {"X-Compound-Timezone": "America/Los_Angeles"}
+
+    today_kolkata = client.get("/api/curriculum/schedule/today", headers=kolkata)
+    assert today_kolkata.status_code == 200
+    assert [b["track"] for b in today_kolkata.json()] == ["dsa"]
+
+    today_la = client.get("/api/curriculum/schedule/today", headers=los_angeles)
+    assert today_la.status_code == 200
+    assert [b["track"] for b in today_la.json()] == ["ai-math"]
+
+    queue_kolkata = client.get("/api/queue/daily", headers=kolkata)
+    assert queue_kolkata.status_code == 200
+    assert queue_kolkata.json()["weekday"] == 0
+    assert queue_kolkata.json()["blocks"][0]["track_slug"] == "dsa"
+
+    queue_la = client.get("/api/queue/daily", headers=los_angeles)
+    assert queue_la.status_code == 200
+    assert queue_la.json()["weekday"] == 6
+    assert queue_la.json()["blocks"][0]["track_slug"] == "ai-math"
+
+    started = client.post("/api/blocks/0/start", headers=kolkata)
+    assert started.status_code == 200
+    assert started.json()["session_date"] == "2026-06-01"
+    assert started.json()["track_slug"] == "dsa"
 
 
 def test_reschedule_endpoint(client):
@@ -485,6 +577,7 @@ def test_generate_roadmap_chunked_fallback(client, monkeypatch):
     def fake_single(*args, **kwargs):
         raise rg.RoadmapError("__truncated__")
 
+    monkeypatch.setattr(rg.settings, "gemini_api_key", "test-key")
     monkeypatch.setattr(rg, "_generate_single_pass", fake_single)
     monkeypatch.setattr(rg, "_generate_chunked", lambda *a, **k: fake_curriculum)
     monkeypatch.setattr(rg, "_should_chunk_first", lambda goals: False)
@@ -495,3 +588,78 @@ def test_generate_roadmap_chunked_fallback(client, monkeypatch):
     )
     assert res.status_code == 200
     assert res.json()["curriculum"]["tracks"][0]["slug"] == "ml"
+
+
+def test_public_catalog_search_star_and_adopt(client):
+    tracks = client.get("/api/catalog/tracks?q=system&sort=ranking").json()
+    assert any(t["slug"] == "system-design" for t in tracks)
+    system = next(t for t in tracks if t["slug"] == "system-design")
+    assert system["material_count"] >= 1
+
+    starred = client.post(f"/api/catalog/tracks/{system['id']}/star")
+    assert starred.status_code == 200
+    assert starred.json()["is_starred"] is True
+    assert starred.json()["star_count"] >= system["star_count"]
+
+    unstarred = client.delete(f"/api/catalog/tracks/{system['id']}/star")
+    assert unstarred.status_code == 200
+    assert unstarred.json()["is_starred"] is False
+
+    adopted = client.post(f"/api/catalog/tracks/{system['id']}/adopt")
+    assert adopted.status_code == 201
+    body = adopted.json()
+    assert body["materials_created"] == system["material_count"]
+    copied = client.get(f"/api/tracks/{body['track_id']}")
+    assert copied.status_code == 200
+    assert copied.json()["source_track_id"] == system["id"]
+    assert copied.json()["is_public"] is False
+
+
+def test_track_ai_update_adds_materials(client, monkeypatch):
+    tracks = client.get("/api/tracks").json()
+    system = next(t for t in tracks if t["slug"] == "system-design")
+
+    monkeypatch.setattr(
+        "app.api.routes.tracks.generate_track_update",
+        lambda track, materials, instruction: {
+            "summary": "Added quiz and challenge.",
+            "materials": [
+                {
+                    "title": "System Design · Load Balancing Quiz",
+                    "url": "https://github.com/donnemartin/system-design-primer",
+                    "block_label": "System Design · Load Balancing",
+                    "type": "quiz",
+                    "estimated_minutes": 20,
+                    "priority_percent": 15,
+                    "cognitive_cost_multiplier": 1.0,
+                    "sequence": 99,
+                    "notes": "MEDIUM quiz: answer tradeoff questions.",
+                },
+                {
+                    "title": "System Design · Hard Load Balancer Challenge",
+                    "url": "https://github.com/donnemartin/system-design-primer",
+                    "block_label": "System Design · Load Balancing",
+                    "type": "practice",
+                    "estimated_minutes": 45,
+                    "priority_percent": 18,
+                    "cognitive_cost_multiplier": 1.2,
+                    "sequence": 100,
+                    "notes": "HARD challenge: design failover and health checks.",
+                },
+            ],
+        },
+    )
+
+    res = client.post(
+        f"/api/tracks/{system['id']}/ai-updates",
+        json={"instruction": "Add quiz and hard problem for load balancing", "apply": True},
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["status"] == "APPLIED"
+    assert body["added_materials"] == 2
+
+    materials = client.get(f"/api/materials?track_id={system['id']}").json()
+    titles = {m["title"] for m in materials}
+    assert "System Design · Load Balancing Quiz" in titles
+    assert "System Design · Hard Load Balancer Challenge" in titles

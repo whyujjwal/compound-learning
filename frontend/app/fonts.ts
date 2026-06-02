@@ -1,23 +1,23 @@
-import { Inter, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 
-export const sans = Inter({
+export const sans = IBM_Plex_Sans({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-sans",
-  axes: ["opsz"],
+  weight: ["400", "500", "600", "700"],
 });
 
-export const mono = JetBrains_Mono({
+export const mono = IBM_Plex_Mono({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-mono",
   weight: ["400", "500", "600", "700"],
 });
 
-export const serif = Source_Serif_4({
+export const serif = Newsreader({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-serif",
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
   style: ["normal", "italic"],
 });

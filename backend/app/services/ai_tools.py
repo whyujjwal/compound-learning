@@ -16,6 +16,7 @@ from app.models.user import User
 from app.schemas.session import StudySessionCreate
 from app.services.session_service import create_session
 from app.services.stats_service import get_stats
+from app.services.timezone import local_weekday
 from app.services.weekly_schedule import track_slugs_for_weekday
 
 
@@ -509,7 +510,7 @@ class ToolExecutor:
     def _tool_generate_weekly_plan(self) -> dict[str, Any]:
         stats = get_stats(self.db, self.user)
         lagging = sorted(stats.track_breakdown, key=lambda t: t.reviews_total)[:2]
-        weekday = datetime.now(UTC).weekday()
+        weekday = local_weekday(user=self.user)
         today = track_slugs_for_weekday(weekday, self.user)
         return {
             "today_blocks": today,

@@ -20,6 +20,8 @@ class StudyMaterial(Base):
     external_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     block_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
     resource_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    resource_health_status: Mapped[str] = mapped_column(String(24), nullable=False, default="UNKNOWN", server_default="UNKNOWN")
+    resource_quality_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0")
     sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cognitive_cost_multiplier: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     estimated_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=15)

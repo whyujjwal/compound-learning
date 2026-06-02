@@ -24,6 +24,7 @@ from app.models.track import Track
 from app.models.user import User
 from app.services.ai_service import AIDisabled
 from app.services.stats_service import get_stats
+from app.services.timezone import local_day_bounds, local_now, utc_now
 
 logger = logging.getLogger("compound.coach.insights")
 
@@ -31,13 +32,13 @@ logger = logging.getLogger("compound.coach.insights")
 # ---------------------------------------------------------------------------
 # Period keys
 # ---------------------------------------------------------------------------
-def _today_key(now: datetime | None = None) -> str:
-    now = now or datetime.now(UTC)
+def _today_key(now: datetime | None = None, timezone_name: str | None = None, user: User | None = None) -> str:
+    now = now or local_now(timezone_name, user)
     return now.date().isoformat()
 
 
-def _week_key(now: datetime | None = None) -> str:
-    now = now or datetime.now(UTC)
+def _week_key(now: datetime | None = None, timezone_name: str | None = None, user: User | None = None) -> str:
+    now = now or local_now(timezone_name, user)
     iso = now.isocalendar()
     return f"{iso.year}-W{iso.week:02d}"
 
@@ -49,13 +50,18 @@ def _aware(dt: datetime) -> datetime:
     return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
 
 
-def _build_daily_snapshot(db: Session, user: User) -> dict[str, Any]:
+def _build_daily_snapshot(
+    db: Session,
+    user: User,
+    timezone_name: str | None = None,
+) -> dict[str, Any]:
     """Tight, model-friendly view of today's state."""
-    now = datetime.now(UTC)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    yesterday_start = today_start - timedelta(days=1)
+    now = utc_now()
+    local = local_now(timezone_name, user, now)
+    today_start, _ = local_day_bounds(local.date(), timezone_name, user)
+    yesterday_start, _ = local_day_bounds(local.date() - timedelta(days=1), timezone_name, user)
 
-    stats = get_stats(db, user)
+    stats = get_stats(db, user, timezone_name)
     user_card_ids = select(Card.id).where(Card.user_id == user.id)
 
     reviews_yday = (
@@ -133,7 +139,7 @@ def _build_daily_snapshot(db: Session, user: User) -> dict[str, Any]:
     track_names = [t.name for t in db.query(Track).filter(Track.user_id == user.id).all()]
 
     return {
-        "date": now.date().isoformat(),
+        "date": local.date().isoformat(),
         "sessions_this_week": stats.sessions_this_week,
         "days_active_30d": stats.days_active_30d,
         "total_minutes_invested": stats.total_minutes_invested,
@@ -159,13 +165,18 @@ def _build_daily_snapshot(db: Session, user: User) -> dict[str, Any]:
     }
 
 
-def _build_weekly_snapshot(db: Session, user: User) -> dict[str, Any]:
-    now = datetime.now(UTC)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    week_start = today_start - timedelta(days=7)
-    prev_week_start = week_start - timedelta(days=7)
+def _build_weekly_snapshot(
+    db: Session,
+    user: User,
+    timezone_name: str | None = None,
+) -> dict[str, Any]:
+    now = utc_now()
+    local = local_now(timezone_name, user, now)
+    today_start, _ = local_day_bounds(local.date(), timezone_name, user)
+    week_start, _ = local_day_bounds(local.date() - timedelta(days=6), timezone_name, user)
+    prev_week_start, _ = local_day_bounds(local.date() - timedelta(days=13), timezone_name, user)
 
-    stats = get_stats(db, user)
+    stats = get_stats(db, user, timezone_name)
     user_card_ids = select(Card.id).where(Card.user_id == user.id)
 
     reviews_this_week = (
@@ -393,13 +404,19 @@ def _get_cached(
     )
 
 
-def get_or_create_daily(db: Session, user: User, *, refresh: bool = False) -> CoachInsight:
-    key = _today_key()
+def get_or_create_daily(
+    db: Session,
+    user: User,
+    *,
+    refresh: bool = False,
+    timezone_name: str | None = None,
+) -> CoachInsight:
+    key = _today_key(timezone_name=timezone_name, user=user)
     cached = _get_cached(db, user, CoachInsightKind.DAILY, key)
     if cached and not refresh:
         return cached
 
-    snapshot = _build_daily_snapshot(db, user)
+    snapshot = _build_daily_snapshot(db, user, timezone_name)
     text = _generate(DAILY_SYSTEM, snapshot, max_tokens=400)
 
     if cached:
@@ -428,13 +445,19 @@ def get_or_create_daily(db: Session, user: User, *, refresh: bool = False) -> Co
     return insight
 
 
-def get_or_create_weekly(db: Session, user: User, *, refresh: bool = False) -> CoachInsight:
-    key = _week_key()
+def get_or_create_weekly(
+    db: Session,
+    user: User,
+    *,
+    refresh: bool = False,
+    timezone_name: str | None = None,
+) -> CoachInsight:
+    key = _week_key(timezone_name=timezone_name, user=user)
     cached = _get_cached(db, user, CoachInsightKind.WEEKLY, key)
     if cached and not refresh:
         return cached
 
-    snapshot = _build_weekly_snapshot(db, user)
+    snapshot = _build_weekly_snapshot(db, user, timezone_name)
     text = _generate(WEEKLY_SYSTEM, snapshot, max_tokens=900)
 
     if cached:

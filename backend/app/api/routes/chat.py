@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_client_timezone, get_current_user
 from app.models.chat import Conversation, Message
 from app.models.user import User
 from app.schemas.chat import (
@@ -164,9 +164,10 @@ def daily_insight(
     refresh: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    timezone_name: str = Depends(get_client_timezone),
 ) -> CoachInsightResponse:
     try:
-        insight = get_or_create_daily(db, user, refresh=refresh)
+        insight = get_or_create_daily(db, user, refresh=refresh, timezone_name=timezone_name)
     except AIDisabled as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
@@ -179,9 +180,10 @@ def weekly_insight(
     refresh: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    timezone_name: str = Depends(get_client_timezone),
 ) -> CoachInsightResponse:
     try:
-        insight = get_or_create_weekly(db, user, refresh=refresh)
+        insight = get_or_create_weekly(db, user, refresh=refresh, timezone_name=timezone_name)
     except AIDisabled as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_client_timezone, get_current_user
 from app.models.user import User
 from app.schemas.queue import DailyQueueResponse, QueueItem
 from app.services.queue_service import build_daily_queue, build_extra_pull
@@ -14,8 +14,9 @@ router = APIRouter(prefix="/queue", tags=["queue"])
 def get_daily_queue(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    timezone_name: str = Depends(get_client_timezone),
 ) -> DailyQueueResponse:
-    return build_daily_queue(db, user)
+    return build_daily_queue(db, user, timezone_name)
 
 
 @router.get("/extra", response_model=list[QueueItem])

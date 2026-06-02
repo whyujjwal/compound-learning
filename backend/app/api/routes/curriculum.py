@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_client_timezone, get_current_user
 from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.roadmap_generation import RoadmapGeneration
@@ -51,8 +51,9 @@ def get_weekly_schedule(
 def get_today_schedule(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    timezone_name: str = Depends(get_client_timezone),
 ) -> list[BlockScheduleItem]:
-    return today_block_items(user)
+    return today_block_items(user, timezone_name)
 
 
 @router.put("/schedule", response_model=WeeklySchedule)
@@ -116,10 +117,11 @@ def reschedule_curriculum(
 def curriculum_overview(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    timezone_name: str = Depends(get_client_timezone),
 ) -> CurriculumOverview:
     now = datetime.now(UTC)
     schedule = schedule_for_user(user)
-    today = today_block_items(user)
+    today = today_block_items(user, timezone_name)
 
     tracks = db.query(Track).filter(Track.user_id == user.id).order_by(Track.name).all()
     track_summaries: list[TrackCurriculumSummary] = []
@@ -371,6 +373,9 @@ def generate_curriculum_roadmap(
         )
     except RoadmapError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    for track_data in curriculum.get("tracks", []):
+        track_data.setdefault("is_public", True)
+        track_data["generation_prompt"] = payload.goals
 
     if not payload.apply:
         saved = _save_generation(

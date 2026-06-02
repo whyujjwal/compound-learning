@@ -226,7 +226,7 @@ export default function SchedulePage() {
           <span>weekly blocks</span>
         </div>
         <div>
-          <strong>{totalMinutes || "—"}</strong>
+          <strong>{totalMinutes || "-"}</strong>
           <span>planned minutes</span>
         </div>
       </section>
@@ -302,7 +302,7 @@ export default function SchedulePage() {
                               disabled={index === 0}
                               title="Move earlier"
                             >
-                              ↑
+                              ^
                             </button>
                             <button
                               type="button"
@@ -311,7 +311,7 @@ export default function SchedulePage() {
                               disabled={index === schedule[day.key].length - 1}
                               title="Move later"
                             >
-                              ↓
+                              v
                             </button>
                             <button
                               type="button"
@@ -319,7 +319,7 @@ export default function SchedulePage() {
                               onClick={() => removeBlock(day.key, index)}
                               title="Remove"
                             >
-                              ×
+                              x
                             </button>
                           </div>
                         </div>

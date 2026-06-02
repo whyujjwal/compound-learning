@@ -34,16 +34,30 @@ class RoadmapError(Exception):
 
 
 MATERIAL_SHAPE = """{
-          "title": "Specific resource or concept title",
-          "url": "https://real-public-url-to-a-real-resource",
-          "block_label": "Track · Phase or Topic",
-          "type": "reading|video|practice|project|course",
+          "title": "Specific resource, quiz, project, or practice title",
+          "url": "https://real-public-url-to-a-real-free-resource",
+          "block_label": "Track · Module Name",
+          "type": "reading|video|practice|project|course|quiz|checkpoint",
           "estimated_minutes": 25,
           "priority_percent": 10,
           "cognitive_cost_multiplier": 1.0,
           "sequence": 1,
-          "notes": "2-4 line study brief: WATCH/READ, then DO concrete steps."
+          "notes": "2-5 line study brief. State the outcome, the exact task, and whether it is easy, medium, or hard."
         }"""
+
+QUALITY_RULES = """Quality rules:
+- Optimize for the BEST free public resources: official docs, university pages, open courseware,
+  canonical GitHub repos, freeCodeCamp, Khan Academy, arXiv papers, high-signal blog posts,
+  and reputable YouTube lectures. Avoid paid-only links unless there is a useful free preview.
+- Never invent URLs. If unsure of a deep link, use the canonical homepage/repo/course URL.
+- Group every track into 4-6 roadmap modules using `block_label` exactly as "Track Name · Module".
+- Each module should feel complete: concept resource(s), one easy practice task, one hard challenge,
+  and a quiz/checkpoint/project that tests whether the learner can apply the module.
+- Use `type: "quiz"` for lightweight self-tests, `type: "checkpoint"` for milestone checks,
+  and `type: "project"` for build/design tasks.
+- Put difficulty in notes with labels like EASY, MEDIUM, or HARD so the UI can surface the learning load.
+- Prefer learning outcomes over vague descriptions. The learner should know what they can do after each module.
+"""
 
 SYSTEM_PROMPT = f"""You are an expert curriculum designer for an advanced spaced-repetition \
 learning platform (FSRS-6). The learner tells you what they want to master and how much time \
@@ -74,10 +88,8 @@ Return ONLY valid JSON (no prose, no markdown fences) matching this exact shape:
 
 Rules:
 - Create ONE track per distinct goal the learner names. If they name 4 things, make 4 tracks.
-- Each track: 6–10 materials ordered by `sequence`, progressing beginner → advanced.
-- Use REAL, well-known, free or freemium resources with working public URLs \
-(official docs, MIT OCW, freeCodeCamp, Khan Academy, arXiv, YouTube, GitHub repos, \
-university course pages). Never invent fake URLs. Prefer URLs from RESEARCH CONTEXT when given.
+- Each track: 10–16 materials ordered by `sequence`, progressing beginner → advanced.
+{QUALITY_RULES}
 - `priority_percent`: lower = more foundational (1–15), up to 80 for optional depth.
 - `cognitive_multiplier` per track: 1.0 easy, up to 1.5 for dense math/theory.
 - `estimated_minutes`: realistic per-item study time (10–60).
@@ -116,10 +128,9 @@ TRACK_MATERIALS_PROMPT = f"""You are an expert curriculum designer. Return ONLY 
 }}
 
 Rules:
-- Produce 6–8 materials for THIS track only, ordered by sequence (beginner → advanced).
+- Produce 10–14 materials for THIS track only, ordered by sequence (beginner → advanced).
 - Use RESEARCH CONTEXT below for real GitHub repos, docs, and courses when relevant.
-- Never invent fake URLs. Use canonical site roots if unsure of exact deep links.
-- `block_label` should reference the track name and topic phase.
+{QUALITY_RULES}
 """
 
 SCHEDULE_PROMPT = """You are an expert curriculum designer. Return ONLY valid JSON:
@@ -136,6 +147,28 @@ Rules:
 - Use ONLY the track slugs provided (plus "review" on Sunday).
 - Spread tracks across the week based on weekly hours. Heavier tracks earlier in the week.
 - Each day: 0–3 blocks. Always include a light review block on Sunday.
+"""
+
+TRACK_UPDATE_PROMPT = f"""You are an expert curriculum editor for an AI learning platform.
+The learner already has a track and asks you to improve it.
+
+Return ONLY valid JSON:
+
+{{
+  "summary": "One sentence describing the improvement.",
+  "materials": [
+    {MATERIAL_SHAPE}
+  ]
+}}
+
+Rules:
+- Generate 3-8 NEW materials only. Do not repeat existing titles.
+{QUALITY_RULES}
+- The new materials must directly satisfy the learner's instruction.
+- If the instruction asks for questions, quizzes, easy problems, hard problems, or projects,
+  create those as concrete `quiz`, `practice`, `checkpoint`, or `project` items.
+- Use `block_label` to place additions into an existing module when possible, or create a
+  new module label as "Track Name · Module".
 """
 
 
@@ -447,3 +480,53 @@ def generate_roadmap(goals: str, weekly_hours: int = 10, level: str | None = Non
     if last_error and str(last_error) != "__truncated__":
         raise last_error
     raise RoadmapError("Could not generate a roadmap. Try again.")
+
+
+def generate_track_update(track: Any, materials: list[Any], instruction: str) -> dict[str, Any]:
+    """Generate a JSON patch of new materials for an existing track."""
+    if not settings.ai_enabled:
+        raise RoadmapError(
+            "AI is not configured. Set the API key for your provider to update tracks."
+        )
+    if not instruction or not instruction.strip():
+        raise RoadmapError("Please describe how you want to update the track.")
+
+    existing = []
+    for m in materials[:80]:
+        existing.append(
+            {
+                "title": m.title,
+                "block_label": m.block_label,
+                "type": m.resource_type,
+                "estimated_minutes": m.estimated_minutes,
+            }
+        )
+
+    research = gather_track_research(track.name, instruction)
+    user_prompt = (
+        f"Track: {track.name}\n"
+        f"Description: {track.description or ''}\n"
+        f"Existing materials JSON:\n{json.dumps(existing, ensure_ascii=False)}\n\n"
+        f"Learner instruction:\n{instruction}\n\n"
+        f"RESEARCH CONTEXT:\n{research}\n\n"
+        "Return the track update JSON now."
+    )
+    data = _call_model_json(TRACK_UPDATE_PROMPT, user_prompt, max_tokens=8192)
+    materials_out = data.get("materials") or []
+    clean = _normalize(
+        {
+            "tracks": [
+                {
+                    "slug": getattr(track, "slug", "track"),
+                    "name": track.name,
+                    "description": track.description,
+                    "materials": materials_out,
+                }
+            ],
+            "weekly_schedule": {},
+        }
+    )
+    return {
+        "summary": data.get("summary") or "Track updated.",
+        "materials": clean["tracks"][0].get("materials") or [],
+    }

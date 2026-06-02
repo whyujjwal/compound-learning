@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Iterable
 
 from sqlalchemy.orm import Session, joinedload
@@ -19,6 +19,7 @@ from app.services.mastery import (
     prerequisites_met,
 )
 from app.services.weekly_schedule import blocks_for_weekday
+from app.services.timezone import local_weekday, utc_now
 
 _SLOT_LABELS = {
     2: ["Morning", "Afternoon"],
@@ -209,13 +210,18 @@ def _pack_new_with_priority(
     return picked, deferred
 
 
-def build_daily_queue(db: Session, user: User) -> DailyQueueResponse:
-    now = datetime.now(UTC)
+def build_daily_queue(
+    db: Session,
+    user: User,
+    timezone_name: str | None = None,
+    local_day: date | None = None,
+) -> DailyQueueResponse:
+    now = utc_now()
     default_block_minutes = user.daily_study_minutes or DEFAULT_BLOCK_MINUTES
     if default_block_minutes > 240:
         default_block_minutes = default_block_minutes // 2
 
-    weekday = now.weekday()
+    weekday = (local_day.weekday() if local_day else local_weekday(timezone_name, user, now))
     paused = set(user.paused_tracks or [])
     day_blocks = [b for b in blocks_for_weekday(weekday, user) if b.track not in paused]
     track_slugs = [b.track for b in day_blocks]
@@ -359,7 +365,7 @@ def build_extra_pull(
     )
     if track is None:
         return []
-    now = datetime.now(UTC)
+    now = utc_now()
     cards = _eligible_new_cards(
         db, user, track.id, limit=count, exclude_ids=exclude_card_ids or []
     )

@@ -18,10 +18,11 @@ from app.schemas.block import BlockSessionResponse
 from app.schemas.queue import QueueItem
 from app.services.queue_service import build_daily_queue
 from app.services.fsrs_service import review_card
+from app.services.timezone import local_today, utc_now
 
 
-def _today() -> date:
-    return datetime.now(UTC).date()
+def _today(user: User, timezone_name: str | None = None) -> date:
+    return local_today(timezone_name, user)
 
 
 def _hydrate_items(db: Session, user: User, card_ids: list[str]) -> list[QueueItem]:
@@ -35,7 +36,7 @@ def _hydrate_items(db: Session, user: User, card_ids: list[str]) -> list[QueueIt
         .all()
     )
     by_id = {str(c.id): c for c in cards}
-    now = datetime.now(UTC)
+    now = utc_now()
     items: list[QueueItem] = []
     for cid in card_ids:
         card = by_id.get(cid)
@@ -103,8 +104,13 @@ def _block_items_from_daily(daily, slot: int) -> tuple[list[str], object | None]
     return [str(i.card_id) for i in items], block
 
 
-def start_block(db: Session, user: User, slot: int) -> BlockSessionResponse:
-    today = _today()
+def start_block(
+    db: Session,
+    user: User,
+    slot: int,
+    timezone_name: str | None = None,
+) -> BlockSessionResponse:
+    today = _today(user, timezone_name)
     existing = (
         db.query(BlockSession)
         .filter(
@@ -115,7 +121,7 @@ def start_block(db: Session, user: User, slot: int) -> BlockSessionResponse:
         .first()
     )
 
-    daily = build_daily_queue(db, user)
+    daily = build_daily_queue(db, user, timezone_name, local_day=today)
     card_ids, block = _block_items_from_daily(daily, slot)
     if not block or not card_ids:
         raise HTTPException(status_code=404, detail=f"No block found for slot {slot} today")
@@ -148,8 +154,13 @@ def start_block(db: Session, user: User, slot: int) -> BlockSessionResponse:
     return _to_response(session, items)
 
 
-def get_block(db: Session, user: User, slot: int) -> BlockSessionResponse:
-    today = _today()
+def get_block(
+    db: Session,
+    user: User,
+    slot: int,
+    timezone_name: str | None = None,
+) -> BlockSessionResponse:
+    today = _today(user, timezone_name)
     session = (
         db.query(BlockSession)
         .filter(
@@ -172,8 +183,9 @@ def submit_block_review(
     card_id: UUID,
     rating: str,
     elapsed_seconds: int,
+    timezone_name: str | None = None,
 ) -> BlockSessionResponse:
-    today = _today()
+    today = _today(user, timezone_name)
     session = (
         db.query(BlockSession)
         .filter(

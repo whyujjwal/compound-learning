@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "npm run typecheck",
+    "typecheck": "tsc --noEmit --incremental false"
   },
   "dependencies": {
     "cmdk": "^1.1.1",

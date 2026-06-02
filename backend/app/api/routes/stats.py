@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -6,12 +6,13 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_client_timezone, get_current_user
 from app.models.card import Card
 from app.models.review_log import ReviewLog, ReviewRating
 from app.models.user import User
 from app.schemas.stats import StatsResponse
 from app.services.stats_service import get_stats
+from app.services.timezone import local_date_for, local_day_bounds, local_today
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -31,8 +32,9 @@ class RetentionPoint(BaseModel):
 def get_user_stats(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    timezone_name: str = Depends(get_client_timezone),
 ) -> StatsResponse:
-    return get_stats(db, user)
+    return get_stats(db, user, timezone_name)
 
 
 @router.get("/activity", response_model=list[ActivityPoint])
@@ -40,30 +42,26 @@ def get_activity(
     days: int = Query(120, ge=7, le=365),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    timezone_name: str = Depends(get_client_timezone),
 ) -> list[ActivityPoint]:
-    now = datetime.now(UTC)
-    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = local_today(timezone_name, user)
+    start_day = today - timedelta(days=days - 1)
+    start, _ = local_day_bounds(start_day, timezone_name, user)
     user_card_ids = select(Card.id).where(Card.user_id == user.id)
 
     rows = (
-        db.query(
-            func.date(ReviewLog.reviewed_at).label("day"),
-            func.count(ReviewLog.id).label("count"),
-        )
+        db.query(ReviewLog.reviewed_at)
         .filter(
             ReviewLog.card_id.in_(user_card_ids),
             ReviewLog.reviewed_at >= start,
         )
-        .group_by("day")
         .all()
     )
     by_day: dict[date, int] = {}
-    for day, count in rows:
-        if isinstance(day, str):
-            day = date.fromisoformat(day)
-        by_day[day] = int(count)
+    for (reviewed_at,) in rows:
+        day = local_date_for(reviewed_at, timezone_name, user)
+        by_day[day] = by_day.get(day, 0) + 1
 
-    today = now.date()
     out: list[ActivityPoint] = []
     for i in range(days):
         d = today - timedelta(days=days - 1 - i)
@@ -76,9 +74,11 @@ def get_retention_timeline(
     days: int = Query(30, ge=7, le=365),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
+    timezone_name: str = Depends(get_client_timezone),
 ) -> list[RetentionPoint]:
-    now = datetime.now(UTC)
-    start = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = local_today(timezone_name, user)
+    start_day = today - timedelta(days=days - 1)
+    start, _ = local_day_bounds(start_day, timezone_name, user)
     user_card_ids = select(Card.id).where(Card.user_id == user.id)
 
     good_expr = case(
@@ -90,7 +90,7 @@ def get_retention_timeline(
     )
     rows = (
         db.query(
-            func.date(ReviewLog.reviewed_at).label("day"),
+            ReviewLog.reviewed_at,
             func.count(ReviewLog.id).label("total"),
             func.sum(good_expr).label("good"),
         )
@@ -98,16 +98,15 @@ def get_retention_timeline(
             ReviewLog.card_id.in_(user_card_ids),
             ReviewLog.reviewed_at >= start,
         )
-        .group_by("day")
+        .group_by(ReviewLog.reviewed_at)
         .all()
     )
     by_day: dict[date, tuple[int, int]] = {}
-    for day, total, good in rows:
-        if isinstance(day, str):
-            day = date.fromisoformat(day)
-        by_day[day] = (int(total or 0), int(good or 0))
+    for reviewed_at, total, good in rows:
+        day = local_date_for(reviewed_at, timezone_name, user)
+        old_total, old_good = by_day.get(day, (0, 0))
+        by_day[day] = (old_total + int(total or 0), old_good + int(good or 0))
 
-    today = now.date()
     out: list[RetentionPoint] = []
     for i in range(days):
         d = today - timedelta(days=days - 1 - i)

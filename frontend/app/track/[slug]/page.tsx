@@ -1,12 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useShell } from "@/components/ui/Shell";
 import { RightPanel, PanelSection } from "@/components/ui/RightPanel";
 import { trackAccent } from "@/lib/trackColors";
-import { api, type Material, type QueueItem, type TrackProgress } from "@/lib/api";
+import { api, type Material, type QueueItem, type TrackAIUpdate, type TrackProgress } from "@/lib/api";
+
+function countModuleIntent(materials: Material[], pattern: RegExp): number {
+  return materials.filter((m) =>
+    pattern.test(`${m.title} ${m.resource_type ?? ""} ${m.raw_content ?? ""}`)
+  ).length;
+}
 
 export default function TrackPage() {
   const params = useParams<{ slug: string }>();
@@ -18,26 +24,48 @@ export default function TrackPage() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [pulling, setPulling] = useState(false);
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiUpdating, setAiUpdating] = useState(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [aiPreview, setAiPreview] = useState<TrackAIUpdate | null>(null);
+  const [aiPreviewInstruction, setAiPreviewInstruction] = useState("");
+  const mountedRef = useRef(true);
 
   const track = tracks.find((t) => t.slug === slug);
   const accent = trackAccent(slug, track?.color);
 
   useEffect(() => {
-    if (!slug) return;
-    let cancelled = false;
-    Promise.all([
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const fetchTrackData = useCallback(async () => {
+    if (!slug) return { nextProgress: null, nextMaterials: [] as Material[] };
+    const [p, m] = await Promise.all([
       api.getTrackProgress(slug).catch(() => null),
       track ? api.getMaterials(track.id).catch(() => []) : Promise.resolve([]),
-    ]).then(([p, m]) => {
-      if (cancelled) return;
-      setProgress(p);
-      setMaterials(m);
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
+    ]);
+    return { nextProgress: p, nextMaterials: m };
   }, [slug, track]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    fetchTrackData()
+      .then(({ nextProgress, nextMaterials }) => {
+        if (!active || !mountedRef.current) return;
+        setProgress(nextProgress);
+        setMaterials(nextMaterials);
+      })
+      .finally(() => {
+        if (active && mountedRef.current) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [fetchTrackData]);
 
   const startSession = useCallback(
     async (count = 5) => {
@@ -61,6 +89,45 @@ export default function TrackPage() {
       }
     },
     [slug, track, router]
+  );
+
+  const updateTrackWithAI = useCallback(
+    async (instruction?: string, apply = true) => {
+      if (!track) return;
+      const prompt = (instruction ?? aiInstruction).trim();
+      if (!prompt) return;
+      setAiUpdating(true);
+      setAiMessage(null);
+      try {
+        const result = await api.updateTrackWithAI(track.id, prompt, apply);
+        if (result.error) {
+          setAiMessage(result.error);
+        } else if (!apply) {
+          setAiPreview(result);
+          setAiPreviewInstruction(prompt);
+          setAiMessage(result.result?.summary ?? "Preview ready.");
+        } else {
+          setAiInstruction("");
+          setAiPreview(null);
+          setAiPreviewInstruction("");
+          setAiMessage(
+            `${result.added_materials} new item${result.added_materials === 1 ? "" : "s"} added. ${
+              result.result?.summary ?? "Track updated."
+            }`
+          );
+          const { nextProgress, nextMaterials } = await fetchTrackData();
+          if (!mountedRef.current) return;
+          setProgress(nextProgress);
+          setMaterials(nextMaterials);
+        }
+      } catch (err) {
+        if (!mountedRef.current) return;
+        setAiMessage(err instanceof Error ? err.message : "Could not update this track.");
+      } finally {
+        if (mountedRef.current) setAiUpdating(false);
+      }
+    },
+    [aiInstruction, fetchTrackData, track]
   );
 
   // Right panel
@@ -156,16 +223,41 @@ export default function TrackPage() {
     progress && progress.materials_total
       ? progress.materials_started / progress.materials_total
       : 0;
+  const materialsByBlock = materials.reduce<Record<string, Material[]>>((acc, material) => {
+    const label = material.block_label || "Uncategorized";
+    if (!acc[label]) acc[label] = [];
+    acc[label].push(material);
+    return acc;
+  }, {});
+
+  const outcome =
+    track?.description ||
+    `Build practical capability in ${progress?.name ?? track?.name ?? "this track"} through a guided roadmap, daily practice, and spaced review.`;
 
   return (
     <>
       <header className="track-hero" style={{ ["--track-color" as string]: accent }}>
         <div className="track-hero-eyebrow">
-          <span className="track-dot" aria-hidden /> Track ·{" "}
+          <span className="track-dot" aria-hidden /> Learning track ·{" "}
           {progress?.materials_total ?? track?.material_count ?? 0} materials
         </div>
         <h1 className="track-hero-name">{progress?.name ?? track?.name}</h1>
-        {track?.description && <p className="track-hero-desc">{track.description}</p>}
+        <p className="track-hero-desc">{outcome}</p>
+
+        <div className="track-outcome-grid">
+          <div>
+            <span>Outcome</span>
+            <strong>Explain, practice, and apply the core ideas without losing them after a week.</strong>
+          </div>
+          <div>
+            <span>Structure</span>
+            <strong>{progress?.blocks.length ?? 0} modules · ordered materials · review cards</strong>
+          </div>
+          <div>
+            <span>AI loop</span>
+            <strong>Extend modules, repair weak spots, or generate projects as the track evolves.</strong>
+          </div>
+        </div>
 
         <div className="track-hero-row">
           <div className="track-progress">
@@ -189,6 +281,9 @@ export default function TrackPage() {
             <Link href={`/graph/${slug}`} className="v2-btn ghost" style={{ marginRight: 8 }}>
               Knowledge graph
             </Link>
+            <Link href="/curriculum/build" className="v2-btn ghost">
+              Extend with AI
+            </Link>
             <button
               type="button"
               className="v2-btn primary"
@@ -211,35 +306,182 @@ export default function TrackPage() {
             {progress.next_block_label && <span> · {progress.next_block_label}</span>}
           </div>
         )}
+
+        <form
+          className="track-ai-update"
+          onSubmit={(e) => {
+            e.preventDefault();
+            updateTrackWithAI(undefined, false);
+          }}
+        >
+          <div>
+            <span>Dynamic AI track editor</span>
+            <strong>Ask for quizzes, better free resources, easy drills, hard challenges, or a new module.</strong>
+          </div>
+          <input
+            className="v2-input"
+            value={aiInstruction}
+            onChange={(e) => setAiInstruction(e.target.value)}
+            placeholder="e.g. Add a hard checkpoint and quiz for load balancing"
+            disabled={aiUpdating}
+          />
+          <button type="submit" className="v2-btn primary" disabled={aiUpdating || !aiInstruction.trim()}>
+            {aiUpdating ? "Thinking..." : "Preview update"}
+          </button>
+        </form>
+        {aiPreview?.result?.materials && aiPreview.result.materials.length > 0 && (
+          <section className="track-ai-preview">
+            <div className="track-ai-preview-head">
+              <div>
+                <span>AI diff preview</span>
+                <strong>{aiPreview.result.summary ?? "Review the proposed additions before applying."}</strong>
+              </div>
+              <button
+                type="button"
+                className="v2-btn primary"
+                disabled={aiUpdating}
+                onClick={() => updateTrackWithAI(aiPreviewInstruction, true)}
+              >
+                Apply {aiPreview.result.materials.length} items
+              </button>
+            </div>
+            <div className="track-ai-preview-list">
+              {aiPreview.result.materials.slice(0, 6).map((material) => (
+                <div key={`${material.sequence}-${material.title}`}>
+                  <strong>{material.title}</strong>
+                  <span>{material.type ?? "material"} · {material.estimated_minutes}m · {material.block_label ?? "New module"}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+        <div className="track-ai-suggestions">
+          {[
+            "Add a 5-question quiz for this track",
+            "Add easy warmups and hard challenges",
+            "Replace weak links with free official resources",
+            "Add a capstone project",
+          ].map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              className="roadmap-example"
+              disabled={aiUpdating}
+              onClick={() => updateTrackWithAI(prompt, false)}
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+        {aiMessage && <p className="week-canvas-message">{aiMessage}</p>}
       </header>
 
       {progress && progress.blocks.length > 0 && (
         <>
-          <div className="track-section-label">Blocks</div>
-          <div className="track-blocks" style={{ ["--track-color" as string]: accent }}>
+          <div className="track-section-label">Roadmap modules</div>
+          <div className="track-modules" style={{ ["--track-color" as string]: accent }}>
             {progress.blocks.map((b) => {
               const pctM = b.material_count ? b.mastered_count / b.material_count : 0;
               const pctS = b.material_count ? b.started_count / b.material_count : 0;
+              const moduleMaterials = materialsByBlock[b.label] ?? [];
+              const quizzes = countModuleIntent(moduleMaterials, /\b(quiz|checkpoint|test)\b/i);
+              const easy = countModuleIntent(moduleMaterials, /\b(easy|warmup|beginner|foundation)\b/i);
+              const hard = countModuleIntent(moduleMaterials, /\b(hard|challenge|capstone|project)\b/i);
               return (
-                <div className="track-block" key={b.label}>
-                  <div className="track-block-title">
-                    <span>{b.label}</span>
-                    <span className="track-block-meta">
-                      {b.started_count}/{b.material_count} started · {b.mastered_count} mastered
-                    </span>
+                <article className="track-module" key={b.label}>
+                  <div className="track-module-main">
+                    <div className="track-module-head">
+                      <div>
+                        <h2>{b.label}</h2>
+                        <p>
+                          Work through the materials, capture the core tradeoffs, then use reviews
+                          to keep this module active.
+                        </p>
+                      </div>
+                      <span className="track-module-pct">{Math.round(pctM * 100)}%</span>
+                    </div>
+                    <div className="track-block-bar">
+                      <span
+                        className="track-block-bar-started"
+                        style={{ width: `${pctS * 100}%` }}
+                      />
+                      <span
+                        className="track-block-bar-mastered"
+                        style={{ width: `${pctM * 100}%` }}
+                      />
+                    </div>
+                    <div className="track-module-meta">
+                      <span>{b.started_count}/{b.material_count} started</span>
+                      <span>{b.mastered_count} mastered</span>
+                      <span>{moduleMaterials.reduce((sum, m) => sum + m.estimated_minutes, 0)} min</span>
+                    </div>
+                    <div className="track-module-quality">
+                      <span>{quizzes} quiz/checkpoint</span>
+                      <span>{easy} easy</span>
+                      <span>{hard} hard</span>
+                    </div>
                   </div>
-                  <div className="track-block-bar">
-                    <span
-                      className="track-block-bar-started"
-                      style={{ width: `${pctS * 100}%` }}
-                    />
-                    <span
-                      className="track-block-bar-mastered"
-                      style={{ width: `${pctM * 100}%` }}
-                    />
+
+                  <div className="track-module-materials">
+                    {moduleMaterials.slice(0, 5).map((material) => (
+                      <a
+                        key={material.id}
+                        href={material.external_url ?? `/materials?track=${material.track_id}`}
+                        target={material.external_url ? "_blank" : undefined}
+                        rel={material.external_url ? "noreferrer" : undefined}
+                        className="track-module-material"
+                      >
+                        <span>{material.title}</span>
+                        <small>
+                          {material.resource_type ?? "material"} · {material.estimated_minutes}m
+                        </small>
+                      </a>
+                    ))}
+                    {moduleMaterials.length > 5 && (
+                      <Link href={`/materials?track=${track?.id ?? ""}`} className="track-module-more">
+                        +{moduleMaterials.length - 5} more materials
+                      </Link>
+                    )}
                   </div>
-                  <div className="track-block-pct">{Math.round(pctM * 100)}%</div>
-                </div>
+
+                  <div className="track-module-actions">
+                    <button
+                      type="button"
+                      className="v2-btn sm ghost"
+                      disabled={aiUpdating}
+                      onClick={() => updateTrackWithAI(`Add a focused quiz/checkpoint for module: ${b.label}`, false)}
+                    >
+                      Quick quiz
+                    </button>
+                    <button
+                      type="button"
+                      className="v2-btn sm ghost"
+                      disabled={aiUpdating}
+                      onClick={() => updateTrackWithAI(`Add easy warmup practice for module: ${b.label}`, false)}
+                    >
+                      Easy drill
+                    </button>
+                    <button
+                      type="button"
+                      className="v2-btn sm ghost"
+                      disabled={aiUpdating}
+                      onClick={() => updateTrackWithAI(`Add a hard challenge problem for module: ${b.label}`, false)}
+                    >
+                      Hard challenge
+                    </button>
+                    <button
+                      type="button"
+                      className="v2-btn sm ghost"
+                      disabled={aiUpdating}
+                      onClick={() => updateTrackWithAI(`Add a practical project checkpoint for module: ${b.label}`, false)}
+                    >
+                      Generate project
+                    </button>
+                    <Link href={`/graph/${slug}`} className="v2-btn sm ghost">
+                      Inspect graph
+                    </Link>
+                  </div>
+                </article>
               );
             })}
           </div>

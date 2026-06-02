@@ -1,4 +1,5 @@
 import { getAuthToken } from "./auth";
+import { getClientTimezone } from "./time";
 
 /** Same-origin /api in the browser (proxied by Next.js); absolute URL for any server-side use. */
 export function getApiBase(): string {
@@ -44,11 +45,13 @@ async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   const { direct, timeoutMs, ...fetchOptions } = options ?? {};
   const base = direct && getDirectApiBase() ? getDirectApiBase()! : getApiBase();
   const token = typeof window !== "undefined" ? getAuthToken() : null;
+  const timezone = typeof window !== "undefined" ? getClientTimezone() : null;
   const res = await fetch(`${base}${path}`, {
     ...fetchOptions,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(timezone ? { "X-Compound-Timezone": timezone } : {}),
       ...fetchOptions.headers,
     },
     cache: "no-store",
@@ -76,8 +79,99 @@ export type Track = {
   color: string;
   cognitive_multiplier: number;
   is_system: boolean;
+  is_public: boolean;
+  is_featured: boolean;
+  star_count: number;
+  adoption_count: number;
+  rating_count: number;
+  rating_avg: number;
+  quality_score: number;
+  source_track_id: string | null;
+  generation_prompt: string | null;
   material_count: number;
   due_card_count: number;
+};
+
+export type CatalogTrack = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  color: string;
+  creator_name: string | null;
+  creator_id: string;
+  material_count: number;
+  module_count: number;
+  star_count: number;
+  adoption_count: number;
+  rating_count: number;
+  rating_avg: number;
+  quality_score: number;
+  is_featured: boolean;
+  is_starred: boolean;
+  rank_score: number;
+  source_track_id: string | null;
+  created_at: string;
+  published_at: string | null;
+};
+
+export type CatalogTrackDetail = CatalogTrack & {
+  materials: {
+    id: string;
+    title: string;
+    external_url: string | null;
+    block_label: string | null;
+    resource_type: string | null;
+    estimated_minutes: number;
+    sequence: number;
+    resource_health_status: string;
+    resource_quality_score: number;
+  }[];
+  quality: {
+    quality_score: number;
+    resource_score: number;
+    quiz_count: number;
+    project_count: number;
+    practice_count: number;
+    hard_count: number;
+    module_count: number;
+  };
+};
+
+export type CatalogCollection = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  tracks: CatalogTrack[];
+};
+
+export type CreatorProfile = {
+  id: string;
+  display_name: string | null;
+  track_count: number;
+  total_stars: number;
+  total_adoptions: number;
+  avg_rating: number;
+  tracks: CatalogTrack[];
+};
+
+export type Leaderboards = {
+  tracks: CatalogTrack[];
+  creators: CreatorProfile[];
+};
+
+export type TrackAIUpdate = {
+  id: string;
+  track_id: string;
+  status: string;
+  added_materials: number;
+  result: {
+    summary?: string;
+    materials?: GeneratedRoadmap["curriculum"]["tracks"][number]["materials"];
+  } | null;
+  error: string | null;
+  created_at: string;
 };
 
 export type QueueItem = {
@@ -331,7 +425,7 @@ export type GeneratedRoadmap = {
         notes?: string | null;
       }[];
     }[];
-    weekly_schedule: Record<string, { block: number; track: string }[]>;
+    weekly_schedule: WeeklySchedule;
   };
   applied: boolean;
   stats: Record<string, number> | null;
@@ -401,6 +495,7 @@ export const api = {
     description?: string;
     color?: string;
     cognitive_multiplier?: number;
+    is_public?: boolean;
   }) => request<Track>("/tracks", { method: "POST", body: JSON.stringify(data) }),
   updateTrack: (
     id: string,
@@ -409,9 +504,46 @@ export const api = {
       description: string;
       color: string;
       cognitive_multiplier: number;
+      is_public: boolean;
+      is_featured: boolean;
     }>
   ) => request<Track>(`/tracks/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteTrack: (id: string) => request<void>(`/tracks/${id}`, { method: "DELETE" }),
+  updateTrackWithAI: (id: string, instruction: string, apply = true) =>
+    request<TrackAIUpdate>(`/tracks/${id}/ai-updates`, {
+      method: "POST",
+      body: JSON.stringify({ instruction, apply }),
+      direct: true,
+      timeoutMs: 300_000,
+    }),
+
+  getCatalogTracks: (params?: { q?: string; featured?: boolean; sort?: "ranking" | "stars" | "new"; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.q) search.set("q", params.q);
+    if (params?.featured) search.set("featured", "true");
+    if (params?.sort) search.set("sort", params.sort);
+    if (params?.limit) search.set("limit", String(params.limit));
+    const qs = search.toString();
+    return request<CatalogTrack[]>(`/catalog/tracks${qs ? `?${qs}` : ""}`);
+  },
+  getCatalogTrack: (id: string) => request<CatalogTrackDetail>(`/catalog/tracks/${id}`),
+  starCatalogTrack: (id: string) =>
+    request<CatalogTrack>(`/catalog/tracks/${id}/star`, { method: "POST" }),
+  unstarCatalogTrack: (id: string) =>
+    request<CatalogTrack>(`/catalog/tracks/${id}/star`, { method: "DELETE" }),
+  adoptCatalogTrack: (id: string) =>
+    request<{ track_id: string; slug: string; materials_created: number }>(
+      `/catalog/tracks/${id}/adopt`,
+      { method: "POST" }
+    ),
+  rateCatalogTrack: (id: string, rating: number, note?: string) =>
+    request<CatalogTrack>(`/catalog/tracks/${id}/rate`, {
+      method: "POST",
+      body: JSON.stringify({ rating, note }),
+    }),
+  getCatalogCollections: () => request<CatalogCollection[]>("/catalog/collections"),
+  getCreatorProfile: (id: string) => request<CreatorProfile>(`/catalog/creators/${id}`),
+  getLeaderboards: () => request<Leaderboards>("/catalog/leaderboards"),
 
   getMaterials: (trackId?: string) =>
     request<Material[]>(trackId ? `/materials?track_id=${trackId}` : "/materials"),

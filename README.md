@@ -133,7 +133,7 @@ Coach gracefully degrades: without an API key, the chat UI still lets you create
 cd backend && pytest -v
 ```
 
-14 tests cover the queue, FSRS review flow, CRUD endpoints, stats, and chat (status + conversation lifecycle).
+31 tests cover the queue, FSRS review flow, CRUD endpoints, stats, chat, auth-adjacent flows, catalog, sessions, and roadmap generation.
 
 ---
 

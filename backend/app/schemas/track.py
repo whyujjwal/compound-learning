@@ -10,6 +10,7 @@ class TrackCreate(BaseModel):
     description: str | None = None
     color: str = Field(default="#6366f1", pattern=r"^#[0-9a-fA-F]{6}$")
     cognitive_multiplier: float = Field(default=1.0, gt=0.0)
+    is_public: bool = True
 
 
 class TrackUpdate(BaseModel):
@@ -17,6 +18,8 @@ class TrackUpdate(BaseModel):
     description: str | None = None
     color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
     cognitive_multiplier: float | None = Field(default=None, gt=0.0)
+    is_public: bool | None = None
+    is_featured: bool | None = None
 
 
 class TrackResponse(BaseModel):
@@ -28,6 +31,15 @@ class TrackResponse(BaseModel):
     color: str
     cognitive_multiplier: float
     is_system: bool
+    is_public: bool
+    is_featured: bool
+    star_count: int
+    adoption_count: int
+    rating_count: int
+    rating_avg: float
+    quality_score: float
+    source_track_id: UUID | None
+    generation_prompt: str | None
     created_at: datetime
     material_count: int = 0
     due_card_count: int = 0

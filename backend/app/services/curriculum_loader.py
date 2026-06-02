@@ -11,6 +11,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -72,6 +73,10 @@ def import_curriculum(
                 color=track_data.get("color", "#e8a849"),
                 cognitive_multiplier=track_data.get("cognitive_multiplier", 1.0),
                 is_system=track_data.get("is_system", False),
+                is_public=track_data.get("is_public", True),
+                is_featured=track_data.get("is_featured", False),
+                generation_prompt=track_data.get("generation_prompt"),
+                published_at=datetime.now(UTC) if track_data.get("is_public", True) else None,
             )
             db.add(track)
             db.flush()
@@ -84,6 +89,13 @@ def import_curriculum(
             track.cognitive_multiplier = track_data.get("cognitive_multiplier", track.cognitive_multiplier)
             if "is_system" in track_data:
                 track.is_system = track_data["is_system"]
+            if "is_public" in track_data:
+                track.is_public = track_data["is_public"]
+                track.published_at = track.published_at or (datetime.now(UTC) if track.is_public else None)
+            if "is_featured" in track_data:
+                track.is_featured = track_data["is_featured"]
+            if "generation_prompt" in track_data:
+                track.generation_prompt = track_data["generation_prompt"]
             stats["tracks_updated"] += 1
 
         incoming_titles = {md["title"] for md in track_data.get("materials", [])}

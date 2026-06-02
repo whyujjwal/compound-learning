@@ -36,7 +36,7 @@ export default function CurriculumEditorPage() {
   }
 
   async function reimport() {
-    const result = await api.importCurriculum();
+    const result = await api.importExampleCurriculum();
     setMessage(`Imported: ${JSON.stringify(result)}`);
     if (trackId) setMaterials(await api.getMaterials(trackId));
   }
@@ -45,7 +45,7 @@ export default function CurriculumEditorPage() {
     <div>
       <header className="page-header">
         <h1 className="page-title">Curriculum Editor</h1>
-        <p className="page-sub">Edit materials in-app or re-import bundled curriculum.json.</p>
+        <p className="page-sub">Edit materials in-app or import the bundled example curriculum.</p>
       </header>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
@@ -57,7 +57,7 @@ export default function CurriculumEditorPage() {
           ))}
         </select>
         <button type="button" className="v2-btn ghost" onClick={reimport}>
-          Re-import default curriculum
+          Import example curriculum
         </button>
       </div>
 

@@ -7,8 +7,8 @@ import { sans, mono, serif } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Compound — Learning Companion",
-  description: "FSRS-powered spaced-repetition workspace for DSA, AI, ML, and System Design",
+  title: "Compound — AI Learning OS",
+  description: "Generate, adopt, remix, and practice AI-built learning tracks with spaced review.",
 };
 
 export const viewport: Viewport = {

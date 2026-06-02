@@ -1,3 +1,5 @@
+import { getLocalDateKey } from "./time";
+
 const KEY = "compound:daily-progress";
 
 type DailyProgress = {
@@ -6,7 +8,7 @@ type DailyProgress = {
 };
 
 function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
+  return getLocalDateKey();
 }
 
 function load(): DailyProgress {
