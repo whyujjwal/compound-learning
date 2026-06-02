@@ -185,6 +185,23 @@ Every material has:
 
 **FSRS-6** handles when to *re-surface* a card for review. The curriculum determines what *enters* the queue. Together: you always see today's new content + today's optimal reviews.
 
+## Local-Day Scheduling
+
+The weekly schedule is interpreted in the learner's local timezone. The frontend sends
+`X-Compound-Timezone` on API calls, and backend endpoints that select "today" also accept
+`?timezone=` for deterministic tests and integrations.
+
+These paths share the same local-day contract:
+
+- `GET /api/curriculum/schedule/today`
+- `GET /api/queue/daily`
+- `POST /api/blocks/{slot}/start`
+- `GET /api/stats`, `/api/stats/activity`, and `/api/stats/retention-timeline`
+- Daily and weekly coach insight cache keys
+
+If no timezone is supplied, Compound falls back to UTC. Due-review eligibility still compares
+absolute instants; only calendar-day grouping and weekday selection use the learner's local day.
+
 ---
 
 ## Importing the curriculum

@@ -31,6 +31,11 @@ to design a complete curriculum:
 The roadmap is previewed before you apply it ("Add to my library" or "Replace & start"), and the
 generated weekly schedule is stored **per user** — the daily queue and HEFT planner read it directly.
 
+Daily planning uses the learner's local calendar day, not UTC. Browser requests send
+`X-Compound-Timezone` with the IANA timezone from `Intl.DateTimeFormat()`, and backend "today"
+paths also accept `?timezone=` for tests or integrations. The weekly schedule, Today queue, block
+sessions, stats, activity charts, and coach insight cache keys all resolve the same local day.
+
 ---
 
 ## Stack
@@ -125,6 +130,11 @@ Coach gracefully degrades: without an API key, the chat UI still lets you create
 └──────────────────────────────────────────────────────────────┘
 ```
 
+Local-day endpoints read `X-Compound-Timezone` (for example `Asia/Kolkata` or
+`America/Los_Angeles`) and fall back to UTC if the header/query value is absent or invalid.
+This keeps the weekly calendar, Today auto-start, block sessions, and "reviews today" counters
+aligned around the learner's midnight.
+
 ---
 
 ## Testing
@@ -133,7 +143,8 @@ Coach gracefully degrades: without an API key, the chat UI still lets you create
 cd backend && pytest -v
 ```
 
-31 tests cover the queue, FSRS review flow, CRUD endpoints, stats, chat, auth-adjacent flows, catalog, sessions, and roadmap generation.
+31 tests cover the queue, local-day selection, FSRS review flow, CRUD endpoints, stats, chat,
+sessions, and roadmap generation.
 
 ---
 

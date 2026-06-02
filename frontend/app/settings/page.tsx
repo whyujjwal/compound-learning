@@ -20,8 +20,12 @@ export default function SettingsPage() {
   const [aiStatus, setAIStatus] = useState<{ enabled: boolean; provider: string; model: string } | null>(null);
   const [retention, setRetention] = useState(0.9);
   const [blockMinutes, setBlockMinutes] = useState(120);
+  const [dailyNewCards, setDailyNewCards] = useState(0);
   const [pausedTracks, setPausedTracks] = useState<string[]>([]);
-  const [learningFocus, setLearningFocus] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [learningGoals, setLearningGoals] = useState("");
+  const [milestoneTitle, setMilestoneTitle] = useState("");
+  const [milestoneDate, setMilestoneDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -39,8 +43,12 @@ export default function SettingsPage() {
         setTracks(t);
         setRetention(u.target_retention);
         setBlockMinutes(u.daily_study_minutes);
+        setDailyNewCards(u.daily_new_cards ?? 0);
         setPausedTracks(u.paused_tracks ?? []);
-        setLearningFocus(u.milestone_title ?? "");
+        setDisplayName(u.display_name ?? "");
+        setLearningGoals(u.learning_goals ?? "");
+        setMilestoneTitle(u.milestone_title ?? "");
+        setMilestoneDate(u.milestone_date ? u.milestone_date.slice(0, 10) : "");
         setAIStatus(s);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
@@ -59,9 +67,13 @@ export default function SettingsPage() {
       const updated = await api.updateUser({
         target_retention: retention,
         daily_study_minutes: blockMinutes,
+        daily_new_cards: dailyNewCards,
         paused_tracks: pausedTracks,
-        milestone_title: learningFocus || null,
-        milestone_date: null,
+        display_name: displayName.trim() || null,
+        learning_goals: learningGoals.trim() || null,
+        milestone_title: milestoneTitle.trim() || null,
+        milestone_date: milestoneDate ? new Date(`${milestoneDate}T00:00:00`).toISOString() : null,
+        onboarded: true,
       });
       setUser(updated);
       setMessage("Saved.");
@@ -81,6 +93,21 @@ export default function SettingsPage() {
 
   const activeCount = tracks.length - pausedTracks.length;
   const pausedCount = pausedTracks.length;
+  const profileFields = [
+    displayName.trim(),
+    learningGoals.trim(),
+    milestoneTitle.trim(),
+    milestoneDate,
+  ];
+  const profileComplete = Math.round(
+    (profileFields.filter(Boolean).length / profileFields.length) * 100
+  );
+  const initials = (displayName || user?.email || "U")
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 
   return (
     <div className="settings-page">
@@ -93,7 +120,10 @@ export default function SettingsPage() {
           </p>
         </div>
         <div className="settings-account">
-          <span>{user?.email}</span>
+          <span>{displayName || user?.email}</span>
+          <button type="submit" form="settings-form" className="v2-btn primary" disabled={saving}>
+            {saving ? "Saving..." : "Save changes"}
+          </button>
           <button
             type="button"
             className="v2-btn ghost"
@@ -117,21 +147,97 @@ export default function SettingsPage() {
           <span>study block</span>
         </div>
         <div>
-          <strong>{activeCount}</strong>
-          <span>active tracks</span>
+          <strong>{profileComplete}%</strong>
+          <span>profile complete</span>
         </div>
       </section>
 
-      <form onSubmit={handleSave} className="settings-grid">
+      <form id="settings-form" onSubmit={handleSave} className="settings-grid">
+        <section className="settings-card settings-profile-card">
+          <div className="settings-profile-head">
+            <div className="settings-profile-avatar" aria-hidden>
+              {initials || "U"}
+            </div>
+            <div>
+              <h2>Your profile</h2>
+              <p>
+                This is what Coach and generated roadmaps use to understand what you are trying to become.
+              </p>
+            </div>
+            <span className="settings-profile-complete">{profileComplete}% complete</span>
+          </div>
+
+          <div className="settings-controls profile-controls">
+            <label className="settings-control">
+              <span>
+                <span>Name</span>
+                <strong>public</strong>
+              </span>
+              <input
+                className="v2-input"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Your name"
+              />
+            </label>
+
+            <label className="settings-control">
+              <span>
+                <span>Email</span>
+                <strong>account</strong>
+              </span>
+              <input className="v2-input" value={user?.email ?? ""} readOnly />
+            </label>
+
+            <label className="settings-control wide">
+              <span>
+                <span>Learning goals</span>
+                <strong>{learningGoals.length}/2000</strong>
+              </span>
+              <textarea
+                className="v2-input"
+                rows={4}
+                maxLength={2000}
+                value={learningGoals}
+                onChange={(e) => setLearningGoals(e.target.value)}
+                placeholder="I want to master backend systems, distributed architecture, and interview-ready problem solving."
+              />
+            </label>
+
+            <label className="settings-control">
+              <span>
+                <span>Current milestone</span>
+                <strong>optional</strong>
+              </span>
+              <input
+                className="v2-input"
+                value={milestoneTitle}
+                onChange={(e) => setMilestoneTitle(e.target.value)}
+                placeholder="System design interviews"
+              />
+            </label>
+
+            <label className="settings-control">
+              <span>
+                <span>Target date</span>
+                <strong>optional</strong>
+              </span>
+              <input
+                className="v2-input"
+                type="date"
+                value={milestoneDate}
+                onChange={(e) => setMilestoneDate(e.target.value)}
+              />
+            </label>
+          </div>
+        </section>
+
         <section className="settings-card settings-card-main">
           <div className="settings-card-head">
             <div>
               <h2>Learning rhythm</h2>
-              <p>Retention, block length, and focus in one place.</p>
+              <p>Retention, block length, and new-card pace in one place.</p>
             </div>
-            <button type="submit" className="v2-btn primary" disabled={saving}>
-              {saving ? "Saving..." : "Save changes"}
-            </button>
           </div>
 
           <div className="settings-controls">
@@ -167,14 +273,16 @@ export default function SettingsPage() {
 
             <label className="settings-control wide">
               <span>
-                <span>Current focus</span>
-                <strong>optional</strong>
+                <span>New-card cap</span>
+                <strong>{dailyNewCards === 0 ? "unlimited" : `${dailyNewCards}/day`}</strong>
               </span>
               <input
-                className="v2-input"
-                placeholder="Graph algorithms, transformers, distributed caches..."
-                value={learningFocus}
-                onChange={(e) => setLearningFocus(e.target.value)}
+                type="number"
+                min={0}
+                max={200}
+                step={1}
+                value={dailyNewCards}
+                onChange={(e) => setDailyNewCards(Number(e.target.value))}
               />
             </label>
           </div>

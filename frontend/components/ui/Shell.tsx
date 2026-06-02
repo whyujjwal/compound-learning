@@ -11,6 +11,7 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 import { AppBar } from "./AppBar";
+import { LeftRail } from "./LeftRail";
 import { CommandPalette } from "./CommandPalette";
 import {
   api,
@@ -54,6 +55,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [activity, setActivity] = useState<{ date: string; count: number }[]>([]);
   const [cmdkOpen, setCmdkOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [actions, setActionsState] = useState<{
     onStartFirstBlock?: () => void;
     onPushMore?: (slug: string) => void;
@@ -98,7 +100,29 @@ export function Shell({ children }: { children: ReactNode }) {
     }
   }, [pathname, reloadQueue]);
 
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.body.style.overflow = mobileNavOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && mobileNavOpen) setMobileNavOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
+
   const openCmdk = useCallback(() => setCmdkOpen(true), []);
+  const toggleMobileNav = useCallback(() => setMobileNavOpen((v) => !v), []);
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
   const setRightPanel = useCallback((_node: ReactNode | null) => {}, []);
   const setActions = useCallback(
     (a: {
@@ -136,12 +160,23 @@ export function Shell({ children }: { children: ReactNode }) {
     ]
   );
 
+  const bodyClass = `shell-body${mobileNavOpen ? " nav-open" : ""}`;
+
   return (
     <Ctx.Provider value={ctx}>
       <div className="shell">
-        <AppBar onOpenCmdk={openCmdk} />
-        <div className="shell-body">
+        <AppBar onOpenCmdk={openCmdk} onToggleNav={toggleMobileNav} navOpen={mobileNavOpen} />
+        <div className={bodyClass}>
+          <LeftRail tracks={tracks} overview={overview} />
           <main className="shell-main">{children}</main>
+          {mobileNavOpen && (
+            <button
+              type="button"
+              className="nav-backdrop"
+              aria-label="Close sidebar"
+              onClick={closeMobileNav}
+            />
+          )}
         </div>
       </div>
 

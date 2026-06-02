@@ -6,23 +6,30 @@ import { trackAccent } from "@/lib/trackColors";
 import type { Track, CurriculumOverview } from "@/lib/api";
 
 const WORKSPACE = [
-  { href: "/", label: "Today", match: (p: string) => p === "/" },
-  { href: "/explore", label: "Explore", match: (p: string) => p.startsWith("/explore") },
-  { href: "/curriculum", label: "My Library", match: (p: string) => p === "/curriculum" },
+  { href: "/", label: "Today", note: "Queue", match: (p: string) => p === "/" },
+  { href: "/schedule", label: "Weekly calendar", note: "Plan", match: (p: string) => p.startsWith("/schedule") },
+  { href: "/stats", label: "Progress", note: "Stats", match: (p: string) => p.startsWith("/stats") },
+  { href: "/coach", label: "Coach", note: "AI", match: (p: string) => p.startsWith("/coach") },
+];
+
+const LEARN = [
+  { href: "/explore", label: "Explore", note: "Catalog", match: (p: string) => p.startsWith("/explore") },
+  { href: "/curriculum", label: "My library", note: "Roadmap", match: (p: string) => p === "/curriculum" || p.startsWith("/track/") },
   {
     href: "/curriculum/build",
-    label: "AI Studio",
+    label: "Build roadmap",
+    note: "Generate",
     match: (p: string) => p.startsWith("/curriculum/build"),
   },
-  { href: "/schedule", label: "My Week", match: (p: string) => p.startsWith("/schedule") },
+  { href: "/curriculum/edit", label: "Roadmap editor", note: "Edit", match: (p: string) => p.startsWith("/curriculum/edit") },
 ];
 
 const FOOTER = [
-  { href: "/tracks", label: "Track Admin", match: (p: string) => p === "/tracks" },
-  { href: "/materials", label: "Materials", match: (p: string) => p.startsWith("/materials") },
-  { href: "/cards", label: "Cards", match: (p: string) => p.startsWith("/cards") },
-  { href: "/curriculum/edit", label: "Editor", match: (p: string) => p.startsWith("/curriculum/edit") },
-  { href: "/settings", label: "Settings", match: (p: string) => p.startsWith("/settings") },
+  { href: "/tracks", label: "Tracks", note: "Admin", match: (p: string) => p === "/tracks" },
+  { href: "/materials", label: "Materials", note: "Resources", match: (p: string) => p.startsWith("/materials") },
+  { href: "/cards", label: "Cards", note: "FSRS", match: (p: string) => p.startsWith("/cards") },
+  { href: "/team", label: "Team", note: "Org", match: (p: string) => p.startsWith("/team") },
+  { href: "/settings", label: "Settings", note: "Profile", match: (p: string) => p.startsWith("/settings") },
 ];
 
 export function LeftRail({
@@ -52,7 +59,22 @@ export function LeftRail({
             href={l.href}
             className={`rail-link${l.match(pathname) ? " active" : ""}`}
           >
-            {l.label}
+            <span>{l.label}</span>
+            <span className="rail-link-note">{l.note}</span>
+          </Link>
+        ))}
+      </div>
+
+      <div className="rail-section" aria-label="Learn">
+        <div className="rail-label">Learn</div>
+        {LEARN.map((l) => (
+          <Link
+            key={l.href}
+            href={l.href}
+            className={`rail-link${l.match(pathname) ? " active" : ""}`}
+          >
+            <span>{l.label}</span>
+            <span className="rail-link-note">{l.note}</span>
           </Link>
         ))}
       </div>
@@ -93,7 +115,8 @@ export function LeftRail({
             href={v.href}
             className={`rail-link rail-link-muted${v.match(pathname) ? " active" : ""}`}
           >
-            {v.label}
+            <span>{v.label}</span>
+            <span className="rail-link-note">{v.note}</span>
           </Link>
         ))}
       </div>
