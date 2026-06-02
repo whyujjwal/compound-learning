@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTheme } from "@/components/ThemeProvider";
 import { useShell } from "@/components/ui/Shell";
 import { trackAccent } from "@/lib/trackColors";
 import { clearAuthToken } from "@/lib/auth";
@@ -9,6 +10,7 @@ import { api, type Track, type User } from "@/lib/api";
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
   const { setRightPanel } = useShell();
   useEffect(() => {
     setRightPanel(null);
@@ -91,6 +93,30 @@ export default function SettingsPage() {
           </p>
         </div>
       </header>
+
+      <section className="settings-panel">
+        <h2>Appearance</h2>
+        <div className="field">
+          <span className="field-label">Theme</span>
+          <div className="theme-toggle-row">
+            <button
+              type="button"
+              className={`theme-option${theme === "dark" ? " active" : ""}`}
+              onClick={() => setTheme("dark")}
+            >
+              Dark
+            </button>
+            <button
+              type="button"
+              className={`theme-option${theme === "light" ? " active" : ""}`}
+              onClick={() => setTheme("light")}
+            >
+              Light
+            </button>
+          </div>
+          <span className="field-hint">Warm Scholar&apos;s Lamp palette in both modes.</span>
+        </div>
+      </section>
 
       <form onSubmit={handleSave}>
         <section className="settings-panel">

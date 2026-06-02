@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, Suspense, useState } from "react";
+import { Suspense, FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { setAuthToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 
@@ -182,6 +183,9 @@ function GoogleIcon() {
 export default function LoginPage() {
   return (
     <div className="login-page">
+      <div className="login-theme">
+        <ThemeToggle />
+      </div>
       <div className="login-card">
         <p className="login-eyebrow">Compound</p>
         <h1 className="login-title">Sign in</h1>

@@ -6,7 +6,7 @@ export function Heatmap({
   data,
   weeks = 16,
   color = "#c89b6b",
-  emptyColor = "rgba(255,255,255,0.04)",
+  emptyColor = "var(--heatmap-empty)",
   size = 11,
   gap = 3,
 }: {

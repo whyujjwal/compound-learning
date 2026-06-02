@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const PRIMARY_NAV = [
   { href: "/", label: "Today", match: (p: string) => p === "/" },
@@ -71,6 +72,7 @@ export function AppBar({
       <div className="appbar-spacer" aria-hidden />
 
       <div className="appbar-tools">
+        <ThemeToggle />
         <button
           type="button"
           className="cmdk-trigger"
