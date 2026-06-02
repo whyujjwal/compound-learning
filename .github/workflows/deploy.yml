@@ -38,25 +38,34 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          BACKEND_URL_SECRET: ${{ secrets.BACKEND_URL }}
+          FRONTEND_URL_SECRET: ${{ secrets.FRONTEND_URL }}
         run: |
-          BACKEND_URL=$(gcloud run services describe compound-api --region=asia-south1 --format="value(status.url)" --project=${GCP_PROJECT_ID} 2>/dev/null || echo "")
-          if [ -z "$BACKEND_URL" ]; then
-            BACKEND_URL="https://compound-api-778177955406.asia-south1.run.app"
+          if [ -n "$BACKEND_URL_SECRET" ]; then
+            BACKEND_URL="${BACKEND_URL_SECRET%/}"
+          else
+            BACKEND_URL=$(gcloud run services describe compound-api --region=asia-south1 --format="value(status.url)" --project=${GCP_PROJECT_ID} 2>/dev/null || echo "")
+            if [ -z "$BACKEND_URL" ]; then
+              BACKEND_URL="https://compound-api-778177955406.asia-south1.run.app"
+            fi
           fi
           GOOGLE_REDIRECT="${BACKEND_URL}/api/auth/google/callback"
+          FRONTEND_ENV=""
+          if [ -n "$FRONTEND_URL_SECRET" ]; then
+            FRONTEND_ENV=",FRONTEND_URL=${FRONTEND_URL_SECRET%/}"
+          fi
           gcloud run deploy compound-api \
             --image=asia-south1-docker.pkg.dev/${GCP_PROJECT_ID}/compound/api:latest \
             --platform=managed \
             --region=asia-south1 \
             --port=8000 \
             --add-cloudsql-instances=${GCP_PROJECT_ID}:asia-south1:compound-db \
-            --set-env-vars="DATABASE_URL=postgresql+psycopg2://compound:CompoundDBPass2026!@/compound?host=/cloudsql/${GCP_PROJECT_ID}:asia-south1:compound-db,CORS_ORIGINS=http://localhost:3000,AI_PROVIDER=gemini,AI_MODEL=gemini-2.5-flash,GEMINI_API_KEY=${GEMINI_API_KEY},APP_PASSWORD=${APP_PASSWORD},JWT_SECRET=${JWT_SECRET},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET},GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT}" \
+            --set-env-vars="DATABASE_URL=postgresql+psycopg2://compound:CompoundDBPass2026!@/compound?host=/cloudsql/${GCP_PROJECT_ID}:asia-south1:compound-db,CORS_ORIGINS=http://localhost:3000,AI_PROVIDER=gemini,AI_MODEL=gemini-2.5-flash,GEMINI_API_KEY=${GEMINI_API_KEY},APP_PASSWORD=${APP_PASSWORD},JWT_SECRET=${JWT_SECRET},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET},GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT}${FRONTEND_ENV}" \
             --update-annotations=run.googleapis.com/invoker-iam-disabled=true \
             --no-allow-unauthenticated \
             --project=${GCP_PROJECT_ID}
           
-          url=$(gcloud run services describe compound-api --region=asia-south1 --format="value(status.url)" --project=${GCP_PROJECT_ID})
-          echo "backend_url=$url" >> $GITHUB_OUTPUT
+          echo "backend_url=$BACKEND_URL" >> $GITHUB_OUTPUT
 
       - name: Build & Push Frontend
         run: |
@@ -88,9 +97,15 @@ jobs:
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           WEB_URL: ${{ steps.deploy-frontend.outputs.web_url }}
+          BACKEND_URL: ${{ steps.deploy-backend.outputs.backend_url }}
+          FRONTEND_URL_SECRET: ${{ secrets.FRONTEND_URL }}
         run: |
-          BACKEND_URL=$(gcloud run services describe compound-api --region=asia-south1 --format="value(status.url)" --project=${GCP_PROJECT_ID})
+          if [ -n "$FRONTEND_URL_SECRET" ]; then
+            WEB_ORIGIN="${FRONTEND_URL_SECRET%/}"
+          else
+            WEB_ORIGIN="${WEB_URL}"
+          fi
           gcloud run services update compound-api \
             --region=asia-south1 \
-            --update-env-vars="CORS_ORIGINS=${WEB_URL},FRONTEND_URL=${WEB_URL},GOOGLE_REDIRECT_URI=${BACKEND_URL}/api/auth/google/callback" \
+            --update-env-vars="CORS_ORIGINS=${WEB_ORIGIN},FRONTEND_URL=${WEB_ORIGIN},GOOGLE_REDIRECT_URI=${BACKEND_URL}/api/auth/google/callback" \
             --project=${GCP_PROJECT_ID}
