@@ -65,7 +65,7 @@ Return ONLY valid JSON (no prose, no markdown fences) matching this exact shape:
 
 Rules:
 - Create ONE track per distinct goal the learner names. If they name 4 things, make 4 tracks.
-- Each track: 8–16 materials ordered by `sequence`, progressing beginner → advanced.
+- Each track: 6–10 materials ordered by `sequence`, progressing beginner → advanced.
 - Use REAL, well-known, free or freemium resources with working public URLs \
 (official docs, MIT OCW, freeCodeCamp, Khan Academy, arXiv, YouTube channels like 3Blue1Brown / \
 Andrej Karpathy, takeuforward, university course pages, classic textbooks' free pages). \
@@ -91,21 +91,35 @@ def _build_user_prompt(goals: str, weekly_hours: int, level: str | None) -> str:
     )
 
 
+def _repair_json_text(text: str) -> str:
+    """Best-effort fixes for common model JSON mistakes."""
+    text = re.sub(r",(\s*[}\]])", r"\1", text)
+    return text
+
+
 def _extract_json(text: str) -> dict[str, Any]:
     text = text.strip()
-    # Strip markdown fences if the model added them anyway.
     fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, re.DOTALL)
     if fence:
         text = fence.group(1).strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        # Last resort: grab the outermost {...} block.
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            return json.loads(text[start : end + 1])
-        raise
+
+    candidates = [text, _repair_json_text(text)]
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        chunk = text[start : end + 1]
+        candidates.extend([chunk, _repair_json_text(chunk)])
+
+    last_error: json.JSONDecodeError | None = None
+    for candidate in candidates:
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError as e:
+            last_error = e
+            continue
+    if last_error:
+        raise last_error
+    raise json.JSONDecodeError("No JSON object found", text, 0)
 
 
 def _normalize(data: dict[str, Any]) -> dict[str, Any]:
@@ -166,51 +180,64 @@ def _normalize(data: dict[str, Any]) -> dict[str, Any]:
 def _call_model(goals: str, weekly_hours: int, level: str | None) -> str:
     user_prompt = _build_user_prompt(goals, weekly_hours, level)
     provider = settings.ai_provider
-    max_tokens = max(settings.ai_max_tokens, 8192)
+    max_tokens = max(settings.ai_max_tokens, 16384)
 
-    if provider == "anthropic":
-        from anthropic import Anthropic
+    try:
+        if provider == "anthropic":
+            from anthropic import Anthropic
 
-        client = Anthropic(api_key=settings.anthropic_api_key)
-        resp = client.messages.create(
-            model=settings.ai_model,
-            max_tokens=max_tokens,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return "".join(b.text for b in resp.content if b.type == "text")
+            client = Anthropic(api_key=settings.anthropic_api_key)
+            resp = client.messages.create(
+                model=settings.ai_model,
+                max_tokens=max_tokens,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            return "".join(b.text for b in resp.content if b.type == "text")
 
-    if provider == "openai":
-        from openai import OpenAI
+        if provider == "openai":
+            from openai import OpenAI
 
-        client = OpenAI(api_key=settings.openai_api_key)
-        resp = client.chat.completions.create(
-            model=settings.ai_model,
-            max_tokens=max_tokens,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-        )
-        return resp.choices[0].message.content or ""
+            client = OpenAI(api_key=settings.openai_api_key)
+            resp = client.chat.completions.create(
+                model=settings.ai_model,
+                max_tokens=max_tokens,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+            )
+            return resp.choices[0].message.content or ""
 
-    if provider == "gemini":
-        from google import genai
-        from google.genai import types
+        if provider == "gemini":
+            from google import genai
+            from google.genai import types
 
-        client = genai.Client(api_key=settings.gemini_api_key)
-        resp = client.models.generate_content(
-            model=settings.ai_model,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                max_output_tokens=max_tokens,
-                temperature=0.7,
-                response_mime_type="application/json",
-            ),
-        )
-        return resp.text or ""
+            client = genai.Client(api_key=settings.gemini_api_key)
+            resp = client.models.generate_content(
+                model=settings.ai_model,
+                contents=user_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    max_output_tokens=max_tokens,
+                    temperature=0.5,
+                    response_mime_type="application/json",
+                ),
+            )
+            candidate = resp.candidates[0] if resp.candidates else None
+            finish = getattr(candidate, "finish_reason", None) if candidate else None
+            if finish and str(finish).endswith("MAX_TOKENS"):
+                raise RoadmapError(
+                    "The roadmap was too large to generate in one pass. "
+                    "Try fewer goals or a narrower focus."
+                )
+            return resp.text or ""
+    except RoadmapError:
+        raise
+    except Exception as e:
+        logger.exception("Roadmap model call failed")
+        raise RoadmapError(f"AI request failed: {e}") from e
 
     raise RoadmapError(f"Unknown AI provider: {provider}")
 
@@ -224,16 +251,31 @@ def generate_roadmap(goals: str, weekly_hours: int = 10, level: str | None = Non
     if not goals or not goals.strip():
         raise RoadmapError("Please describe what you want to learn.")
 
-    raw = _call_model(goals, weekly_hours, level)
-    if not raw.strip():
-        raise RoadmapError("The AI returned an empty response. Try again.")
-    try:
-        data = _extract_json(raw)
-    except json.JSONDecodeError as e:
-        logger.warning("Roadmap JSON parse failed: %s\nRaw: %s", e, raw[:500])
-        raise RoadmapError("Could not parse the generated roadmap. Try rephrasing your goals.")
+    last_error: RoadmapError | None = None
+    for attempt in range(2):
+        raw = _call_model(goals, weekly_hours, level)
+        if not raw.strip():
+            last_error = RoadmapError("The AI returned an empty response. Try again.")
+            continue
+        try:
+            data = _extract_json(raw)
+            data = _normalize(data)
+            if not data.get("tracks"):
+                raise RoadmapError("The generated roadmap had no tracks. Try a more specific goal.")
+            return data
+        except json.JSONDecodeError as e:
+            logger.warning(
+                "Roadmap JSON parse failed (attempt %d): %s\nRaw: %s",
+                attempt + 1,
+                e,
+                raw[:800],
+            )
+            last_error = RoadmapError(
+                "Could not parse the generated roadmap. Try rephrasing your goals."
+            )
+        except RoadmapError as e:
+            last_error = e
 
-    data = _normalize(data)
-    if not data.get("tracks"):
-        raise RoadmapError("The generated roadmap had no tracks. Try a more specific goal.")
-    return data
+    if last_error:
+        raise last_error
+    raise RoadmapError("Could not generate a roadmap. Try again.")

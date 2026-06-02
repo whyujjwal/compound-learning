@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 const PRIMARY_NAV = [
   { href: "/", label: "Today", match: (p: string) => p === "/" },
@@ -26,7 +27,11 @@ export function AppBar({
   hasPanel: boolean;
 }) {
   const pathname = usePathname() || "/";
-  const isMac = typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
+  const [modKey, setModKey] = useState("Ctrl");
+
+  useEffect(() => {
+    setModKey(/Mac|iPod|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl");
+  }, []);
 
   return (
     <header className="appbar">
@@ -73,7 +78,7 @@ export function AppBar({
           aria-label="Open command palette"
         >
           <span className="cmdk-trigger-label">Search…</span>
-          <kbd>{isMac ? "⌘" : "Ctrl"} K</kbd>
+          <kbd suppressHydrationWarning>{modKey} K</kbd>
         </button>
         {hasPanel && (
           <button
