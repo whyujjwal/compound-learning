@@ -4122,6 +4122,13 @@ select.v2-input {
   text-align: center;
 }
 
+.login-switch {
+  margin: var(--s-4) 0 0;
+  font-size: 13px;
+  color: var(--fg-mute);
+  text-align: center;
+}
+
 .login-submit {
   margin-top: var(--s-2);
   width: 100%;

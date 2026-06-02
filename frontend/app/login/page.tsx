@@ -1,39 +1,44 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { setAuthToken } from "@/lib/auth";
 import { api } from "@/lib/api";
 
 type Mode = "signin" | "register";
-type GoogleStatus = "loading" | "enabled" | "disabled" | "unknown";
+
+function friendlyError(raw: string | null): string | null {
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  if (lower.includes("access_denied") || lower.includes("cancelled")) {
+    return "Sign-in was cancelled.";
+  }
+  if (lower.includes("redirect_uri_mismatch")) {
+    return "Google sign-in is misconfigured. Try again later.";
+  }
+  if (lower.includes("expired") || lower.includes("state")) {
+    return "Session expired. Please try again.";
+  }
+  if (raw.length > 100) return "Sign-in failed. Please try again.";
+  return raw;
+}
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/";
-  const urlError = searchParams.get("error");
 
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(urlError);
+  const [error, setError] = useState<string | null>(
+    friendlyError(searchParams.get("error")),
+  );
   const [loading, setLoading] = useState(false);
-  const [googleStatus, setGoogleStatus] = useState<GoogleStatus>("loading");
-
-  useEffect(() => {
-    api
-      .getGoogleAuthStatus()
-      .then((s) => setGoogleStatus(s.enabled ? "enabled" : "disabled"))
-      .catch(() => setGoogleStatus("unknown"));
-  }, []);
 
   function startGoogleLogin() {
-    if (googleStatus === "disabled") {
-      setError("Google sign-in is not configured on this server.");
-      return;
-    }
+    setError(null);
     const params = new URLSearchParams({ next });
     window.location.href = `/api/auth/google?${params.toString()}`;
   }
@@ -59,60 +64,18 @@ function LoginForm() {
   }
 
   const isRegister = mode === "register";
-  const googleDisabled = googleStatus === "disabled";
 
   return (
     <>
-      <div className="login-mode-tabs" role="tablist" aria-label="Sign in or register">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={!isRegister}
-          className={`login-mode-tab${!isRegister ? " active" : ""}`}
-          onClick={() => {
-            setMode("signin");
-            setError(null);
-          }}
-        >
-          Sign in
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={isRegister}
-          className={`login-mode-tab${isRegister ? " active" : ""}`}
-          onClick={() => {
-            setMode("register");
-            setError(null);
-          }}
-        >
-          Create account
-        </button>
-      </div>
-
       <form className="login-form" onSubmit={handleSubmit}>
-        <>
-          <button
-            type="button"
-            className="login-google-btn"
-            onClick={startGoogleLogin}
-            disabled={googleDisabled}
-            aria-busy={googleStatus === "loading"}
-          >
-            {googleStatus === "loading" ? (
-              <span className="login-google-loading" aria-hidden />
-            ) : (
-              <GoogleIcon />
-            )}
-            Continue with Google
-          </button>
-          {googleStatus === "unknown" && (
-            <p className="login-hint">Google sign-in may still work — try the button above.</p>
-          )}
-          <p className="login-divider">
-            <span>or</span>
-          </p>
-        </>
+        <button type="button" className="login-google-btn" onClick={startGoogleLogin}>
+          <GoogleIcon />
+          Continue with Google
+        </button>
+
+        <p className="login-divider">
+          <span>or</span>
+        </p>
 
         {isRegister && (
           <>
@@ -142,7 +105,7 @@ function LoginForm() {
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
           placeholder="you@example.com"
-          required={isRegister}
+          required
         />
 
         <label className="login-label" htmlFor="password">
@@ -172,15 +135,23 @@ function LoginForm() {
               : "Signing in…"
             : isRegister
               ? "Create account"
-              : "Sign in"}
+              : "Sign in with email"}
         </button>
-
-        {!isRegister && (
-          <p className="login-footnote">
-            Leave email blank to use the shared workspace password instead.
-          </p>
-        )}
       </form>
+
+      <p className="login-switch">
+        {isRegister ? "Already have an account?" : "New here?"}{" "}
+        <button
+          type="button"
+          className="login-link-btn"
+          onClick={() => {
+            setMode(isRegister ? "signin" : "register");
+            setError(null);
+          }}
+        >
+          {isRegister ? "Sign in" : "Create account"}
+        </button>
+      </p>
     </>
   );
 }
@@ -208,40 +179,13 @@ function GoogleIcon() {
   );
 }
 
-function LampMark() {
-  return (
-    <svg className="login-lamp" width="32" height="32" viewBox="0 0 32 32" aria-hidden>
-      <defs>
-        <radialGradient id="lamp-glow" cx="50%" cy="40%" r="60%">
-          <stop offset="0%" stopColor="#e6b787" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="#c89b6b" stopOpacity="0.2" />
-        </radialGradient>
-      </defs>
-      <ellipse cx="16" cy="14" rx="10" ry="9" fill="url(#lamp-glow)" opacity="0.55" />
-      <path
-        d="M16 4c-4.4 0-8 3.1-8 7.5 0 2.8 1.4 5.2 3.5 6.7V20h9v-1.8c2.1-1.5 3.5-3.9 3.5-6.7C24 7.1 20.4 4 16 4z"
-        fill="none"
-        stroke="#c89b6b"
-        strokeWidth="1.25"
-        strokeLinejoin="round"
-      />
-      <path d="M12 22h8v1.5a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V22z" fill="#c89b6b" opacity="0.85" />
-      <line x1="16" y1="25.5" x2="16" y2="28" stroke="#c89b6b" strokeWidth="1.25" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export default function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-brand">
-          <LampMark />
-          <p className="login-eyebrow">Compound</p>
-        </div>
-        <h1 className="login-title">Welcome back</h1>
-        <p className="login-sub">Your personal learning workspace — lit for deep study.</p>
-        <Suspense fallback={<p className="login-sub">Loading…</p>}>
+        <p className="login-eyebrow">Compound</p>
+        <h1 className="login-title">Sign in</h1>
+        <Suspense fallback={null}>
           <LoginForm />
         </Suspense>
       </div>

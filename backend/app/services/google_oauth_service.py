@@ -25,8 +25,15 @@ _SCOPES = "openid email profile"
 _CURRICULUM = Path(__file__).resolve().parents[3] / "docs" / "curriculum.json"
 
 
+def google_redirect_uri() -> str:
+    """OAuth callback — use the web app origin so Google redirects through Next.js /api proxy."""
+    if settings.google_redirect_uri:
+        return settings.google_redirect_uri
+    return f"{settings.frontend_url.rstrip('/')}/api/auth/google/callback"
+
+
 def google_auth_enabled() -> bool:
-    return bool(settings.google_client_id and settings.google_client_secret and settings.google_redirect_uri)
+    return bool(settings.google_client_id and settings.google_client_secret)
 
 
 def _state_secret() -> str:
@@ -50,9 +57,10 @@ def parse_oauth_state(state: str) -> str:
 def authorization_url(next_path: str = "/") -> str:
     if not google_auth_enabled():
         raise RuntimeError("Google OAuth is not configured")
+    redirect_uri = google_redirect_uri()
     params = {
         "client_id": settings.google_client_id,
-        "redirect_uri": settings.google_redirect_uri,
+        "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": _SCOPES,
         "access_type": "online",
@@ -70,7 +78,7 @@ async def exchange_code(code: str) -> dict[str, Any]:
                 "code": code,
                 "client_id": settings.google_client_id,
                 "client_secret": settings.google_client_secret,
-                "redirect_uri": settings.google_redirect_uri,
+                "redirect_uri": google_redirect_uri(),
                 "grant_type": "authorization_code",
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},

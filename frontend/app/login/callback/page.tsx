@@ -34,9 +34,7 @@ export default function LoginCallbackPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <p className="login-eyebrow">Compound</p>
-        <h1 className="login-title">Almost there</h1>
-        <Suspense fallback={<p className="login-sub">Loading…</p>}>
+        <Suspense fallback={null}>
           <CallbackHandler />
         </Suspense>
       </div>

@@ -1,7 +1,11 @@
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
+from app.config import settings
 
 from app.database import get_db
 from app.models.user import User
@@ -25,6 +29,11 @@ from app.services.google_oauth_service import (
     upsert_google_user,
 )
 router = APIRouter(tags=["auth"])
+
+
+def _login_error_redirect(message: str) -> RedirectResponse:
+    params = urlencode({"error": message})
+    return RedirectResponse(url=f"{settings.frontend_url.rstrip('/')}/login?{params}", status_code=302)
 
 
 class LegacyLoginRequest(BaseModel):
@@ -56,11 +65,11 @@ async def google_callback(
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     if error:
-        raise HTTPException(status_code=400, detail=f"Google sign-in failed: {error}")
+        return _login_error_redirect(f"Google sign-in failed: {error}")
     if not code or not state:
-        raise HTTPException(status_code=400, detail="Missing code or state from Google")
+        return _login_error_redirect("Google sign-in did not complete. Please try again.")
     if not google_auth_enabled():
-        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+        return _login_error_redirect("Google sign-in is not configured on this server.")
 
     try:
         next_path = parse_oauth_state(state)
@@ -71,7 +80,7 @@ async def google_callback(
         return RedirectResponse(url=frontend_callback_url(token, next_path), status_code=302)
     except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _login_error_redirect(str(exc))
 
 
 @router.post("/auth/register", response_model=AuthResponse)
