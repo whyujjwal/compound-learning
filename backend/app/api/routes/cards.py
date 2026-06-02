@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -42,6 +42,8 @@ def _card_detail(db: Session, card: Card) -> CardDetailResponse:
 @router.get("", response_model=list[CardDetailResponse])
 def list_cards(
     track_id: UUID | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[CardDetailResponse]:
@@ -54,7 +56,7 @@ def list_cards(
     )
     if track_id:
         query = query.filter(StudyMaterial.track_id == track_id)
-    cards = query.order_by(Card.due_at.asc()).all()
+    cards = query.order_by(Card.due_at.asc()).offset(offset).limit(limit).all()
     return [_card_detail(db, card) for card in cards]
 
 

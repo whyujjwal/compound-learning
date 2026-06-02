@@ -2,7 +2,6 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTheme } from "@/components/ThemeProvider";
 import { useShell } from "@/components/ui/Shell";
 import { trackAccent } from "@/lib/trackColors";
 import { clearAuthToken } from "@/lib/auth";
@@ -10,7 +9,6 @@ import { api, type Track, type User } from "@/lib/api";
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
   const { setRightPanel } = useShell();
   useEffect(() => {
     setRightPanel(null);
@@ -82,108 +80,122 @@ export default function SettingsPage() {
   if (loading) return <p style={{ color: "var(--fg-mute)" }}>Loading settings…</p>;
 
   const activeCount = tracks.length - pausedTracks.length;
+  const pausedCount = pausedTracks.length;
 
   return (
-    <>
-      <header className="page-head">
+    <div className="settings-page">
+      <header className="settings-hero">
         <div>
+          <p className="page-kicker">Preferences</p>
           <h1 className="page-title">Settings</h1>
           <p className="page-sub">
-            {user?.email} · {Math.round(retention * 100)}% retention · {blockMinutes}m / block
+            Tune the learning engine without turning the room into a cockpit.
           </p>
+        </div>
+        <div className="settings-account">
+          <span>{user?.email}</span>
+          <button
+            type="button"
+            className="v2-btn ghost"
+            onClick={() => {
+              clearAuthToken();
+              router.replace("/login");
+            }}
+          >
+            Sign out
+          </button>
         </div>
       </header>
 
-      <section className="settings-panel">
-        <h2>Appearance</h2>
-        <div className="field">
-          <span className="field-label">Theme</span>
-          <div className="theme-toggle-row">
-            <button
-              type="button"
-              className={`theme-option${theme === "dark" ? " active" : ""}`}
-              onClick={() => setTheme("dark")}
-            >
-              Dark
-            </button>
-            <button
-              type="button"
-              className={`theme-option${theme === "light" ? " active" : ""}`}
-              onClick={() => setTheme("light")}
-            >
-              Light
-            </button>
-          </div>
-          <span className="field-hint">Warm Scholar&apos;s Lamp palette in both modes.</span>
+      <section className="settings-snapshot" aria-label="Current settings">
+        <div>
+          <strong>{Math.round(retention * 100)}%</strong>
+          <span>target retention</span>
+        </div>
+        <div>
+          <strong>{blockMinutes}m</strong>
+          <span>study block</span>
+        </div>
+        <div>
+          <strong>{activeCount}</strong>
+          <span>active tracks</span>
         </div>
       </section>
 
-      <form onSubmit={handleSave}>
-        <section className="settings-panel">
-          <h2>Session</h2>
-          <div className="field">
-            <span className="field-label">
-              Target retention <span className="field-value">{Math.round(retention * 100)}%</span>
-            </span>
-            <input
-              type="range"
-              min={0.7}
-              max={0.99}
-              step={0.01}
-              value={retention}
-              onChange={(e) => setRetention(Number(e.target.value))}
-            />
-            <span className="field-hint">
-              FSRS aims to schedule reviews so you recall this fraction of cards. Default 90%.
-            </span>
+      <form onSubmit={handleSave} className="settings-grid">
+        <section className="settings-card settings-card-main">
+          <div className="settings-card-head">
+            <div>
+              <h2>Learning rhythm</h2>
+              <p>Retention, block length, and focus in one place.</p>
+            </div>
+            <button type="submit" className="v2-btn primary" disabled={saving}>
+              {saving ? "Saving..." : "Save changes"}
+            </button>
           </div>
 
-          <div className="field">
-            <span className="field-label">Block size · {blockMinutes} minutes</span>
-            <input
-              type="number"
-              min={30}
-              max={240}
-              step={5}
-              value={blockMinutes}
-              onChange={(e) => setBlockMinutes(Number(e.target.value))}
-            />
-            <span className="field-hint">
-              How long a single block lasts. New items pack up to this budget; FSRS reviews always run.
-            </span>
+          <div className="settings-controls">
+            <label className="settings-control">
+              <span>
+                <span>Target retention</span>
+                <strong>{Math.round(retention * 100)}%</strong>
+              </span>
+              <input
+                type="range"
+                min={0.7}
+                max={0.99}
+                step={0.01}
+                value={retention}
+                onChange={(e) => setRetention(Number(e.target.value))}
+              />
+            </label>
+
+            <label className="settings-control">
+              <span>
+                <span>Block size</span>
+                <strong>{blockMinutes} min</strong>
+              </span>
+              <input
+                type="number"
+                min={30}
+                max={240}
+                step={5}
+                value={blockMinutes}
+                onChange={(e) => setBlockMinutes(Number(e.target.value))}
+              />
+            </label>
+
+            <label className="settings-control wide">
+              <span>
+                <span>Current focus</span>
+                <strong>optional</strong>
+              </span>
+              <input
+                className="v2-input"
+                placeholder="Graph algorithms, transformers, distributed caches..."
+                value={learningFocus}
+                onChange={(e) => setLearningFocus(e.target.value)}
+              />
+            </label>
+          </div>
+
+          <div className="settings-save-row">
+            {message && <span className="field-msg-ok">{message}</span>}
+            {error && <span className="field-msg-bad">{error}</span>}
           </div>
         </section>
 
-        <section className="settings-panel">
-          <h2>Current focus</h2>
-          <p className="field-hint" style={{ marginBottom: 12 }}>
-            Optional label for what you&apos;re exploring right now — no deadline, no rush.
-            Compound picks up wherever you left off, forever.
-          </p>
-          <div className="field">
-            <span className="field-label">Focus (optional)</span>
-            <input
-              className="v2-input"
-              placeholder="e.g. Graph algorithms, transformers, distributed caches"
-              value={learningFocus}
-              onChange={(e) => setLearningFocus(e.target.value)}
-            />
+        <section className="settings-card">
+          <div className="settings-card-head">
+            <div>
+              <h2>Track availability</h2>
+              <p>{pausedCount} paused. Paused tracks stay out of Today but remain reviewable.</p>
+            </div>
           </div>
-        </section>
-
-        <section className="settings-panel">
-          <h2>Active tracks</h2>
-          <div className="field">
-            <span className="field-hint">
-              Paused tracks are skipped in today&apos;s blocks. Reviews still appear if you open a track manually.
-              {activeCount === 0 && (
-                <strong style={{ color: "var(--warn)", display: "block", marginTop: 6 }}>
-                  All tracks paused — your block stack will be empty.
-                </strong>
-              )}
-            </span>
-          </div>
-          <div className="toggle-grid">
+          {activeCount === 0 && (
+            <p className="settings-warning">All tracks are paused, so today&apos;s block stack will be empty.</p>
+          )}
+          <div className="settings-track-grid">
             {tracks.map((t) => {
               const paused = pausedTracks.includes(t.slug);
               const accent = trackAccent(t.slug, t.color);
@@ -192,78 +204,37 @@ export default function SettingsPage() {
                   key={t.slug}
                   type="button"
                   onClick={() => toggleTrack(t.slug)}
-                  className={`toggle-card${paused ? " paused" : " active"}`}
+                  className={`settings-track-toggle${paused ? " paused" : " active"}`}
                   style={{ ["--toggle-accent" as string]: accent }}
                 >
-                  <span className="toggle-card-state">{paused ? "Paused" : "Active"}</span>
-                  <span className="toggle-card-name">{t.name}</span>
-                  <span className="toggle-card-meta">{t.material_count} materials</span>
+                  <span className="settings-track-dot" aria-hidden />
+                  <span className="settings-track-name">{t.name}</span>
+                  <span className="settings-track-state">{paused ? "Paused" : "Active"}</span>
                 </button>
               );
             })}
           </div>
         </section>
-
-        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <button type="submit" className="v2-btn primary" disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </button>
-          {message && <span className="field-msg-ok">{message}</span>}
-          {error && <span className="field-msg-bad">{error}</span>}
-        </div>
       </form>
 
-      <section className="settings-panel" style={{ marginTop: 24 }}>
-        <h2>How sessions work</h2>
-        <ul style={{ margin: 0, paddingLeft: 18, color: "var(--fg-soft)", fontSize: 13, lineHeight: 1.7 }}>
-          <li><strong style={{ color: "var(--fg)" }}>Your pace</strong> — no calendar, no finish line. Add tracks and materials anytime.</li>
-          <li><strong style={{ color: "var(--fg)" }}>FSRS-6</strong> schedules each rep just before you forget.</li>
-          <li><strong style={{ color: "var(--fg)" }}>Two blocks weekdays, four weekends</strong> — one track per block.</li>
-          <li><strong style={{ color: "var(--fg)" }}>Next-in-sequence</strong> — always resumes where you stopped.</li>
-          <li><strong style={{ color: "var(--fg)" }}>No penalty for gaps.</strong> Miss a month and tomorrow looks the same.</li>
-        </ul>
-      </section>
-
-      <section className="settings-panel">
-        <h2>Coach</h2>
-        {aiStatus?.enabled ? (
-          <p style={{ color: "var(--fg-soft)", fontSize: 13, margin: 0, lineHeight: 1.55 }}>
-            Connected to{" "}
-            <code style={{ fontFamily: "var(--font-mono-stack)", color: "var(--accent)" }}>
-              {aiStatus.model}
-            </code>
-            . Coach reads progress, retention, struggling cards, and per-track breakdowns to surface
-            daily nudges and weekly reviews.
-          </p>
-        ) : (
-          <>
-            <p style={{ color: "var(--fg-mute)", fontSize: 13, margin: "0 0 12px" }}>
-              Coach is offline. Add an API key to enable AI advice.
+      <section className="settings-card settings-status">
+        <div>
+          <span className="settings-status-label">Coach</span>
+          {aiStatus?.enabled ? (
+            <p>
+              Connected to <code>{aiStatus.model}</code>
             </p>
-            <pre className="env-snippet">{`# backend/.env
+          ) : (
+            <p>Offline until an AI key is configured.</p>
+          )}
+        </div>
+        {!aiStatus?.enabled && (
+          <pre className="env-snippet">{`# backend/.env
 AI_PROVIDER=gemini
 AI_MODEL=gemini-2.5-flash
 GEMINI_API_KEY=AIza...`}</pre>
-          </>
         )}
       </section>
-
-      <section className="settings-panel">
-        <h2>Access</h2>
-        <p style={{ color: "var(--fg-soft)", fontSize: 13, margin: "0 0 12px", lineHeight: 1.55 }}>
-          Sign out to clear this browser&apos;s session and return to the password screen.
-        </p>
-        <button
-          type="button"
-          className="v2-btn"
-          onClick={() => {
-            clearAuthToken();
-            router.replace("/login");
-          }}
-        >
-          Sign out
-        </button>
-      </section>
-    </>
+    </div>
   );
 }

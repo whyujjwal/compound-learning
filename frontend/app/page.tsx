@@ -403,7 +403,7 @@ function PracticeHero({
       <p className="practice-hero-foot">
         Finish a track?{" "}
         <Link href="/curriculum/edit">Add more to your library</Link>
-        {" "}— Compound grows with you.
+        {" "}— each small block compounds into the next.
       </p>
     </section>
   );

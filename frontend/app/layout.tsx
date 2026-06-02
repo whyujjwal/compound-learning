@@ -7,8 +7,11 @@ import { sans, mono, serif } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Compound — AI Learning OS",
-  description: "Generate, adopt, remix, and practice AI-built learning tracks with spaced review.",
+  title: "compound",
+  description: "A focused learning workspace where small study blocks compound into durable mastery.",
+  icons: {
+    icon: "/compound-icon.svg",
+  },
 };
 
 export const viewport: Viewport = {

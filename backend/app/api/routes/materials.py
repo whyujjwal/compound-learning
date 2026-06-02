@@ -41,6 +41,8 @@ def _material_response(db: Session, material: StudyMaterial) -> MaterialResponse
 @router.get("", response_model=list[MaterialResponse])
 def list_materials(
     track_id: UUID | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[MaterialResponse]:
@@ -51,7 +53,12 @@ def list_materials(
     )
     if track_id:
         query = query.filter(StudyMaterial.track_id == track_id)
-    materials = query.order_by(StudyMaterial.created_at.desc()).all()
+    materials = (
+        query.order_by(StudyMaterial.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [_material_response(db, m) for m in materials]
 
 

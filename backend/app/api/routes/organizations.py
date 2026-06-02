@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -22,20 +22,31 @@ router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 @router.get("", response_model=list[OrganizationResponse])
 def list_organizations(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[OrganizationResponse]:
     memberships = (
         db.query(OrganizationMember)
         .filter(OrganizationMember.user_id == user.id)
+        .order_by(OrganizationMember.joined_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     org_ids = [m.organization_id for m in memberships]
     if not org_ids:
         return []
-    orgs = db.query(Organization).filter(Organization.id.in_(org_ids)).all()
+    org_by_id = {
+        org.id: org
+        for org in db.query(Organization).filter(Organization.id.in_(org_ids)).all()
+    }
     result = []
-    for org in orgs:
+    for org_id in org_ids:
+        org = org_by_id.get(org_id)
+        if not org:
+            continue
         count = (
             db.query(OrganizationMember)
             .filter(OrganizationMember.organization_id == org.id)
@@ -82,6 +93,8 @@ def create_organization(
 @router.get("/{org_id}/members", response_model=list[MemberResponse])
 def list_members(
     org_id: UUID,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[MemberResponse]:
@@ -95,6 +108,9 @@ def list_members(
     members = (
         db.query(OrganizationMember)
         .filter(OrganizationMember.organization_id == org_id)
+        .order_by(OrganizationMember.joined_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     result = []

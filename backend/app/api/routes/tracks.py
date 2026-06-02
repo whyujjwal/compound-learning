@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -66,10 +66,19 @@ def _track_response(db: Session, track: Track) -> TrackResponse:
 
 @router.get("", response_model=list[TrackResponse])
 def list_tracks(
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[TrackResponse]:
-    tracks = db.query(Track).filter(Track.user_id == user.id).order_by(Track.is_system.desc(), Track.name).all()
+    tracks = (
+        db.query(Track)
+        .filter(Track.user_id == user.id)
+        .order_by(Track.is_system.desc(), Track.name)
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [_track_response(db, t) for t in tracks]
 
 

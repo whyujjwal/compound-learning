@@ -7,27 +7,21 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 
 const PRIMARY_NAV = [
   { href: "/", label: "Today", match: (p: string) => p === "/" },
+  {
+    href: "/curriculum",
+    label: "Learn",
+    match: (p: string) =>
+      p.startsWith("/curriculum") || p.startsWith("/track/") || p.startsWith("/materials") || p.startsWith("/cards"),
+  },
   { href: "/explore", label: "Explore", match: (p: string) => p.startsWith("/explore") },
-  { href: "/curriculum", label: "Library", match: (p: string) => p === "/curriculum" },
-  { href: "/curriculum/build", label: "Studio", match: (p: string) => p.startsWith("/curriculum/build") },
+  { href: "/schedule", label: "Week", match: (p: string) => p.startsWith("/schedule") },
   { href: "/coach", label: "Coach", match: (p: string) => p.startsWith("/coach") },
-  { href: "/stats", label: "Stats", match: (p: string) => p.startsWith("/stats") },
 ];
 
 export function AppBar({
   onOpenCmdk,
-  onTogglePanel,
-  panelOpen,
-  onToggleNav,
-  navOpen,
-  hasPanel,
 }: {
   onOpenCmdk: () => void;
-  onTogglePanel: () => void;
-  panelOpen: boolean;
-  onToggleNav: () => void;
-  navOpen: boolean;
-  hasPanel: boolean;
 }) {
   const pathname = usePathname() || "/";
   const [modKey, setModKey] = useState("Ctrl");
@@ -38,25 +32,13 @@ export function AppBar({
 
   return (
     <header className="appbar">
-      <button
-        type="button"
-        className="appbar-icon-btn appbar-hamburger"
-        onClick={onToggleNav}
-        aria-label={navOpen ? "Close menu" : "Open menu"}
-        aria-expanded={navOpen}
-      >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-          {navOpen ? (
-            <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          ) : (
-            <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          )}
-        </svg>
-      </button>
-
       <Link href="/" className="appbar-brand" aria-label="Compound home">
-        <span className="appbar-brand-mark" aria-hidden />
-        Compound OS
+        <span className="appbar-brand-mark" aria-hidden>
+          <span />
+          <span />
+          <span />
+        </span>
+        <span className="appbar-brand-word">compound</span>
       </Link>
 
       <nav className="appbar-nav" aria-label="Primary">
@@ -84,21 +66,6 @@ export function AppBar({
           <span className="cmdk-trigger-label">Search…</span>
           <kbd suppressHydrationWarning>{modKey} K</kbd>
         </button>
-        {hasPanel && (
-          <button
-            type="button"
-            className="appbar-icon-btn appbar-panel-toggle"
-            aria-pressed={panelOpen}
-            onClick={onTogglePanel}
-            aria-label="Toggle sidebar"
-            title="Toggle sidebar"
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-              <rect x="0.5" y="0.5" width="13" height="13" rx="2" stroke="currentColor" />
-              <path d="M9 0v14" stroke="currentColor" />
-            </svg>
-          </button>
-        )}
       </div>
     </header>
   );

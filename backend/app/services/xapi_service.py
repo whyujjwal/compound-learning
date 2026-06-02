@@ -39,11 +39,12 @@ def emit_xapi_statement(
     return row
 
 
-def list_statements(db: Session, user_id: UUID, limit: int = 50) -> list[dict[str, Any]]:
+def list_statements(db: Session, user_id: UUID, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
     rows = (
         db.query(XapiStatement)
         .filter(XapiStatement.user_id == user_id)
         .order_by(XapiStatement.created_at.desc())
+        .offset(offset)
         .limit(limit)
         .all()
     )

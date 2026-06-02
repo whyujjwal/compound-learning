@@ -145,6 +145,7 @@ def list_catalog_tracks(
     featured: bool = False,
     sort: str = Query(default="ranking", pattern="^(ranking|stars|new)$"),
     limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[CatalogTrackResponse]:
@@ -183,7 +184,7 @@ def list_catalog_tracks(
             Track.created_at.desc(),
         )
 
-    tracks = query.limit(limit).all()
+    tracks = query.offset(offset).limit(limit).all()
     return [_catalog_response(db, track, user) for track in tracks]
 
 
@@ -342,12 +343,21 @@ def adopt_track(
     return AdoptTrackResponse(track_id=track.id, slug=track.slug, materials_created=created)
 
 
-def _collection_tracks(db: Session, collection: CatalogCollection, user: User) -> list[CatalogTrackResponse]:
+def _collection_tracks(
+    db: Session,
+    collection: CatalogCollection,
+    user: User,
+    *,
+    limit: int,
+    offset: int = 0,
+) -> list[CatalogTrackResponse]:
     rows = (
         db.query(CatalogCollectionItem)
         .join(Track, CatalogCollectionItem.track_id == Track.id)
         .filter(CatalogCollectionItem.collection_id == collection.id, Track.is_public.is_(True))
         .order_by(CatalogCollectionItem.sort_order.asc(), Track.star_count.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [_catalog_response(db, row.track, user) for row in rows]
@@ -382,18 +392,28 @@ def _ensure_default_collections(db: Session) -> None:
 
 @router.get("/collections", response_model=list[CatalogCollectionResponse])
 def list_collections(
+    limit: int = Query(default=12, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    track_limit: int = Query(default=8, ge=1, le=50),
+    track_offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[CatalogCollectionResponse]:
     _ensure_default_collections(db)
-    collections = db.query(CatalogCollection).order_by(CatalogCollection.sort_order.asc(), CatalogCollection.title.asc()).all()
+    collections = (
+        db.query(CatalogCollection)
+        .order_by(CatalogCollection.sort_order.asc(), CatalogCollection.title.asc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [
         CatalogCollectionResponse(
             id=c.id,
             slug=c.slug,
             title=c.title,
             description=c.description,
-            tracks=_collection_tracks(db, c, user),
+            tracks=_collection_tracks(db, c, user, limit=track_limit, offset=track_offset),
         )
         for c in collections
     ]
@@ -402,21 +422,30 @@ def list_collections(
 @router.get("/creators/{creator_id}", response_model=CreatorProfileResponse)
 def get_creator_profile(
     creator_id: UUID,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> CreatorProfileResponse:
     creator = db.query(User).filter(User.id == creator_id).first()
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
-    tracks = db.query(Track).filter(Track.user_id == creator.id, Track.is_public.is_(True)).order_by(Track.star_count.desc()).all()
+    all_public_tracks = db.query(Track).filter(Track.user_id == creator.id, Track.is_public.is_(True))
+    tracks = (
+        all_public_tracks.order_by(Track.star_count.desc(), Track.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     responses = [_catalog_response(db, track, user) for track in tracks]
-    ratings = [track.rating_avg for track in tracks if track.rating_count > 0]
+    totals = all_public_tracks.all()
+    ratings = [track.rating_avg for track in totals if track.rating_count > 0]
     return CreatorProfileResponse(
         id=creator.id,
         display_name=creator.display_name,
-        track_count=len(tracks),
-        total_stars=sum(t.star_count for t in tracks),
-        total_adoptions=sum(t.adoption_count for t in tracks),
+        track_count=len(totals),
+        total_stars=sum(t.star_count for t in totals),
+        total_adoptions=sum(t.adoption_count for t in totals),
         avg_rating=round(sum(ratings) / len(ratings), 2) if ratings else 0.0,
         tracks=responses,
     )
@@ -424,6 +453,9 @@ def get_creator_profile(
 
 @router.get("/leaderboards", response_model=LeaderboardResponse)
 def get_leaderboards(
+    track_limit: int = Query(default=20, ge=1, le=100),
+    track_offset: int = Query(default=0, ge=0),
+    creator_limit: int = Query(default=10, ge=1, le=50),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> LeaderboardResponse:
@@ -432,14 +464,14 @@ def get_leaderboards(
         Track.quality_score.desc(),
         Track.star_count.desc(),
         Track.adoption_count.desc(),
-    ).limit(20).all()
+    ).offset(track_offset).limit(track_limit).all()
     creators: list[CreatorProfileResponse] = []
     creator_ids = []
     for track in tracks:
         if track.user_id not in creator_ids:
             creator_ids.append(track.user_id)
-    for creator_id in creator_ids[:10]:
-        creators.append(get_creator_profile(creator_id, db, user))
+    for creator_id in creator_ids[:creator_limit]:
+        creators.append(get_creator_profile(creator_id, limit=10, offset=0, db=db, user=user))
     return LeaderboardResponse(
         tracks=[_catalog_response(db, track, user) for track in tracks],
         creators=creators,

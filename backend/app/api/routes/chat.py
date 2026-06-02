@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -32,6 +32,8 @@ def ai_status() -> AIStatus:
 
 @router.get("/conversations", response_model=list[ConversationSummary])
 def list_conversations(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[ConversationSummary]:
@@ -44,6 +46,8 @@ def list_conversations(
         .filter(Conversation.user_id == user.id)
         .group_by(Conversation.id)
         .order_by(Conversation.updated_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [
@@ -80,23 +84,32 @@ def create_conversation(
 @router.get("/conversations/{conv_id}", response_model=ConversationDetail)
 def get_conversation(
     conv_id: UUID,
+    message_limit: int = Query(default=200, ge=1, le=500),
+    message_offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ConversationDetail:
     conv = (
         db.query(Conversation)
-        .options(joinedload(Conversation.messages))
         .filter(Conversation.id == conv_id, Conversation.user_id == user.id)
         .first()
     )
     if not conv:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    messages = (
+        db.query(Message)
+        .filter(Message.conversation_id == conv.id)
+        .order_by(Message.created_at.asc())
+        .offset(message_offset)
+        .limit(message_limit)
+        .all()
+    )
     return ConversationDetail(
         id=conv.id,
         title=conv.title,
         created_at=conv.created_at,
         updated_at=conv.updated_at,
-        messages=[MessageResponse.model_validate(m) for m in conv.messages],
+        messages=[MessageResponse.model_validate(m) for m in messages],
     )
 
 

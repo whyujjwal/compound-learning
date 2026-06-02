@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -73,6 +73,8 @@ def patch_session(
 @router.get("/material/{material_id}", response_model=list[StudySessionResponse])
 def list_material_sessions(
     material_id: UUID,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[StudySessionResponse]:
@@ -81,7 +83,8 @@ def list_material_sessions(
         .options(joinedload(StudySession.material))
         .filter(StudySession.user_id == user.id, StudySession.material_id == material_id)
         .order_by(StudySession.created_at.desc())
-        .limit(50)
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [_to_response(s) for s in sessions]
@@ -89,7 +92,8 @@ def list_material_sessions(
 
 @router.get("/recent", response_model=list[StudySessionResponse])
 def recent_sessions(
-    limit: int = 20,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[StudySessionResponse]:
@@ -98,7 +102,8 @@ def recent_sessions(
         .options(joinedload(StudySession.material))
         .filter(StudySession.user_id == user.id)
         .order_by(StudySession.created_at.desc())
-        .limit(min(limit, 100))
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [_to_response(s) for s in sessions]

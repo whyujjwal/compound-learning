@@ -11,7 +11,6 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 import { AppBar } from "./AppBar";
-import { LeftRail } from "./LeftRail";
 import { CommandPalette } from "./CommandPalette";
 import {
   api,
@@ -30,11 +29,6 @@ type ShellCtx = {
   reloadAll: () => Promise<void>;
   reloadQueue: () => Promise<void>;
   openCmdk: () => void;
-  togglePanel: () => void;
-  panelOpen: boolean;
-  mobileNavOpen: boolean;
-  toggleMobileNav: () => void;
-  closeMobileNav: () => void;
   setRightPanel: (node: ReactNode | null) => void;
   setActions: (actions: {
     onStartFirstBlock?: () => void;
@@ -60,9 +54,6 @@ export function Shell({ children }: { children: ReactNode }) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [activity, setActivity] = useState<{ date: string; count: number }[]>([]);
   const [cmdkOpen, setCmdkOpen] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [rightPanelNode, setRightPanelNode] = useState<ReactNode | null>(null);
   const [actions, setActionsState] = useState<{
     onStartFirstBlock?: () => void;
     onPushMore?: (slug: string) => void;
@@ -107,34 +98,8 @@ export function Shell({ children }: { children: ReactNode }) {
     }
   }, [pathname, reloadQueue]);
 
-  // Close mobile nav on every route change
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [pathname]);
-
-  // Lock body scroll while drawer is open
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    document.body.style.overflow = mobileNavOpen ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [mobileNavOpen]);
-
-  // ESC closes the drawer
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && mobileNavOpen) setMobileNavOpen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mobileNavOpen]);
-
-  const togglePanel = useCallback(() => setPanelOpen((v) => !v), []);
   const openCmdk = useCallback(() => setCmdkOpen(true), []);
-  const toggleMobileNav = useCallback(() => setMobileNavOpen((v) => !v), []);
-  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
-  const setRightPanel = useCallback((node: ReactNode | null) => setRightPanelNode(node), []);
+  const setRightPanel = useCallback((_node: ReactNode | null) => {}, []);
   const setActions = useCallback(
     (a: {
       onStartFirstBlock?: () => void;
@@ -154,11 +119,6 @@ export function Shell({ children }: { children: ReactNode }) {
       reloadAll,
       reloadQueue,
       openCmdk,
-      togglePanel,
-      panelOpen,
-      mobileNavOpen,
-      toggleMobileNav,
-      closeMobileNav,
       setRightPanel,
       setActions,
     }),
@@ -171,53 +131,18 @@ export function Shell({ children }: { children: ReactNode }) {
       reloadAll,
       reloadQueue,
       openCmdk,
-      togglePanel,
-      panelOpen,
-      mobileNavOpen,
-      toggleMobileNav,
-      closeMobileNav,
       setRightPanel,
       setActions,
     ]
   );
 
-  const showPanel = panelOpen && Boolean(rightPanelNode);
-  const bodyClass = `shell-body${mobileNavOpen ? " nav-open" : ""}`;
-
   return (
     <Ctx.Provider value={ctx}>
-      <div className={`shell${showPanel ? " panel-open" : ""}`}>
-        <AppBar
-          onOpenCmdk={openCmdk}
-          onTogglePanel={togglePanel}
-          panelOpen={panelOpen}
-          onToggleNav={toggleMobileNav}
-          navOpen={mobileNavOpen}
-          hasPanel={Boolean(rightPanelNode)}
-        />
-        <div className={bodyClass}>
-          <LeftRail tracks={tracks} overview={overview} />
+      <div className="shell">
+        <AppBar onOpenCmdk={openCmdk} />
+        <div className="shell-body">
           <main className="shell-main">{children}</main>
         </div>
-        {showPanel && (
-          <>
-            <button
-              type="button"
-              className="panel-backdrop"
-              aria-label="Close sidebar"
-              onClick={togglePanel}
-            />
-            {rightPanelNode}
-          </>
-        )}
-        {mobileNavOpen && (
-          <button
-            type="button"
-            className="nav-backdrop"
-            aria-label="Close menu"
-            onClick={closeMobileNav}
-          />
-        )}
       </div>
 
       <CommandPalette
@@ -227,7 +152,6 @@ export function Shell({ children }: { children: ReactNode }) {
         onStartFirstBlock={actions.onStartFirstBlock}
         onPushMore={actions.onPushMore}
         onRefreshNudge={actions.onRefreshNudge}
-        onTogglePanel={togglePanel}
       />
     </Ctx.Provider>
   );

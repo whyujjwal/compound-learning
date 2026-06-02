@@ -41,6 +41,21 @@ type RequestOptions = RequestInit & {
   timeoutMs?: number;
 };
 
+type PaginationParams = {
+  limit?: number;
+  offset?: number;
+};
+
+function setPagination(search: URLSearchParams, params?: PaginationParams): void {
+  if (params?.limit) search.set("limit", String(params.limit));
+  if (params?.offset) search.set("offset", String(params.offset));
+}
+
+function queryString(search: URLSearchParams): string {
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
 async function request<T>(path: string, options?: RequestOptions): Promise<T> {
   const { direct, timeoutMs, ...fetchOptions } = options ?? {};
   const base = direct && getDirectApiBase() ? getDirectApiBase()! : getApiBase();
@@ -476,8 +491,11 @@ export const api = {
       timeoutMs: 300_000,
     }),
 
-  listRoadmapGenerations: () =>
-    request<RoadmapGenerationSummary[]>("/curriculum/generations"),
+  listRoadmapGenerations: (params?: PaginationParams) => {
+    const search = new URLSearchParams();
+    setPagination(search, params);
+    return request<RoadmapGenerationSummary[]>(`/curriculum/generations${queryString(search)}`);
+  },
 
   getRoadmapGeneration: (id: string) =>
     request<RoadmapGenerationSummary & { curriculum: GeneratedRoadmap["curriculum"] }>(
@@ -487,7 +505,11 @@ export const api = {
   deleteRoadmapGeneration: (id: string) =>
     request<void>(`/curriculum/generations/${id}`, { method: "DELETE" }),
 
-  getTracks: () => request<Track[]>("/tracks"),
+  getTracks: (params?: PaginationParams) => {
+    const search = new URLSearchParams();
+    setPagination(search, params);
+    return request<Track[]>(`/tracks${queryString(search)}`);
+  },
   getTrack: (id: string) => request<Track>(`/tracks/${id}`),
   createTrack: (data: {
     slug: string;
@@ -517,14 +539,17 @@ export const api = {
       timeoutMs: 300_000,
     }),
 
-  getCatalogTracks: (params?: { q?: string; featured?: boolean; sort?: "ranking" | "stars" | "new"; limit?: number }) => {
+  getCatalogTracks: (params?: {
+    q?: string;
+    featured?: boolean;
+    sort?: "ranking" | "stars" | "new";
+  } & PaginationParams) => {
     const search = new URLSearchParams();
     if (params?.q) search.set("q", params.q);
     if (params?.featured) search.set("featured", "true");
     if (params?.sort) search.set("sort", params.sort);
-    if (params?.limit) search.set("limit", String(params.limit));
-    const qs = search.toString();
-    return request<CatalogTrack[]>(`/catalog/tracks${qs ? `?${qs}` : ""}`);
+    setPagination(search, params);
+    return request<CatalogTrack[]>(`/catalog/tracks${queryString(search)}`);
   },
   getCatalogTrack: (id: string) => request<CatalogTrackDetail>(`/catalog/tracks/${id}`),
   starCatalogTrack: (id: string) =>
@@ -541,12 +566,28 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ rating, note }),
     }),
-  getCatalogCollections: () => request<CatalogCollection[]>("/catalog/collections"),
+  getCatalogCollections: (params?: PaginationParams & { trackLimit?: number; trackOffset?: number }) => {
+    const search = new URLSearchParams();
+    setPagination(search, params);
+    if (params?.trackLimit) search.set("track_limit", String(params.trackLimit));
+    if (params?.trackOffset) search.set("track_offset", String(params.trackOffset));
+    return request<CatalogCollection[]>(`/catalog/collections${queryString(search)}`);
+  },
   getCreatorProfile: (id: string) => request<CreatorProfile>(`/catalog/creators/${id}`),
-  getLeaderboards: () => request<Leaderboards>("/catalog/leaderboards"),
+  getLeaderboards: (params?: { trackLimit?: number; trackOffset?: number; creatorLimit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.trackLimit) search.set("track_limit", String(params.trackLimit));
+    if (params?.trackOffset) search.set("track_offset", String(params.trackOffset));
+    if (params?.creatorLimit) search.set("creator_limit", String(params.creatorLimit));
+    return request<Leaderboards>(`/catalog/leaderboards${queryString(search)}`);
+  },
 
-  getMaterials: (trackId?: string) =>
-    request<Material[]>(trackId ? `/materials?track_id=${trackId}` : "/materials"),
+  getMaterials: (trackId?: string, params?: PaginationParams) => {
+    const search = new URLSearchParams();
+    if (trackId) search.set("track_id", trackId);
+    setPagination(search, params);
+    return request<Material[]>(`/materials${queryString(search)}`);
+  },
   getMaterial: (id: string) => request<Material>(`/materials/${id}`),
   createMaterial: (data: {
     track_id: string;
@@ -577,8 +618,12 @@ export const api = {
   ) => request<Material>(`/materials/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteMaterial: (id: string) => request<void>(`/materials/${id}`, { method: "DELETE" }),
 
-  getCards: (trackId?: string) =>
-    request<CardDetail[]>(trackId ? `/cards?track_id=${trackId}` : "/cards"),
+  getCards: (trackId?: string, params?: PaginationParams) => {
+    const search = new URLSearchParams();
+    if (trackId) search.set("track_id", trackId);
+    setPagination(search, params);
+    return request<CardDetail[]>(`/cards${queryString(search)}`);
+  },
   getCard: (id: string) => request<CardDetail>(`/cards/${id}`),
 
   getDailyQueue: () => request<DailyQueue>("/queue/daily"),
@@ -630,16 +675,24 @@ export const api = {
   },
 
   getAIStatus: () => request<{ enabled: boolean; provider: string; model: string }>("/chat/status"),
-  listConversations: () =>
-    request<{ id: string; title: string; created_at: string; updated_at: string; message_count: number }[]>(
-      "/chat/conversations"
-    ),
+  listConversations: (params?: PaginationParams) => {
+    const search = new URLSearchParams();
+    setPagination(search, params);
+    return request<{ id: string; title: string; created_at: string; updated_at: string; message_count: number }[]>(
+      `/chat/conversations${queryString(search)}`
+    );
+  },
   createConversation: (title?: string) =>
     request<Conversation>("/chat/conversations", {
       method: "POST",
       body: JSON.stringify({ title }),
     }),
-  getConversation: (id: string) => request<Conversation>(`/chat/conversations/${id}`),
+  getConversation: (id: string, params?: { messageLimit?: number; messageOffset?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.messageLimit) search.set("message_limit", String(params.messageLimit));
+    if (params?.messageOffset) search.set("message_offset", String(params.messageOffset));
+    return request<Conversation>(`/chat/conversations/${id}${queryString(search)}`);
+  },
   deleteConversation: (id: string) =>
     request<void>(`/chat/conversations/${id}`, { method: "DELETE" }),
   sendMessage: (convId: string, content: string) =>
@@ -673,13 +726,19 @@ export const api = {
       { method: "POST" }
     ),
 
-  getRecentSessions: (limit = 20) => request<StudySession[]>(`/sessions/recent?limit=${limit}`),
+  getRecentSessions: (limit = 20, offset = 0) =>
+    request<StudySession[]>(`/sessions/recent?limit=${limit}&offset=${offset}`),
 
   getKnowledgeGraph: (slug: string) => request<KnowledgeGraph>(`/knowledge-graph/track/${slug}`),
 
-  getLeeches: (limit = 20) => request<GraphNode[]>(`/knowledge-graph/leeches?limit=${limit}`),
+  getLeeches: (limit = 20, offset = 0) =>
+    request<GraphNode[]>(`/knowledge-graph/leeches?limit=${limit}&offset=${offset}`),
 
-  listOrganizations: () => request<Organization[]>(`/organizations`),
+  listOrganizations: (params?: PaginationParams) => {
+    const search = new URLSearchParams();
+    setPagination(search, params);
+    return request<Organization[]>(`/organizations${queryString(search)}`);
+  },
 
   createOrganization: (data: { name: string; slug: string; description?: string }) =>
     request<Organization>("/organizations", { method: "POST", body: JSON.stringify(data) }),

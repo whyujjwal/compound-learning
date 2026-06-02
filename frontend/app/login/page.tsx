@@ -187,8 +187,16 @@ export default function LoginPage() {
         <ThemeToggle />
       </div>
       <div className="login-card">
-        <p className="login-eyebrow">Compound</p>
+        <div className="login-brand">
+          <span className="appbar-brand-mark" aria-hidden>
+            <span />
+            <span />
+            <span />
+          </span>
+          <p className="login-eyebrow">compound</p>
+        </div>
         <h1 className="login-title">Sign in</h1>
+        <p className="login-sub">Turn small study blocks into layered, compounding mastery.</p>
         <Suspense fallback={null}>
           <LoginForm />
         </Suspense>

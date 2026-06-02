@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -71,7 +71,8 @@ def track_knowledge_graph(
 
 @router.get("/leeches", response_model=list[GraphNode])
 def list_leeches(
-    limit: int = 20,
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[GraphNode]:
@@ -80,7 +81,8 @@ def list_leeches(
         .options(joinedload(Card.material))
         .filter(Card.user_id == user.id, Card.lapses >= LEECH_LAPSES)
         .order_by(Card.lapses.desc())
-        .limit(min(limit, 50))
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [

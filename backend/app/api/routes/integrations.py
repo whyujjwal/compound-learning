@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -40,11 +40,12 @@ def lti_launch(payload: dict[str, Any]) -> dict[str, str]:
 
 @router.get("/xapi/statements")
 def xapi_statements(
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
-    return list_statements(db, user.id, limit=limit)
+    return list_statements(db, user.id, limit=limit, offset=offset)
 
 
 @router.post("/anki/import")

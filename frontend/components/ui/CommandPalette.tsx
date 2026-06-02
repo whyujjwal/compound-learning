@@ -12,7 +12,6 @@ export function CommandPalette({
   tracks,
   onPushMore,
   onRefreshNudge,
-  onTogglePanel,
   onStartFirstBlock,
 }: {
   open: boolean;
@@ -20,7 +19,6 @@ export function CommandPalette({
   tracks: Track[];
   onPushMore?: (slug: string) => void;
   onRefreshNudge?: () => void;
-  onTogglePanel?: () => void;
   onStartFirstBlock?: () => void;
 }) {
   const router = useRouter();
@@ -89,21 +87,48 @@ export function CommandPalette({
             <span className="cmdk-item-icon">◐</span>
             Today
           </Command.Item>
+          <Command.Item value="learn library roadmap curriculum" onSelect={() => go("/curriculum")}>
+            <span className="cmdk-item-icon">▦</span>
+            Learn
+          </Command.Item>
+          <Command.Item value="explore catalog public roadmaps" onSelect={() => go("/explore")}>
+            <span className="cmdk-item-icon">◎</span>
+            Explore
+          </Command.Item>
+          <Command.Item value="week schedule calendar" onSelect={() => go("/schedule")}>
+            <span className="cmdk-item-icon">▣</span>
+            Week
+          </Command.Item>
           <Command.Item value="coach" onSelect={() => go("/coach")}>
             <span className="cmdk-item-icon">◇</span>
             Coach
           </Command.Item>
-          <Command.Item value="stats" onSelect={() => go("/stats")}>
-            <span className="cmdk-item-icon">▤</span>
-            Stats
-          </Command.Item>
-          <Command.Item value="roadmap" onSelect={() => go("/curriculum")}>
-            <span className="cmdk-item-icon">▦</span>
-            Roadmap
-          </Command.Item>
           <Command.Item value="build roadmap ai generate" onSelect={() => go("/curriculum/build")}>
             <span className="cmdk-item-icon">✦</span>
             Build roadmap with AI
+          </Command.Item>
+        </Command.Group>
+
+        <Command.Group heading="Manage">
+          <Command.Item value="stats analytics progress" onSelect={() => go("/stats")}>
+            <span className="cmdk-item-icon">▤</span>
+            Stats
+          </Command.Item>
+          <Command.Item value="materials resources" onSelect={() => go("/materials")}>
+            <span className="cmdk-item-icon">≡</span>
+            Materials
+          </Command.Item>
+          <Command.Item value="cards reviews fsrs" onSelect={() => go("/cards")}>
+            <span className="cmdk-item-icon">□</span>
+            Cards
+          </Command.Item>
+          <Command.Item value="track admin tracks" onSelect={() => go("/tracks")}>
+            <span className="cmdk-item-icon">◫</span>
+            Track admin
+          </Command.Item>
+          <Command.Item value="curriculum editor edit" onSelect={() => go("/curriculum/edit")}>
+            <span className="cmdk-item-icon">✎</span>
+            Editor
           </Command.Item>
           <Command.Item value="settings" onSelect={() => go("/settings")}>
             <span className="cmdk-item-icon">⚙</span>
@@ -154,12 +179,6 @@ export function CommandPalette({
             <Command.Item value="refresh nudge" onSelect={() => act(onRefreshNudge)}>
               <span className="cmdk-item-icon">↺</span>
               Refresh today&apos;s nudge
-            </Command.Item>
-          )}
-          {onTogglePanel && (
-            <Command.Item value="toggle panel" onSelect={() => act(onTogglePanel)}>
-              <span className="cmdk-item-icon">▭</span>
-              Toggle context panel
             </Command.Item>
           )}
           {tracks.map((t) =>

@@ -233,174 +233,145 @@ export default function SchedulePage() {
 
       {message && <p className="week-canvas-message">{message}</p>}
 
-      <div className="week-canvas-layout">
-        <section className="week-board" aria-label="Editable weekly schedule">
-          {DAYS.map((day) => (
-            <article key={day.key} className="week-day-column">
-              <header className="week-day-head">
-                <div>
-                  <span className="week-day-short">{day.short}</span>
-                  <h2>{day.label}</h2>
-                </div>
-                <button type="button" className="week-icon-btn" onClick={() => addBlock(day.key)}>
-                  +
-                </button>
-              </header>
+      <section className="week-dock" aria-label="Create track">
+        <form onSubmit={createTrack} className="week-track-form week-track-form-inline">
+          <label>
+            <span>New track</span>
+            <input
+              className="v2-input"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Product Engineering"
+              required
+            />
+          </label>
+          <label>
+            <span>Description</span>
+            <input
+              className="v2-input"
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              placeholder="Outcome or roadmap theme"
+            />
+          </label>
+          <div className="week-color-row" role="radiogroup" aria-label="Track color">
+            {COLORS.map((color) => (
+              <button
+                key={color}
+                type="button"
+                className={`week-color${newColor === color ? " active" : ""}`}
+                style={{ background: color }}
+                onClick={() => setNewColor(color)}
+                aria-label={color}
+              />
+            ))}
+          </div>
+          <button type="submit" className="v2-btn primary" disabled={creatingTrack}>
+            {creatingTrack ? "Creating..." : "Create"}
+          </button>
+        </form>
+      </section>
 
-              <div className="week-block-list">
-                {loading ? (
-                  <p className="week-empty">Loading...</p>
-                ) : schedule[day.key].length === 0 ? (
-                  <button type="button" className="week-empty add" onClick={() => addBlock(day.key)}>
-                    Add block
-                  </button>
-                ) : (
-                  schedule[day.key].map((block, index) => {
-                    const accent =
-                      block.track === "review"
-                        ? "#94a3b8"
-                        : trackAccent(block.track, tracksBySlug[block.track]?.color);
-                    return (
-                      <div
-                        key={`${day.key}-${index}-${block.track}`}
-                        className="week-block"
-                        style={{ ["--track-color" as string]: accent }}
-                      >
-                        <div className="week-block-top">
-                          <span className="week-block-number">{index + 1}</span>
-                          <select
-                            value={block.track}
-                            onChange={(e) => updateBlock(day.key, index, { track: e.target.value })}
-                          >
-                            {tracks.map((track) => (
-                              <option key={track.id} value={track.slug}>
-                                {track.name}
-                              </option>
-                            ))}
-                            <option value="review">Review pass</option>
-                          </select>
-                        </div>
-                        <div className="week-block-bottom">
-                          <label>
-                            <span>Minutes</span>
-                            <input
-                              type="number"
-                              min={5}
-                              max={480}
-                              step={5}
-                              value={block.minutes ?? 45}
-                              onChange={(e) =>
-                                updateBlock(day.key, index, { minutes: Number(e.target.value) })
-                              }
-                            />
-                          </label>
-                          <div className="week-block-tools">
-                            <button
-                              type="button"
-                              className="week-icon-btn"
-                              onClick={() => moveBlock(day.key, index, -1)}
-                              disabled={index === 0}
-                              title="Move earlier"
-                            >
-                              ^
-                            </button>
-                            <button
-                              type="button"
-                              className="week-icon-btn"
-                              onClick={() => moveBlock(day.key, index, 1)}
-                              disabled={index === schedule[day.key].length - 1}
-                              title="Move later"
-                            >
-                              v
-                            </button>
-                            <button
-                              type="button"
-                              className="week-icon-btn danger"
-                              onClick={() => removeBlock(day.key, index)}
-                              title="Remove"
-                            >
-                              x
-                            </button>
-                          </div>
-                        </div>
-                        <p className="week-block-caption">
-                          {labelForTrack(block.track, tracksBySlug)}
-                        </p>
-                      </div>
-                    );
-                  })
-                )}
+      <section className="week-board" aria-label="Editable weekly schedule">
+        {DAYS.map((day) => (
+          <article key={day.key} className="week-day-column">
+            <header className="week-day-head">
+              <div>
+                <span className="week-day-short">{day.short}</span>
+                <h2>{day.label}</h2>
               </div>
-            </article>
-          ))}
-        </section>
-
-        <aside className="week-track-panel">
-          <section className="week-panel-section">
-            <h2>Create a track</h2>
-            <form onSubmit={createTrack} className="week-track-form">
-              <label>
-                <span>Name</span>
-                <input
-                  className="v2-input"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Product Engineering"
-                  required
-                />
-              </label>
-              <label>
-                <span>Description</span>
-                <textarea
-                  className="v2-input"
-                  rows={3}
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                  placeholder="The focus, outcome, or roadmap theme."
-                />
-              </label>
-              <div className="week-color-row" role="radiogroup" aria-label="Track color">
-                {COLORS.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    className={`week-color${newColor === color ? " active" : ""}`}
-                    style={{ background: color }}
-                    onClick={() => setNewColor(color)}
-                    aria-label={color}
-                  />
-                ))}
-              </div>
-              <button type="submit" className="v2-btn primary" disabled={creatingTrack}>
-                {creatingTrack ? "Creating..." : "Create track"}
+              <button type="button" className="week-icon-btn" onClick={() => addBlock(day.key)}>
+                +
               </button>
-            </form>
-          </section>
+            </header>
 
-          <section className="week-panel-section">
-            <h2>Tracks</h2>
-            {tracks.length === 0 ? (
-              <p className="week-panel-empty">
-                Start from your own track, generate a roadmap, or import the four examples.
-              </p>
-            ) : (
-              <div className="week-track-list">
-                {tracks.map((track) => (
-                  <Link
-                    key={track.id}
-                    href={`/track/${track.slug}`}
-                    className="week-track-pill"
-                    style={{ ["--track-color" as string]: trackAccent(track.slug, track.color) }}
-                  >
-                    <span aria-hidden />
-                    {track.name}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
-        </aside>
-      </div>
+            <div className="week-block-list">
+              {loading ? (
+                <p className="week-empty">Loading...</p>
+              ) : schedule[day.key].length === 0 ? (
+                <button type="button" className="week-empty add" onClick={() => addBlock(day.key)}>
+                  Add block
+                </button>
+              ) : (
+                schedule[day.key].map((block, index) => {
+                  const accent =
+                    block.track === "review"
+                      ? "#94a3b8"
+                      : trackAccent(block.track, tracksBySlug[block.track]?.color);
+                  return (
+                    <div
+                      key={`${day.key}-${index}-${block.track}`}
+                      className="week-block"
+                      style={{ ["--track-color" as string]: accent }}
+                    >
+                      <div className="week-block-top">
+                        <span className="week-block-number">{index + 1}</span>
+                        <select
+                          value={block.track}
+                          onChange={(e) => updateBlock(day.key, index, { track: e.target.value })}
+                        >
+                          {tracks.map((track) => (
+                            <option key={track.id} value={track.slug}>
+                              {track.name}
+                            </option>
+                          ))}
+                          <option value="review">Review pass</option>
+                        </select>
+                      </div>
+                      <div className="week-block-bottom">
+                        <label>
+                          <span>Minutes</span>
+                          <input
+                            type="number"
+                            min={5}
+                            max={480}
+                            step={5}
+                            value={block.minutes ?? 45}
+                            onChange={(e) =>
+                              updateBlock(day.key, index, { minutes: Number(e.target.value) })
+                            }
+                          />
+                        </label>
+                        <div className="week-block-tools">
+                          <button
+                            type="button"
+                            className="week-icon-btn"
+                            onClick={() => moveBlock(day.key, index, -1)}
+                            disabled={index === 0}
+                            title="Move earlier"
+                          >
+                            ^
+                          </button>
+                          <button
+                            type="button"
+                            className="week-icon-btn"
+                            onClick={() => moveBlock(day.key, index, 1)}
+                            disabled={index === schedule[day.key].length - 1}
+                            title="Move later"
+                          >
+                            v
+                          </button>
+                          <button
+                            type="button"
+                            className="week-icon-btn danger"
+                            onClick={() => removeBlock(day.key, index)}
+                            title="Remove"
+                          >
+                            x
+                          </button>
+                        </div>
+                      </div>
+                      <p className="week-block-caption">
+                        {labelForTrack(block.track, tracksBySlug)}
+                      </p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </article>
+        ))}
+      </section>
     </div>
   );
 }

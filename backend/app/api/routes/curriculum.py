@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -414,6 +414,8 @@ def generate_curriculum_roadmap(
 
 @router.get("/generations", response_model=list[RoadmapGenerationSummary])
 def list_roadmap_generations(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[RoadmapGenerationSummary]:
@@ -421,7 +423,8 @@ def list_roadmap_generations(
         db.query(RoadmapGeneration)
         .filter(RoadmapGeneration.user_id == user.id)
         .order_by(RoadmapGeneration.created_at.desc())
-        .limit(50)
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return [
