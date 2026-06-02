@@ -1356,29 +1356,12 @@ select.v2-input {
   box-shadow: 0 16px 30px -24px rgba(0, 0, 0, 0.9);
 }
 
-.block-row::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: var(--s-3);
-  bottom: var(--s-3);
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--track-color);
-  opacity: 0.9;
-  transition: top var(--dur) var(--ease-out), bottom var(--dur) var(--ease-out);
-}
-
-.block-row:hover::before { top: var(--s-2); bottom: var(--s-2); }
-
 .block-row.empty { opacity: 0.55; }
 
 .block-row.done {
   opacity: 0.72;
   border-color: rgba(52, 211, 153, 0.2);
 }
-
-.block-row.done::before { background: #34d399; }
 
 .block-row-check {
   color: #34d399;
@@ -3626,7 +3609,6 @@ select.v2-input {
   border: 1px solid var(--hairline);
   border-radius: var(--r-md);
   background: var(--surface-1);
-  border-left: 3px solid var(--track-color, var(--accent));
 }
 
 .block-preview-head {
@@ -3810,10 +3792,6 @@ select.v2-input {
     grid-template-columns: minmax(0, 1fr);
     padding: var(--s-3) var(--s-4);
     gap: var(--s-3);
-  }
-  .block-row::before {
-    top: var(--s-3);
-    bottom: var(--s-3);
   }
   .block-row-meta {
     flex-wrap: wrap;
