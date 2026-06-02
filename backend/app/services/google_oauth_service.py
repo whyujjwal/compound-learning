@@ -25,11 +25,16 @@ _SCOPES = "openid email profile"
 _CURRICULUM = Path(__file__).resolve().parents[3] / "docs" / "curriculum.json"
 
 
+# Production default — must match Google Cloud Console redirect URI exactly.
+_DEFAULT_OAUTH_CALLBACK = (
+    "https://compound-api-778177955406.asia-south1.run.app/api/auth/google/callback"
+)
+
+
 def google_redirect_uri() -> str:
-    """OAuth callback — use the web app origin so Google redirects through Next.js /api proxy."""
     if settings.google_redirect_uri:
         return settings.google_redirect_uri
-    return f"{settings.frontend_url.rstrip('/')}/api/auth/google/callback"
+    return _DEFAULT_OAUTH_CALLBACK
 
 
 def google_auth_enabled() -> bool:

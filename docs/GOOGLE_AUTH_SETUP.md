@@ -23,7 +23,13 @@ Add **both** (exact match required):
 | Environment | Redirect URI |
 |-------------|----------------|
 | Local | `http://localhost:8000/api/auth/google/callback` |
-| Production | `https://compound-api-778177955406.asia-south1.run.app/api/auth/google/callback` |
+| Production (required) | `https://compound-api-778177955406.asia-south1.run.app/api/auth/google/callback` |
+
+Optional (only if you change `GOOGLE_REDIRECT_URI` to the web proxy):
+
+| Environment | Redirect URI |
+|-------------|----------------|
+| Production (web proxy) | `https://compound-web-y2mihra7pa-el.a.run.app/api/auth/google/callback` |
 
 5. Copy **Client ID** and **Client secret**.
 
