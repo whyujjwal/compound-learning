@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { AUTH_COOKIE, expectedToken } from "@/lib/auth";
 
-const PUBLIC_PATHS = new Set(["/login"]);
+const PUBLIC_PATHS = new Set(["/login", "/login/callback"]);
 
 function looksLikeJwt(token: string): boolean {
   return token.split(".").length === 3;

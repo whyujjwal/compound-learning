@@ -1,9 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes import (
     auth,
@@ -21,10 +23,9 @@ from app.api.routes import (
     tracks,
     user,
 )
-from app.auth import auth_enabled, verify_token
 from app.config import settings
 from app.database import Base, SessionLocal, engine
-from app.services.auth_service import decode_access_token
+from app.services.auth_service import auth_enabled, decode_access_token, verify_legacy_token
 from app.services.bootstrap import bootstrap
 from app.services.cors_helpers import cors_middleware_kwargs
 
@@ -53,13 +54,21 @@ app = FastAPI(title="Compound Learning Platform", version="2.0.0", lifespan=life
 
 app.add_middleware(CORSMiddleware, **cors_middleware_kwargs())
 
-_PUBLIC_PATHS = {"/health", "/api/auth/login", "/api/auth/register", "/api/integrations/lti/config"}
+_PUBLIC_PATHS = {
+    "/health",
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/google",
+    "/api/auth/google/callback",
+    "/api/auth/google/status",
+    "/api/integrations/lti/config",
+}
 
 
 def _token_valid(token: str | None) -> bool:
     if not token:
         return False
-    if verify_token(token):
+    if verify_legacy_token(token):
         return True
     return decode_access_token(token) is not None
 
@@ -86,6 +95,9 @@ async def require_auth(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Let FastAPI/Starlette HTTP errors (401/404/409/...) pass through unchanged.
+    if isinstance(exc, (HTTPException, StarletteHTTPException)):
+        return await http_exception_handler(request, exc)
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 

@@ -253,7 +253,35 @@ export type User = {
   paused_tracks: string[];
   milestone_title: string | null;
   milestone_date: string | null;
+  learning_goals: string | null;
+  onboarded: boolean;
   created_at: string;
+};
+
+export type GeneratedRoadmap = {
+  curriculum: {
+    version?: string;
+    tracks: {
+      slug: string;
+      name: string;
+      description: string | null;
+      color: string;
+      cognitive_multiplier: number;
+      materials: {
+        title: string;
+        url?: string | null;
+        block_label?: string | null;
+        type?: string | null;
+        estimated_minutes: number;
+        priority_percent: number;
+        sequence: number;
+        notes?: string | null;
+      }[];
+    }[];
+    weekly_schedule: Record<string, { block: number; track: string }[]>;
+  };
+  applied: boolean;
+  stats: Record<string, number> | null;
 };
 
 export const api = {
@@ -268,9 +296,23 @@ export const api = {
         | "display_name"
         | "milestone_title"
         | "milestone_date"
+        | "learning_goals"
+        | "onboarded"
       >
     >
   ) => request<User>("/user/me", { method: "PATCH", body: JSON.stringify(data) }),
+
+  generateRoadmap: (data: {
+    goals: string;
+    weekly_hours?: number;
+    level?: string;
+    apply?: boolean;
+    replace?: boolean;
+  }) =>
+    request<GeneratedRoadmap>("/curriculum/generate", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   getTracks: () => request<Track[]>("/tracks"),
   getTrack: (id: string) => request<Track>(`/tracks/${id}`),
@@ -350,6 +392,11 @@ export const api = {
   getTodaySchedule: () =>
     request<{ block: number; track: string; track_name: string | null }[]>("/curriculum/schedule/today"),
   importCurriculum: () => request<Record<string, number>>("/curriculum/import/default", { method: "POST" }),
+  importCurriculumInline: (data: GeneratedRoadmap["curriculum"], replace = false) =>
+    request<Record<string, number>>("/curriculum/import", {
+      method: "POST",
+      body: JSON.stringify({ data, replace }),
+    }),
   getTrackProgress: (slug: string) => request<TrackProgress>(`/tracks/slug/${slug}/progress`),
   getExtraQueue: (trackSlug: string, count = 5, excludeCardIds: string[] = []) => {
     const params = new URLSearchParams({ track: trackSlug, count: String(count) });
@@ -418,10 +465,14 @@ export const api = {
       body: JSON.stringify({ email, password, display_name }),
     }),
 
+  getGoogleAuthStatus: () => request<{ enabled: boolean }>("/auth/google/status"),
+
   loginWithEmail: (email: string, password: string) =>
     request<AuthResponse>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      // Omit email entirely when blank so the backend falls back to the
+      // shared workspace password (an empty string fails EmailStr validation).
+      body: JSON.stringify(email ? { email, password } : { password }),
     }),
 };
 

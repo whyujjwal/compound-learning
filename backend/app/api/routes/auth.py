@@ -1,23 +1,77 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.auth import auth_enabled, make_token, verify_password as verify_legacy_password
 from app.database import get_db
 from app.models.user import User
 from app.schemas.auth import AuthResponse, LoginRequest, RegisterRequest
-from app.services.auth_service import authenticate_user, create_access_token, hash_password
+from app.services.auth_service import (
+    auth_enabled,
+    authenticate_user,
+    create_access_token,
+    hash_password,
+    make_legacy_token,
+    verify_legacy_password,
+)
 from app.services.bootstrap import get_default_user, seed_default_organization
-from app.services.curriculum_loader import import_curriculum, load_file
-from pathlib import Path
-
-_CURRICULUM = Path(__file__).resolve().parents[4] / "docs" / "curriculum.json"
-
+from app.services.google_oauth_service import (
+    authorization_url,
+    exchange_code,
+    frontend_callback_url,
+    google_auth_enabled,
+    issue_token_for_user,
+    parse_oauth_state,
+    upsert_google_user,
+)
 router = APIRouter(tags=["auth"])
 
 
 class LegacyLoginRequest(BaseModel):
     password: str
+
+
+class GoogleAuthStatus(BaseModel):
+    enabled: bool
+
+
+@router.get("/auth/google/status", response_model=GoogleAuthStatus)
+def google_status() -> GoogleAuthStatus:
+    return GoogleAuthStatus(enabled=google_auth_enabled())
+
+
+@router.get("/auth/google")
+def google_login(next: str = Query("/", alias="next")) -> RedirectResponse:
+    if not google_auth_enabled():
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+    safe_next = next if next.startswith("/") else "/"
+    return RedirectResponse(url=authorization_url(safe_next), status_code=302)
+
+
+@router.get("/auth/google/callback")
+async def google_callback(
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    if error:
+        raise HTTPException(status_code=400, detail=f"Google sign-in failed: {error}")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing code or state from Google")
+    if not google_auth_enabled():
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+
+    try:
+        next_path = parse_oauth_state(state)
+        profile = await exchange_code(code)
+        user = upsert_google_user(db, profile)
+        db.commit()
+        token = issue_token_for_user(user)
+        return RedirectResponse(url=frontend_callback_url(token, next_path), status_code=302)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/auth/register", response_model=AuthResponse)
@@ -40,8 +94,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthRes
         db.add(user)
     db.flush()
     seed_default_organization(db, user)
-    if _CURRICULUM.exists():
-        import_curriculum(db, user, load_file(_CURRICULUM), prune_orphans=False)
+    # New users start with an empty library and build their own personalized
+    # roadmap via /curriculum/build (the onboarding flow). No bundled import.
     db.commit()
     token = create_access_token(user.id, user.email)
     return AuthResponse(
@@ -75,7 +129,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> AuthResponse:
     user = get_default_user(db)
     return AuthResponse(
         auth_required=True,
-        token=make_token(),
+        token=make_legacy_token(),
         user_id=str(user.id),
         email=user.email,
     )

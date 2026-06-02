@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     jwt_secret: str = "compound-dev-secret-change-in-production"
     jwt_expire_hours: int = 168
 
+    # Google OAuth (Sign in with Google)
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+    frontend_url: str = "http://localhost:3000"
+
     @property
     def ai_enabled(self) -> bool:
         if self.ai_provider == "anthropic":
