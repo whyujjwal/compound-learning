@@ -38,6 +38,7 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI_SECRET: ${{ secrets.GOOGLE_REDIRECT_URI }}
           BACKEND_URL_SECRET: ${{ secrets.BACKEND_URL }}
           FRONTEND_URL_SECRET: ${{ secrets.FRONTEND_URL }}
         run: |
@@ -57,7 +58,11 @@ jobs:
               WEB_ORIGIN="https://compound-web-778177955406.asia-south1.run.app"
             fi
           fi
-          GOOGLE_REDIRECT="${WEB_ORIGIN}/api/auth/google/callback"
+          if [ -n "$GOOGLE_REDIRECT_URI_SECRET" ]; then
+            GOOGLE_REDIRECT="${GOOGLE_REDIRECT_URI_SECRET%/}"
+          else
+            GOOGLE_REDIRECT="https://compound-api-778177955406.asia-south1.run.app/api/auth/google/callback"
+          fi
           gcloud run deploy compound-api \
             --image=asia-south1-docker.pkg.dev/${GCP_PROJECT_ID}/compound/api:latest \
             --platform=managed \
@@ -111,5 +116,5 @@ jobs:
           fi
           gcloud run services update compound-api \
             --region=asia-south1 \
-            --update-env-vars="^@^CORS_ORIGINS=${WEB_ORIGIN},http://localhost:3000@FRONTEND_URL=${WEB_ORIGIN}@GOOGLE_REDIRECT_URI=${WEB_ORIGIN}/api/auth/google/callback" \
+            --update-env-vars="^@^CORS_ORIGINS=${WEB_ORIGIN},http://localhost:3000@FRONTEND_URL=${WEB_ORIGIN}" \
             --project=${GCP_PROJECT_ID}

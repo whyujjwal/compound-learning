@@ -59,8 +59,12 @@ Add GitHub repository secrets:
 
 The deploy workflow sets:
 
-- `GOOGLE_REDIRECT_URI` → `{backend_url}/api/auth/google/callback`
+- `GOOGLE_REDIRECT_URI` → from `GOOGLE_REDIRECT_URI` GitHub secret (must match Google Console **exactly**)
 - `FRONTEND_URL` → Cloud Run web URL (same step that updates CORS)
+
+Default production redirect URI (if secret unset):
+
+`https://compound-api-778177955406.asia-south1.run.app/api/auth/google/callback`
 
 Run migration on deploy (Alembic `0004_google_oauth` adds `users.google_sub`).
 
