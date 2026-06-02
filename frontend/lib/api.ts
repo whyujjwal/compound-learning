@@ -8,6 +8,26 @@ export function getApiBase(): string {
 
 const API_BASE = getApiBase();
 
+function errorMessageFromBody(raw: string, fallback: string): string {
+  if (!raw) return fallback;
+  try {
+    const body = JSON.parse(raw) as { detail?: unknown };
+    if (typeof body.detail === "string") return body.detail;
+    if (Array.isArray(body.detail)) {
+      return body.detail
+        .map((item) =>
+          typeof item === "object" && item && "msg" in item
+            ? String((item as { msg: unknown }).msg)
+            : String(item)
+        )
+        .join("; ");
+    }
+    return JSON.stringify(body);
+  } catch {
+    return raw;
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = typeof window !== "undefined" ? getAuthToken() : null;
   const res = await fetch(`${API_BASE}${path}`, {
@@ -26,15 +46,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       window.location.href = "/login";
       throw new Error("Session expired — please sign in again");
     }
-    let message = res.statusText;
-    try {
-      const body = await res.json();
-      message = body.detail ?? JSON.stringify(body);
-    } catch {
-      const text = await res.text();
-      if (text) message = text;
-    }
-    throw new Error(typeof message === "string" ? message : JSON.stringify(message));
+    const raw = await res.text();
+    throw new Error(errorMessageFromBody(raw, res.statusText));
   }
   if (res.status === 204) return undefined as T;
   return res.json();
