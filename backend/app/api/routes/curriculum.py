@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -10,6 +11,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.card import Card
 from app.models.material import StudyMaterial
+from app.models.roadmap_generation import RoadmapGeneration
 from app.models.track import Track
 from app.models.user import User
 from app.schemas.curriculum import (
@@ -24,6 +26,7 @@ from app.services.curriculum_loader import import_curriculum, load_file
 from app.services.mastery import is_mastered
 from app.services.roadmap_generator import RoadmapError, generate_roadmap
 from app.services.weekly_schedule import (
+    invalidate_schedule_cache,
     schedule_for_user,
     today_block_items,
 )
@@ -50,6 +53,31 @@ def get_today_schedule(
     user: User = Depends(get_current_user),
 ) -> list[BlockScheduleItem]:
     return today_block_items(user)
+
+
+@router.put("/schedule", response_model=WeeklySchedule)
+def set_weekly_schedule(
+    payload: WeeklySchedule,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> WeeklySchedule:
+    """Persist a learner-built weekly schedule. Each day is an ordered list of
+    blocks ({block, track, minutes?}); the daily queue and HEFT planner read it
+    directly, so the learner has full control over which tracks run on which
+    days, in what order, and for how long."""
+    user.weekly_schedule = payload.model_dump()
+    db.commit()
+    db.refresh(user)
+    invalidate_schedule_cache()
+    return payload
+
+
+@router.get("/examples")
+def get_example_curriculum() -> dict[str, Any]:
+    """Return the bundled four-track curriculum as optional importable examples."""
+    if not DEFAULT_PATH.exists():
+        raise HTTPException(status_code=404, detail=f"Example curriculum not found at {DEFAULT_PATH}")
+    return load_file(DEFAULT_PATH)
 
 
 @router.post("/reschedule", response_model=RescheduleResponse)
@@ -211,11 +239,30 @@ def import_default(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict[str, int]:
-    """Import the bundled curriculum at docs/curriculum.json."""
+    """Import the bundled curriculum at docs/curriculum.json.
+
+    Kept for compatibility; in-product this is presented as importing examples.
+    """
     if not DEFAULT_PATH.exists():
         raise HTTPException(status_code=404, detail=f"Default curriculum not found at {DEFAULT_PATH}")
     data = load_file(DEFAULT_PATH)
     return import_curriculum(db, user, data, prune_orphans=prune)
+
+
+@router.post("/import/examples", response_model=dict[str, int])
+def import_examples(
+    prune: bool = False,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, int]:
+    """Import the bundled four-track curriculum as examples for this learner."""
+    if not DEFAULT_PATH.exists():
+        raise HTTPException(status_code=404, detail=f"Example curriculum not found at {DEFAULT_PATH}")
+    data = load_file(DEFAULT_PATH)
+    stats = import_curriculum(db, user, data, prune_orphans=prune, set_schedule=True)
+    user.onboarded = True
+    db.commit()
+    return stats
 
 
 @router.post("/import/path", response_model=dict[str, int])
@@ -256,6 +303,51 @@ class GenerateRoadmapResponse(BaseModel):
     curriculum: dict[str, Any]
     applied: bool
     stats: dict[str, int] | None = None
+    generation_id: UUID | None = None
+
+
+class RoadmapGenerationSummary(BaseModel):
+    id: UUID
+    title: str
+    goals: str
+    weekly_hours: int
+    level: str | None
+    track_count: int
+    applied: bool
+    created_at: datetime
+
+
+class RoadmapGenerationDetail(RoadmapGenerationSummary):
+    curriculum: dict[str, Any]
+
+
+def _roadmap_title(goals: str) -> str:
+    line = goals.strip().split("\n", 1)[0].strip()
+    return (line[:197] + "…") if len(line) > 200 else line or "Untitled roadmap"
+
+
+def _save_generation(
+    db: Session,
+    user: User,
+    *,
+    goals: str,
+    weekly_hours: int,
+    level: str | None,
+    curriculum: dict[str, Any],
+    applied: bool,
+) -> RoadmapGeneration:
+    row = RoadmapGeneration(
+        user_id=user.id,
+        goals=goals,
+        weekly_hours=weekly_hours,
+        level=level,
+        title=_roadmap_title(goals),
+        curriculum=curriculum,
+        applied=applied,
+    )
+    db.add(row)
+    db.flush()
+    return row
 
 
 @router.post("/generate", response_model=GenerateRoadmapResponse)
@@ -269,6 +361,9 @@ def generate_curriculum_roadmap(
     When ``apply`` is true the roadmap is imported immediately (and the user's
     weekly schedule + goals are saved). When ``replace`` is also true, existing
     materials in matching tracks are pruned so the new roadmap is authoritative.
+
+    Every successful generation is saved to history for future reference, even
+    when ``apply`` is false.
     """
     try:
         curriculum = generate_roadmap(
@@ -278,14 +373,105 @@ def generate_curriculum_roadmap(
         raise HTTPException(status_code=503, detail=str(e))
 
     if not payload.apply:
-        return GenerateRoadmapResponse(curriculum=curriculum, applied=False)
+        saved = _save_generation(
+            db,
+            user,
+            goals=payload.goals,
+            weekly_hours=payload.weekly_hours,
+            level=payload.level,
+            curriculum=curriculum,
+            applied=False,
+        )
+        db.commit()
+        return GenerateRoadmapResponse(
+            curriculum=curriculum, applied=False, generation_id=saved.id
+        )
 
     stats = import_curriculum(
         db, user, curriculum, prune_orphans=payload.replace, set_schedule=True
     )
     user.learning_goals = payload.goals[:2000]
     user.onboarded = True
+    saved = _save_generation(
+        db,
+        user,
+        goals=payload.goals,
+        weekly_hours=payload.weekly_hours,
+        level=payload.level,
+        curriculum=curriculum,
+        applied=True,
+    )
     db.commit()
-    return GenerateRoadmapResponse(curriculum=curriculum, applied=True, stats=stats)
+    return GenerateRoadmapResponse(
+        curriculum=curriculum, applied=True, stats=stats, generation_id=saved.id
+    )
 
 
+@router.get("/generations", response_model=list[RoadmapGenerationSummary])
+def list_roadmap_generations(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[RoadmapGenerationSummary]:
+    rows = (
+        db.query(RoadmapGeneration)
+        .filter(RoadmapGeneration.user_id == user.id)
+        .order_by(RoadmapGeneration.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [
+        RoadmapGenerationSummary(
+            id=r.id,
+            title=r.title,
+            goals=r.goals,
+            weekly_hours=r.weekly_hours,
+            level=r.level,
+            track_count=len((r.curriculum or {}).get("tracks") or []),
+            applied=r.applied,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+@router.get("/generations/{generation_id}", response_model=RoadmapGenerationDetail)
+def get_roadmap_generation(
+    generation_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RoadmapGenerationDetail:
+    row = (
+        db.query(RoadmapGeneration)
+        .filter(RoadmapGeneration.id == generation_id, RoadmapGeneration.user_id == user.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Roadmap not found")
+    return RoadmapGenerationDetail(
+        id=row.id,
+        title=row.title,
+        goals=row.goals,
+        weekly_hours=row.weekly_hours,
+        level=row.level,
+        track_count=len((row.curriculum or {}).get("tracks") or []),
+        applied=row.applied,
+        created_at=row.created_at,
+        curriculum=row.curriculum,
+    )
+
+
+@router.delete("/generations/{generation_id}", status_code=204)
+def delete_roadmap_generation(
+    generation_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> None:
+    row = (
+        db.query(RoadmapGeneration)
+        .filter(RoadmapGeneration.id == generation_id, RoadmapGeneration.user_id == user.id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Roadmap not found")
+    db.delete(row)
+    db.commit()

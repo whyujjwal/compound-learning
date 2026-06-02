@@ -35,6 +35,10 @@ _FALLBACK_TEMPLATE: dict[int, list[str]] = {
 }
 
 
+def empty_weekly_schedule() -> WeeklySchedule:
+    return WeeklySchedule.model_validate({day: [] for day in DAY_KEYS})
+
+
 @lru_cache(maxsize=1)
 def load_weekly_schedule_model() -> WeeklySchedule | None:
     if not DEFAULT_PATH.exists():
@@ -47,23 +51,38 @@ def load_weekly_schedule_model() -> WeeklySchedule | None:
 
 
 def schedule_for_user(user: User | None) -> WeeklySchedule | None:
-    """Prefer the user's personalized schedule, else the bundled/default one."""
+    """Prefer the user's personalized schedule.
+
+    Logged-in learners start from a blank canvas, so no per-user schedule means
+    an empty week. The bundled four-track schedule is only used when imported as
+    examples or in non-user fallback paths.
+    """
     if user is not None and getattr(user, "weekly_schedule", None):
         try:
             return WeeklySchedule.model_validate(user.weekly_schedule)
         except Exception:
             pass
+    if user is not None:
+        return empty_weekly_schedule()
     return load_weekly_schedule_model()
 
 
 def track_slugs_for_weekday(weekday: int, user: User | None = None) -> list[str]:
     """Return ordered track slugs for a weekday (Mon=0 … Sun=6)."""
+    return [b.track for b in blocks_for_weekday(weekday, user)]
+
+
+def blocks_for_weekday(weekday: int, user: User | None = None) -> list[BlockScheduleItem]:
+    """Return ordered blocks for a weekday (Mon=0 … Sun=6), preserving per-block
+    minutes so the queue builder can honor learner-defined block lengths."""
     schedule = schedule_for_user(user)
     if schedule is None:
-        return _FALLBACK_TEMPLATE.get(weekday, [])
+        return [
+            BlockScheduleItem(block=i + 1, track=slug)
+            for i, slug in enumerate(_FALLBACK_TEMPLATE.get(weekday, []))
+        ]
     key = DAY_KEYS[weekday]
-    blocks = getattr(schedule, key, [])
-    return [b.track for b in blocks]
+    return list(getattr(schedule, key, []))
 
 
 def today_block_items(user: User | None = None) -> list[BlockScheduleItem]:

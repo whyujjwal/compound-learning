@@ -421,3 +421,77 @@ def test_generate_roadmap_applies_personalized_schedule(client, monkeypatch):
     me = client.get("/api/user/me").json()
     assert me["onboarded"] is True
     assert me["learning_goals"] == "Learn Rust deeply"
+
+
+def test_generate_roadmap_saves_history_without_apply(client, monkeypatch):
+    fake_curriculum = {
+        "version": "1.0",
+        "tracks": [
+            {
+                "slug": "go",
+                "name": "Go Programming",
+                "description": "Learn Go.",
+                "color": "#22c55e",
+                "cognitive_multiplier": 1.0,
+                "materials": [
+                    {
+                        "title": "Tour of Go",
+                        "url": "https://go.dev/tour/",
+                        "estimated_minutes": 30,
+                        "priority_percent": 5,
+                        "sequence": 1,
+                    }
+                ],
+            }
+        ],
+        "weekly_schedule": {d: [] for d in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
+    }
+    fake_curriculum["weekly_schedule"]["monday"] = [{"block": 1, "track": "go"}]
+    fake_curriculum["weekly_schedule"]["sunday"] = [{"block": 1, "track": "review"}]
+
+    monkeypatch.setattr(
+        "app.api.routes.curriculum.generate_roadmap",
+        lambda goals, weekly_hours=10, level=None: fake_curriculum,
+    )
+
+    res = client.post(
+        "/api/curriculum/generate",
+        json={"goals": "Learn Go for backend APIs", "weekly_hours": 6, "apply": False},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["applied"] is False
+    assert body["generation_id"]
+
+    history = client.get("/api/curriculum/generations").json()
+    assert len(history) == 1
+    assert history[0]["track_count"] == 1
+    assert history[0]["applied"] is False
+
+    detail = client.get(f"/api/curriculum/generations/{body['generation_id']}").json()
+    assert detail["curriculum"]["tracks"][0]["slug"] == "go"
+
+
+def test_generate_roadmap_chunked_fallback(client, monkeypatch):
+    """Truncated single-pass falls back to chunked generation."""
+    fake_curriculum = {
+        "version": "1.0",
+        "tracks": [{"slug": "ml", "name": "ML", "materials": [], "color": "#f00", "cognitive_multiplier": 1.0}],
+        "weekly_schedule": {d: [] for d in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
+    }
+
+    from app.services import roadmap_generator as rg
+
+    def fake_single(*args, **kwargs):
+        raise rg.RoadmapError("__truncated__")
+
+    monkeypatch.setattr(rg, "_generate_single_pass", fake_single)
+    monkeypatch.setattr(rg, "_generate_chunked", lambda *a, **k: fake_curriculum)
+    monkeypatch.setattr(rg, "_should_chunk_first", lambda goals: False)
+
+    res = client.post(
+        "/api/curriculum/generate",
+        json={"goals": "Learn ML basics", "weekly_hours": 5, "apply": False},
+    )
+    assert res.status_code == 200
+    assert res.json()["curriculum"]["tracks"][0]["slug"] == "ml"

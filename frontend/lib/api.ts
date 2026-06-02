@@ -6,8 +6,6 @@ export function getApiBase(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 }
 
-const API_BASE = getApiBase();
-
 function errorMessageFromBody(raw: string, fallback: string): string {
   if (!raw) return fallback;
   try {
@@ -28,16 +26,33 @@ function errorMessageFromBody(raw: string, fallback: string): string {
   }
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+/** Direct API URL for long-running browser calls (bypasses Next.js proxy). */
+function getDirectApiBase(): string | null {
+  if (typeof window === "undefined") return null;
+  const raw = process.env.NEXT_PUBLIC_API_URL;
+  if (!raw) return null;
+  return raw.replace(/\/$/, "");
+}
+
+type RequestOptions = RequestInit & {
+  /** Call NEXT_PUBLIC_API_URL directly (needed for 60s+ AI requests). */
+  direct?: boolean;
+  timeoutMs?: number;
+};
+
+async function request<T>(path: string, options?: RequestOptions): Promise<T> {
+  const { direct, timeoutMs, ...fetchOptions } = options ?? {};
+  const base = direct && getDirectApiBase() ? getDirectApiBase()! : getApiBase();
   const token = typeof window !== "undefined" ? getAuthToken() : null;
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
+  const res = await fetch(`${base}${path}`, {
+    ...fetchOptions,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
+      ...fetchOptions.headers,
     },
     cache: "no-store",
+    signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : fetchOptions.signal,
   });
   if (!res.ok) {
     if (res.status === 401 && typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
@@ -182,7 +197,7 @@ export type CurriculumOverview = {
   total_started: number;
   total_mastered: number;
   due_reviews: number;
-  weekly_schedule: Record<string, { block: number; track: string }[]> | null;
+  weekly_schedule: WeeklySchedule | null;
   today_blocks: { block: number; track: string; track_name: string | null }[];
   tracks: {
     id: string;
@@ -263,12 +278,31 @@ export type Stats = {
   }[];
 };
 
+export type ScheduleBlock = {
+  block: number;
+  track: string;
+  track_name?: string | null;
+  minutes?: number | null;
+};
+
+export type WeekdayKey =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export type WeeklySchedule = Record<WeekdayKey, ScheduleBlock[]>;
+
 export type User = {
   id: string;
   email: string;
   display_name: string | null;
   target_retention: number;
   daily_study_minutes: number;
+  daily_new_cards: number;
   paused_tracks: string[];
   milestone_title: string | null;
   milestone_date: string | null;
@@ -301,6 +335,18 @@ export type GeneratedRoadmap = {
   };
   applied: boolean;
   stats: Record<string, number> | null;
+  generation_id?: string | null;
+};
+
+export type RoadmapGenerationSummary = {
+  id: string;
+  title: string;
+  goals: string;
+  weekly_hours: number;
+  level: string | null;
+  track_count: number;
+  applied: boolean;
+  created_at: string;
 };
 
 export const api = {
@@ -311,6 +357,7 @@ export const api = {
         User,
         | "target_retention"
         | "daily_study_minutes"
+        | "daily_new_cards"
         | "paused_tracks"
         | "display_name"
         | "milestone_title"
@@ -318,7 +365,7 @@ export const api = {
         | "learning_goals"
         | "onboarded"
       >
-    >
+    > & { weekly_schedule?: WeeklySchedule }
   ) => request<User>("/user/me", { method: "PATCH", body: JSON.stringify(data) }),
 
   generateRoadmap: (data: {
@@ -331,7 +378,20 @@ export const api = {
     request<GeneratedRoadmap>("/curriculum/generate", {
       method: "POST",
       body: JSON.stringify(data),
+      direct: true,
+      timeoutMs: 300_000,
     }),
+
+  listRoadmapGenerations: () =>
+    request<RoadmapGenerationSummary[]>("/curriculum/generations"),
+
+  getRoadmapGeneration: (id: string) =>
+    request<RoadmapGenerationSummary & { curriculum: GeneratedRoadmap["curriculum"] }>(
+      `/curriculum/generations/${id}`
+    ),
+
+  deleteRoadmapGeneration: (id: string) =>
+    request<void>(`/curriculum/generations/${id}`, { method: "DELETE" }),
 
   getTracks: () => request<Track[]>("/tracks"),
   getTrack: (id: string) => request<Track>(`/tracks/${id}`),
@@ -361,6 +421,9 @@ export const api = {
     title: string;
     raw_content?: string;
     external_url?: string;
+    block_label?: string;
+    resource_type?: string;
+    sequence?: number;
     cognitive_cost_multiplier?: number;
     estimated_minutes?: number;
     priority_percent?: number;
@@ -372,6 +435,9 @@ export const api = {
       title: string;
       raw_content: string;
       external_url: string;
+      block_label: string;
+      resource_type: string;
+      sequence: number;
       cognitive_cost_multiplier: number;
       estimated_minutes: number;
       priority_percent: number;
@@ -407,9 +473,17 @@ export const api = {
     ),
 
   getCurriculumOverview: () => request<CurriculumOverview>("/curriculum/overview"),
-  getWeeklySchedule: () => request<Record<string, { block: number; track: string }[]>>("/curriculum/schedule"),
+  getWeeklySchedule: () => request<WeeklySchedule>("/curriculum/schedule"),
+  setWeeklySchedule: (schedule: WeeklySchedule) =>
+    request<WeeklySchedule>("/curriculum/schedule", {
+      method: "PUT",
+      body: JSON.stringify(schedule),
+    }),
   getTodaySchedule: () =>
     request<{ block: number; track: string; track_name: string | null }[]>("/curriculum/schedule/today"),
+  getExampleCurriculum: () => request<GeneratedRoadmap["curriculum"]>("/curriculum/examples"),
+  importExampleCurriculum: () =>
+    request<Record<string, number>>("/curriculum/import/examples", { method: "POST" }),
   importCurriculum: () => request<Record<string, number>>("/curriculum/import/default", { method: "POST" }),
   importCurriculumInline: (data: GeneratedRoadmap["curriculum"], replace = false) =>
     request<Record<string, number>>("/curriculum/import", {
@@ -545,6 +619,7 @@ export type GraphNode = {
   started: boolean;
   lapses: number;
   is_leech: boolean;
+  card_id: string | null;
 };
 
 export type KnowledgeGraph = {

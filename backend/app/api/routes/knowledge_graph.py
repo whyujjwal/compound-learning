@@ -55,6 +55,7 @@ def track_knowledge_graph(
                 started=bool(card and card.reps > 0),
                 lapses=card.lapses if card else 0,
                 is_leech=bool(card and card.lapses >= LEECH_LAPSES),
+                card_id=card.id if card else None,
             )
         )
         if m.prerequisite_material_id:
@@ -92,6 +93,7 @@ def list_leeches(
             started=c.reps > 0,
             lapses=c.lapses,
             is_leech=True,
+            card_id=c.id,
         )
         for c in cards
     ]

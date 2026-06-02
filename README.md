@@ -53,7 +53,7 @@ docker compose up --build
 - App → http://localhost:3000
 - API docs → http://localhost:8000/docs
 
-The database is seeded automatically with three system tracks (DSA, AI Math, System Design) and demo materials.
+The database is seeded automatically with four system tracks (DSA, AI Math, LLM & ML, System Design) and their full curricula.
 
 ---
 

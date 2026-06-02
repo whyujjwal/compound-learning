@@ -8,6 +8,8 @@ class BlockScheduleItem(BaseModel):
     block: int
     track: str
     track_name: str | None = None
+    # Per-block time budget in minutes. None = fall back to the user's daily block size.
+    minutes: int | None = None
 
 
 class WeeklySchedule(BaseModel):

@@ -18,6 +18,11 @@ class User(Base):
     google_sub: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     target_retention: Mapped[float] = mapped_column(Float, nullable=False, default=0.90)
     daily_study_minutes: Mapped[int] = mapped_column(nullable=False, default=120)
+    # Pace cap: max brand-new cards introduced per day across all blocks. Lets the
+    # learner dial intensity independently of time budget. 0 = unlimited (time-bound only).
+    daily_new_cards: Mapped[int] = mapped_column(
+        nullable=False, default=0, server_default="0"
+    )
     paused_tracks: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, default=list, server_default="{}"
     )

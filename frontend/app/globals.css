@@ -173,7 +173,6 @@ img, svg { display: block; max-width: 100%; }
   max-width: 360px;
   background: var(--surface-2);
   border: 1px solid var(--hairline-strong);
-  border-left: 3px solid var(--accent);
   border-radius: var(--r-sm);
   padding: 10px 32px 10px 14px;
   box-shadow: 0 12px 32px -8px var(--shadow-lg);
@@ -216,9 +215,9 @@ img, svg { display: block; max-width: 100%; }
 
 .toast-close:hover { color: var(--fg); background: var(--overlay-hover); }
 
-.toast-success { border-left-color: var(--ok); }
-.toast-warn { border-left-color: var(--warn); }
-.toast-error { border-left-color: var(--bad); }
+.toast-success { border-color: color-mix(in srgb, var(--ok) 45%, var(--hairline-strong)); }
+.toast-warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--hairline-strong)); }
+.toast-error { border-color: color-mix(in srgb, var(--bad) 45%, var(--hairline-strong)); }
 
 /* ── Skeleton ── */
 .skeleton {
@@ -1064,17 +1063,15 @@ select.v2-input {
 .v2-input:focus-visible { outline: none; }
 
 /* ────────────────────────────────────────────────────────────
-   Command palette
+   Command palette (cmdk v1: overlay + dialog + root)
    ──────────────────────────────────────────────────────────── */
-[cmdk-root].cmdk-shell {
+[cmdk-overlay] {
   position: fixed;
   inset: 0;
   z-index: 50;
-  display: grid;
-  place-items: start center;
-  padding-top: 12vh;
   background: var(--scrim-strong);
   backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   animation: cmdk-fade var(--dur) var(--ease-out);
 }
 
@@ -1084,8 +1081,15 @@ select.v2-input {
 }
 
 [cmdk-dialog] {
+  position: fixed;
+  top: 12vh;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  z-index: 51;
   width: min(640px, 92vw);
   background: var(--surface-1);
+  color: var(--fg);
   border: 1px solid var(--hairline-strong);
   border-radius: var(--r-md);
   box-shadow: 0 24px 70px -20px var(--shadow-xl);
@@ -1096,6 +1100,12 @@ select.v2-input {
 @keyframes cmdk-pop {
   from { opacity: 0; transform: translateY(-8px) scale(0.99); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+[cmdk-root].cmdk-shell {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
 }
 
 [cmdk-input] {
@@ -1149,8 +1159,12 @@ select.v2-input {
 }
 
 [cmdk-item][data-selected="true"] {
-  background: var(--surface-2);
+  background: var(--accent-soft);
   color: var(--fg);
+}
+
+[cmdk-item][data-selected="true"] .cmdk-item-icon {
+  color: var(--accent);
 }
 
 .cmdk-item-icon {
@@ -1563,8 +1577,6 @@ select.v2-input {
   line-height: 1.55;
   color: var(--fg);
   padding: var(--s-3) 0;
-  border-left: 2px solid var(--accent);
-  padding-left: var(--s-4);
 }
 
 .panel-nudge .panel-nudge-dismiss {
@@ -2677,15 +2689,6 @@ select.v2-input {
               transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
 }
 
-.roadmap-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(180px 100% at 0% 0%, color-mix(in srgb, var(--track-color) 10%, transparent), transparent 70%);
-  pointer-events: none;
-  opacity: 0.6;
-}
-
 .roadmap-card:hover {
   border-color: color-mix(in srgb, var(--track-color) 40%, var(--hairline-strong));
   background: var(--surface-2);
@@ -3227,14 +3230,8 @@ select.v2-input {
   border: 1px solid var(--hairline);
   border-radius: var(--r-md);
   padding: var(--s-4);
-  border-left: 3px solid var(--hairline);
 }
 
-.session-section-watch { border-left-color: var(--accent); }
-.session-section-do { border-left-color: #6b9fd4; }
-.session-section-deliverable { border-left-color: #7cb87a; }
-.session-section-recall,
-.session-section-recall-open { border-left-color: #c89b6b; }
 .session-section-muted { opacity: 0.72; }
 
 .session-section-label {
@@ -4018,8 +4015,10 @@ select.v2-input {
   .rating-btn { height: 52px; font-size: 12px; }
 
   /* ── Command palette ── */
-  [cmdk-root].cmdk-shell { padding-top: 8vh; }
-  [cmdk-dialog] { width: 96vw; }
+  [cmdk-dialog] {
+    top: 8vh;
+    width: 96vw;
+  }
   [cmdk-input] { font-size: 14px; padding: 0 var(--s-4); }
 }
 
@@ -4399,7 +4398,85 @@ select.v2-input {
 }
 
 /* ── Roadmap builder ─────────────────────────────────────── */
-.roadmap-build { max-width: 920px; }
+.roadmap-build { max-width: 1100px; }
+
+.roadmap-build-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--s-5);
+  align-items: start;
+}
+
+.roadmap-build-main { min-width: 0; }
+
+.roadmap-history {
+  position: sticky;
+  top: calc(var(--bar-h) + var(--s-4));
+  padding: var(--s-4);
+  max-height: calc(100vh - var(--bar-h) - var(--s-6));
+  overflow-y: auto;
+}
+
+.roadmap-history-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.roadmap-history-sub {
+  margin: 0 0 var(--s-3);
+  font-size: 12px;
+  color: var(--fg-mute);
+  line-height: 1.45;
+}
+
+.roadmap-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.roadmap-history-item {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hairline);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+
+.roadmap-history-item:hover,
+.roadmap-history-item.active {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--hairline-strong));
+  background: var(--surface-1);
+}
+
+.roadmap-history-item-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+
+.roadmap-history-item-meta {
+  display: block;
+  font-family: var(--font-mono-stack);
+  font-size: 10px;
+  color: var(--fg-mute);
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 960px) {
+  .roadmap-build-layout { grid-template-columns: 1fr; }
+  .roadmap-history { position: static; max-height: none; order: -1; }
+}
 
 .roadmap-form {
   display: flex;
@@ -4482,7 +4559,6 @@ select.v2-input {
 .roadmap-tracks { display: flex; flex-direction: column; gap: 14px; }
 .roadmap-track {
   padding: 16px 18px;
-  border-left: 3px solid var(--track-color, var(--accent));
 }
 .roadmap-track-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
 .roadmap-track-dot {

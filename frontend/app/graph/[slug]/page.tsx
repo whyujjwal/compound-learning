@@ -53,10 +53,14 @@ export default function KnowledgeGraphPage() {
       )}
 
       <div className="graph-grid">
-        {graph.nodes.map((node) => (
+        {graph.nodes.map((node) => {
+          const href = node.card_id
+            ? `/session/${node.card_id}`
+            : `/materials?track=${graph.track_slug}`;
+          return (
           <Link
             key={node.id}
-            href={`/materials?track=${graph.track_slug}`}
+            href={href}
             className={`graph-node${node.mastered ? " mastered" : ""}${node.is_leech ? " leech" : ""}`}
           >
             <span className="graph-node-seq">{node.sequence}</span>
@@ -66,7 +70,8 @@ export default function KnowledgeGraphPage() {
               {node.mastered ? "✓ mastered" : node.started ? "in progress" : "new"}
             </span>
           </Link>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ class GraphNode(BaseModel):
     started: bool
     lapses: int = 0
     is_leech: bool = False
+    card_id: UUID | None = None
 
 
 class GraphEdge(BaseModel):

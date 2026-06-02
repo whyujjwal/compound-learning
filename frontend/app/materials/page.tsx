@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useShell } from "@/components/ui/Shell";
 import { trackAccent } from "@/lib/trackColors";
+import { resolveTrackParam } from "@/lib/resolveTrack";
 import { api, type Material, type Track } from "@/lib/api";
 
 function MaterialsContent() {
@@ -13,7 +14,8 @@ function MaterialsContent() {
 
   const [tracks, setTracks] = useState<Track[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [trackId, setTrackId] = useState(preselected ?? "");
+  const [trackId, setTrackId] = useState("");
+  const [tracksReady, setTracksReady] = useState(false);
   const [editing, setEditing] = useState<Material | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -32,30 +34,46 @@ function MaterialsContent() {
     return () => setRightPanel(null);
   }, [setRightPanel]);
 
-  async function load() {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const t = await api.getTracks();
+        if (cancelled) return;
+        setTracks(t);
+        setTrackId(resolveTrackParam(t, preselected));
+        setTracksReady(true);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load tracks");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [preselected]);
+
+  useEffect(() => {
+    if (!tracksReady) return;
+    let cancelled = false;
     setLoading(true);
-    try {
-      const t = await api.getTracks();
-      setTracks(t);
-      const selected = trackId || preselected || t[0]?.id || "";
-      setTrackId(selected);
-      setMaterials(await api.getMaterials(selected || undefined));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!trackId) return;
-    api.getMaterials(trackId).then(setMaterials).catch(console.error);
-  }, [trackId]);
+    setError(null);
+    (async () => {
+      try {
+        const list = await api.getMaterials(trackId || undefined);
+        if (!cancelled) setMaterials(list);
+      } catch (e) {
+        if (!cancelled) {
+          setMaterials([]);
+          setError(e instanceof Error ? e.message : "Failed to load materials");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [trackId, tracksReady]);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
@@ -304,7 +322,9 @@ function MaterialsContent() {
       {loading ? (
         <p style={{ color: "var(--fg-mute)" }}>Loading materials…</p>
       ) : materials.length === 0 ? (
-        <p style={{ color: "var(--fg-mute)" }}>No materials in this track yet.</p>
+        <p style={{ color: "var(--fg-mute)" }}>
+          {trackId ? "No materials in this track yet." : "No materials yet."}
+        </p>
       ) : (
         <div>
           {materials.map((m) => {

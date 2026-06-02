@@ -18,7 +18,7 @@ from app.services.mastery import (
     is_critical_priority,
     prerequisites_met,
 )
-from app.services.weekly_schedule import track_slugs_for_weekday
+from app.services.weekly_schedule import blocks_for_weekday
 
 _SLOT_LABELS = {
     2: ["Morning", "Afternoon"],
@@ -211,13 +211,19 @@ def _pack_new_with_priority(
 
 def build_daily_queue(db: Session, user: User) -> DailyQueueResponse:
     now = datetime.now(UTC)
-    block_minutes = user.daily_study_minutes or DEFAULT_BLOCK_MINUTES
-    if block_minutes > 240:
-        block_minutes = block_minutes // 2
+    default_block_minutes = user.daily_study_minutes or DEFAULT_BLOCK_MINUTES
+    if default_block_minutes > 240:
+        default_block_minutes = default_block_minutes // 2
 
     weekday = now.weekday()
     paused = set(user.paused_tracks or [])
-    track_slugs = [s for s in track_slugs_for_weekday(weekday, user) if s not in paused]
+    day_blocks = [b for b in blocks_for_weekday(weekday, user) if b.track not in paused]
+    track_slugs = [b.track for b in day_blocks]
+
+    # Pace cap: maximum brand-new cards introduced today across all blocks.
+    # 0 means "no cap" (time-budget bound only).
+    new_card_budget = user.daily_new_cards or 0
+    new_cards_taken = 0
 
     tracks_by_slug: dict[str, Track] = {
         t.slug: t for t in db.query(Track).filter(Track.user_id == user.id).all()
@@ -228,7 +234,14 @@ def build_daily_queue(db: Session, user: User) -> DailyQueueResponse:
     seen_card_ids: set = set()
     total_slots = len(track_slugs)
 
-    for idx, slug in enumerate(track_slugs):
+    for idx, sched_block in enumerate(day_blocks):
+        slug = sched_block.track
+        # Per-block minutes override, else the user's daily block size.
+        block_minutes = (
+            sched_block.minutes
+            if sched_block.minutes and sched_block.minutes > 0
+            else default_block_minutes
+        )
         if slug == "review":
             reviews = _due_review_cards_all_tracks(
                 db, user, now, paused_slugs=paused, exclude_ids=seen_card_ids
@@ -277,10 +290,19 @@ def build_daily_queue(db: Session, user: User) -> DailyQueueResponse:
         review_minutes = sum(max(r.material.estimated_minutes or 20, 5) for r in reviews)
 
         remaining = max(block_minutes - review_minutes, 30)
-        new_pool = _eligible_new_cards(
-            db, user, track.id, limit=40, exclude_ids=seen_card_ids
+        # Respect the global daily new-card cap, if set.
+        new_limit = 40
+        if new_card_budget:
+            new_limit = max(new_card_budget - new_cards_taken, 0)
+        new_pool = (
+            _eligible_new_cards(db, user, track.id, limit=new_limit, exclude_ids=seen_card_ids)
+            if new_limit > 0
+            else []
         )
         new_cards, _deferred = _pack_new_with_priority(new_pool, remaining)
+        if new_card_budget:
+            new_cards = new_cards[: max(new_card_budget - new_cards_taken, 0)]
+        new_cards_taken += len(new_cards)
         new_minutes = sum(max(c.material.estimated_minutes or 20, 5) for c in new_cards)
 
         review_items = [_to_item(c, kind="review", now=now) for c in reviews]
@@ -313,7 +335,7 @@ def build_daily_queue(db: Session, user: User) -> DailyQueueResponse:
 
     return DailyQueueResponse(
         weekday=weekday,
-        block_minutes=block_minutes,
+        block_minutes=default_block_minutes,
         blocks=blocks,
         items=all_items,
         total_minutes=sum(b.planned_minutes for b in blocks),

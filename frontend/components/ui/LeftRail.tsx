@@ -13,6 +13,7 @@ const LIBRARY = [
 
 const FOOTER = [
   { href: "/curriculum/build", label: "Build roadmap", match: (p: string) => p.startsWith("/curriculum/build") },
+  { href: "/schedule", label: "My week", match: (p: string) => p.startsWith("/schedule") },
   { href: "/curriculum/edit", label: "Editor", match: (p: string) => p.startsWith("/curriculum/edit") },
   { href: "/team", label: "Team", match: (p: string) => p.startsWith("/team") },
   { href: "/settings", label: "Settings", match: (p: string) => p.startsWith("/settings") },
