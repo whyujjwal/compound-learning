@@ -107,5 +107,5 @@ jobs:
           fi
           gcloud run services update compound-api \
             --region=asia-south1 \
-            --update-env-vars="CORS_ORIGINS=${WEB_ORIGIN},http://localhost:3000,FRONTEND_URL=${WEB_ORIGIN},GOOGLE_REDIRECT_URI=${BACKEND_URL}/api/auth/google/callback" \
+            --update-env-vars="^@^CORS_ORIGINS=${WEB_ORIGIN},http://localhost:3000@FRONTEND_URL=${WEB_ORIGIN}@GOOGLE_REDIRECT_URI=${BACKEND_URL}/api/auth/google/callback" \
             --project=${GCP_PROJECT_ID}

@@ -59,8 +59,7 @@ function LoginForm() {
   }
 
   const isRegister = mode === "register";
-  const showGoogle = !isRegister;
-  const googleDisabled = googleStatus === "disabled" || googleStatus === "loading";
+  const googleDisabled = googleStatus === "disabled";
 
   return (
     <>
@@ -92,30 +91,28 @@ function LoginForm() {
       </div>
 
       <form className="login-form" onSubmit={handleSubmit}>
-        {showGoogle && (
-          <>
-            <button
-              type="button"
-              className="login-google-btn"
-              onClick={startGoogleLogin}
-              disabled={googleDisabled}
-              aria-busy={googleStatus === "loading"}
-            >
-              {googleStatus === "loading" ? (
-                <span className="login-google-loading" aria-hidden />
-              ) : (
-                <GoogleIcon />
-              )}
-              Continue with Google
-            </button>
-            {googleStatus === "unknown" && (
-              <p className="login-hint">Google sign-in may still work — try the button above.</p>
+        <>
+          <button
+            type="button"
+            className="login-google-btn"
+            onClick={startGoogleLogin}
+            disabled={googleDisabled}
+            aria-busy={googleStatus === "loading"}
+          >
+            {googleStatus === "loading" ? (
+              <span className="login-google-loading" aria-hidden />
+            ) : (
+              <GoogleIcon />
             )}
-            <p className="login-divider">
-              <span>or</span>
-            </p>
-          </>
-        )}
+            Continue with Google
+          </button>
+          {googleStatus === "unknown" && (
+            <p className="login-hint">Google sign-in may still work — try the button above.</p>
+          )}
+          <p className="login-divider">
+            <span>or</span>
+          </p>
+        </>
 
         {isRegister && (
           <>
