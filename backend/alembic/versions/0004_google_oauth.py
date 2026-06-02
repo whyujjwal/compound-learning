@@ -4,7 +4,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "0004_google_oauth"
-down_revision = "0004_user_roadmap"
+down_revision = "0003_block_sessions"
 branch_labels = None
 depends_on = None
 
