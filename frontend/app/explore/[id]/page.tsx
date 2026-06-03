@@ -137,7 +137,7 @@ export default function PublicTrackDetailPage() {
           <button type="button" className="v2-btn ghost" onClick={toggleStar} disabled={busy}>
             {track.is_starred ? "Starred" : "Star"}
           </button>
-          <Link href="/curriculum/build" className="v2-btn ghost">
+          <Link href="/library/new" className="v2-btn ghost">
             Remix
           </Link>
         </div>

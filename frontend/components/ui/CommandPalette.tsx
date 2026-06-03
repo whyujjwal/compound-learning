@@ -95,10 +95,6 @@ export function CommandPalette({
             <span className="cmdk-item-icon">◎</span>
             Explore
           </Command.Item>
-          <Command.Item value="week schedule calendar" onSelect={() => go("/schedule")}>
-            <span className="cmdk-item-icon">▣</span>
-            Week
-          </Command.Item>
           <Command.Item value="coach" onSelect={() => go("/coach")}>
             <span className="cmdk-item-icon">◇</span>
             Coach
@@ -141,7 +137,7 @@ export function CommandPalette({
                 value={`material ${m.title}`}
                 onSelect={() => {
                   if (m.external_url) window.open(m.external_url, "_blank", "noopener,noreferrer");
-                  else go(`/materials`);
+                  else go(`/library`);
                 }}
               >
                 <span className="cmdk-item-icon">·</span>

@@ -6,17 +6,10 @@ import { trackAccent } from "@/lib/trackColors";
 import type { Track, CurriculumOverview } from "@/lib/api";
 
 const PRIMARY = [
-  { href: "/", label: "Today", note: "Queue", match: (p: string) => p === "/" },
-  { href: "/library", label: "Library", note: "Syllabi", match: (p: string) => p.startsWith("/library") || p.startsWith("/track/") },
-  { href: "/explore", label: "Explore", note: "Catalog", match: (p: string) => p.startsWith("/explore") },
-  { href: "/coach", label: "Coach", note: "AI", match: (p: string) => p.startsWith("/coach") },
-  { href: "/progress", label: "Progress", note: "Stats", match: (p: string) => p.startsWith("/progress") || p.startsWith("/stats") },
-  { href: "/settings", label: "Settings", note: "Profile", match: (p: string) => p.startsWith("/settings") },
-];
-
-const SECONDARY = [
-  { href: "/library/new", label: "New syllabus", note: "Create", match: (p: string) => p.startsWith("/library/new") },
-  { href: "/schedule", label: "Week", note: "Plan", match: (p: string) => p.startsWith("/schedule") },
+  { href: "/", label: "Home", match: (p: string) => p === "/" },
+  { href: "/library", label: "Library", match: (p: string) => p.startsWith("/library") || p.startsWith("/track/") },
+  { href: "/explore", label: "Explore", match: (p: string) => p.startsWith("/explore") },
+  { href: "/profile", label: "Profile", match: (p: string) => p.startsWith("/profile") || p.startsWith("/settings") || p.startsWith("/progress") || p.startsWith("/stats") },
 ];
 
 export function LeftRail({
@@ -47,21 +40,6 @@ export function LeftRail({
             className={`rail-link${l.match(pathname) ? " active" : ""}`}
           >
             <span>{l.label}</span>
-            <span className="rail-link-note">{l.note}</span>
-          </Link>
-        ))}
-      </div>
-
-      <div className="rail-section" aria-label="Create and plan">
-        <div className="rail-label">Create</div>
-        {SECONDARY.map((l) => (
-          <Link
-            key={l.href}
-            href={l.href}
-            className={`rail-link${l.match(pathname) ? " active" : ""}`}
-          >
-            <span>{l.label}</span>
-            <span className="rail-link-note">{l.note}</span>
           </Link>
         ))}
       </div>

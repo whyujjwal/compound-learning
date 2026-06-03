@@ -21,7 +21,7 @@ export function EmptyLibrary({
           <Link href="/explore" className="v2-btn primary">
             Explore
           </Link>
-          <Link href="/curriculum/build" className="v2-btn ghost">
+          <Link href="/library/new" className="v2-btn ghost">
             Generate with AI
           </Link>
           <Link href="/library/new" className="v2-btn ghost">
