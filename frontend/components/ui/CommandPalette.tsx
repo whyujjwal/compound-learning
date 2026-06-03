@@ -95,7 +95,7 @@ export function CommandPalette({
             <span className="cmdk-item-icon">◎</span>
             Explore
           </Command.Item>
-          <Command.Item value="coach" onSelect={() => go("/coach")}>
+          <Command.Item value="coach ask ai" onSelect={() => go("/")}>
             <span className="cmdk-item-icon">◇</span>
             Coach
           </Command.Item>

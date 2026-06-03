@@ -4,19 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useShell } from "@/components/ui/Shell";
-import { RightPanel, PanelSection } from "@/components/ui/RightPanel";
-import { Heatmap } from "@/components/Heatmap";
 import { trackAccent } from "@/lib/trackColors";
-import { api, type BlockEntry, type CoachInsight, type QueueItem, type User } from "@/lib/api";
+import { api, type BlockEntry, type QueueItem } from "@/lib/api";
 import {
   countCompleted,
   getCompletedSlots,
   isBlockComplete,
 } from "@/lib/dailyProgress";
 import { getLocalDateKey } from "@/lib/time";
-
-const DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+import { HomeCoach } from "@/features/home/HomeCoach";
 
 function dateLabel(): { day: string; meta: string } {
   const d = new Date();
@@ -26,59 +22,18 @@ function dateLabel(): { day: string; meta: string } {
   };
 }
 
-export default function TodayPage() {
+export default function HomePage() {
   const shell = useShell();
   const router = useRouter();
-  const { queue, stats, tracks, activity, reloadQueue, setRightPanel, setActions } = shell;
+  const { queue, stats, tracks, setActions } = shell;
 
-  const [nudge, setNudge] = useState<CoachInsight | null>(null);
-  const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const [extraByTrack, setExtraByTrack] = useState<Record<string, QueueItem[]>>({});
-  const [pushingTrack, setPushingTrack] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
   const [completedSlots, setCompletedSlots] = useState<number[]>([]);
+  const [showSchedule, setShowSchedule] = useState(false);
 
   useEffect(() => {
-    api.getUser().then(setUser).catch(() => {});
     setCompletedSlots(getCompletedSlots());
   }, [queue, stats]);
-
-  const trackBySlug = useMemo(
-    () => Object.fromEntries(tracks.map((t) => [t.slug, t])),
-    [tracks]
-  );
-
-  // ── Nudge ────────────────────────────────────────────────
-  useEffect(() => {
-    const today = getLocalDateKey();
-    if (typeof window !== "undefined") {
-      if (window.localStorage.getItem("compound:nudge-dismiss") === today) {
-        setNudgeDismissed(true);
-        return;
-      }
-    }
-    let cancelled = false;
-    api
-      .getDailyInsight()
-      .then((n) => !cancelled && setNudge(n))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const dismissNudge = useCallback(() => {
-    const today = getLocalDateKey();
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("compound:nudge-dismiss", today);
-    }
-    setNudgeDismissed(true);
-  }, []);
-
-  const refreshNudge = useCallback(() => {
-    setNudgeDismissed(false);
-    api.getDailyInsight(true).then(setNudge).catch(() => {});
-  }, []);
 
   // ── Block actions ────────────────────────────────────────
   const startBlock = useCallback(
@@ -91,7 +46,6 @@ export default function TodayPage() {
   const pushMore = useCallback(
     async (slug: string) => {
       const block = queue?.blocks.find((b) => b.track_slug === slug);
-      setPushingTrack(slug);
       try {
         const already = new Set<string>();
         if (block) {
@@ -104,8 +58,8 @@ export default function TodayPage() {
           ...prev,
           [slug]: [...(prev[slug] ?? []), ...more],
         }));
-      } finally {
-        setPushingTrack(null);
+      } catch {
+        // tolerate failure
       }
     },
     [queue, extraByTrack]
@@ -114,7 +68,6 @@ export default function TodayPage() {
   // ── Expose actions to command palette ────────────────────
   useEffect(() => {
     setActions({
-      onRefreshNudge: refreshNudge,
       onPushMore: pushMore,
       onStartFirstBlock: () => {
         const block = queue?.blocks.find(
@@ -124,82 +77,7 @@ export default function TodayPage() {
       },
     });
     return () => setActions({});
-  }, [setActions, refreshNudge, pushMore, queue, startBlock]);
-
-  // ── Right panel content ──────────────────────────────────
-  useEffect(() => {
-    setRightPanel(
-      <RightPanel>
-        {!nudgeDismissed && nudge && nudge.content ? (
-          <PanelSection
-            label="Today's nudge"
-            action={
-              <button
-                type="button"
-                className="appbar-icon-btn"
-                onClick={refreshNudge}
-                aria-label="Refresh nudge"
-                title="Refresh"
-              >
-                ↺
-              </button>
-            }
-          >
-            <div className="panel-nudge">
-              {nudge.content}
-              <button
-                type="button"
-                className="panel-nudge-dismiss"
-                onClick={dismissNudge}
-              >
-                Dismiss for today ✕
-              </button>
-            </div>
-          </PanelSection>
-        ) : null}
-
-        {activity.length > 0 && (
-          <PanelSection label="Activity · last 16 weeks">
-            <div className="panel-heatmap-wrap">
-              <Heatmap data={activity} weeks={16} size={10} gap={3} />
-            </div>
-          </PanelSection>
-        )}
-
-        <PanelSection label="This week">
-          <ThisWeek tracks={trackBySlug} />
-        </PanelSection>
-
-        {stats && (
-          <PanelSection label="Progress">
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div className="stat">
-                <span className="stat-num">{stats.materials_started}</span>
-                <span className="stat-label">started</span>
-                <span className="stat-hint">
-                  of {stats.total_materials} · {stats.materials_mastered} mastered
-                </span>
-              </div>
-              <div className="stat">
-                <span className="stat-num">
-                  {Math.round((stats.retention_rate || 0) * 100)}%
-                </span>
-                <span className="stat-label">retention</span>
-                <span className="stat-hint">
-                  {stats.days_active_30d} active days / 30
-                </span>
-              </div>
-              <div className="stat">
-                <span className="stat-num">{stats.total_minutes_invested}</span>
-                <span className="stat-label">minutes invested</span>
-              </div>
-            </div>
-          </PanelSection>
-        )}
-      </RightPanel>
-    );
-    return () => setRightPanel(null);
-  }, [setRightPanel, nudge, nudgeDismissed, refreshNudge, dismissNudge, stats, trackBySlug, activity]);
+  }, [setActions, pushMore, queue, startBlock]);
 
   const date = dateLabel();
   const blocks = queue?.blocks ?? [];
@@ -209,13 +87,9 @@ export default function TodayPage() {
   const blocksDone = countCompleted(blocks.map((b) => b.slot));
   const firstOpenBlock = activeBlocks.find((b) => !isBlockComplete(b.slot)) ?? activeBlocks[0];
   const allBlocksDone = activeBlocks.length > 0 && blocksDone >= activeBlocks.length;
-  const minutesGoal = queue?.total_minutes ?? stats?.daily_goal_minutes ?? 120;
-  const minutesToday = stats?.minutes_today ?? 0;
-  const minutesPct = minutesGoal > 0 ? Math.min(100, Math.round((minutesToday / minutesGoal) * 100)) : 0;
   const autoStarted = useRef(false);
-  const [showSchedule, setShowSchedule] = useState(false);
 
-  // Once per day: open Today → land in practice immediately (zero decisions).
+  // Once per day: open Home → land in practice immediately.
   useEffect(() => {
     if (autoStarted.current || !queue || !firstOpenBlock || allBlocksDone) return;
     if (typeof window === "undefined") return;
@@ -230,182 +104,111 @@ export default function TodayPage() {
     startBlock(firstOpenBlock);
   }, [queue, firstOpenBlock, allBlocksDone, startBlock]);
 
-  return (
-    <>
-      <PracticeHero
-        date={date}
-        stats={stats}
-        nudge={!nudgeDismissed ? nudge : null}
-        blocksDone={blocksDone}
-        blocksTotal={activeBlocks.length}
-        allBlocksDone={allBlocksDone}
-        minutesToday={minutesToday}
-        minutesGoal={minutesGoal}
-        minutesPct={minutesPct}
-        learningFocus={user?.milestone_title}
-        onStart={() => firstOpenBlock && startBlock(firstOpenBlock)}
-        canStart={Boolean(firstOpenBlock)}
-      />
-
-      {firstOpenBlock && !allBlocksDone && (
-        <BlockChecklistPreview block={firstOpenBlock} onOpen={() => startBlock(firstOpenBlock)} />
-      )}
-
-      {blocks.length === 0 ? (
-        <div className="empty-today">
-          <h2 className="empty-today-title">Your canvas is empty.</h2>
-          <p className="empty-today-sub">
-            Create tracks from scratch, generate a personalized roadmap, or import
-            the four example tracks when you want a starting point.
-          </p>
-          <Link href="/curriculum/build" className="v2-btn primary" style={{ marginTop: 12 }}>
-            Build my roadmap →
-          </Link>
-          <p className="empty-today-sub" style={{ marginTop: 10, fontSize: 12 }}>
-            Or open the <Link href="/curriculum">roadmap canvas</Link> and{" "}
-            <Link href="/schedule">weekly calendar</Link>.
-          </p>
-        </div>
-      ) : (
-        <>
-          <button
-            type="button"
-            className="today-schedule-toggle"
-            onClick={() => setShowSchedule((v) => !v)}
-            aria-expanded={showSchedule}
-          >
-            {showSchedule ? "Hide schedule" : `Today's schedule · ${activeBlocks.length} block${activeBlocks.length === 1 ? "" : "s"}`}
-            <span aria-hidden>{showSchedule ? " ▾" : " ▸"}</span>
-          </button>
-          {showSchedule && (
-            <div className="today-blocks">
-              {blocks.map((block) => (
-                <BlockRow
-                  key={block.slot}
-                  block={block}
-                  extra={extraByTrack[block.track_slug] ?? []}
-                  completed={completedSlots.includes(block.slot)}
-                  onStart={() => startBlock(block)}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </>
-  );
-}
-
-function PracticeHero({
-  date,
-  stats,
-  nudge,
-  blocksDone,
-  blocksTotal,
-  allBlocksDone,
-  minutesToday,
-  minutesGoal,
-  minutesPct,
-  learningFocus,
-  onStart,
-  canStart,
-}: {
-  date: { day: string; meta: string };
-  stats: import("@/lib/api").Stats | null;
-  nudge: CoachInsight | null;
-  blocksDone: number;
-  blocksTotal: number;
-  allBlocksDone: boolean;
-  minutesToday: number;
-  minutesGoal: number;
-  minutesPct: number;
-  learningFocus?: string | null;
-  onStart: () => void;
-  canStart: boolean;
-}) {
   const streak = stats?.current_streak ?? 0;
-  const reviewsToday = stats?.reviews_today ?? 0;
-  const mastered = stats?.materials_mastered ?? 0;
-  const totalMaterials = stats?.total_materials ?? 0;
-
-  const ctaLabel = allBlocksDone
-    ? "Review completed blocks"
-    : blocksDone > 0
-      ? "Continue block"
-      : "Open block";
+  const blocksDoneDisplay = `${blocksDone}/${activeBlocks.length || "—"}`;
+  const retention = stats ? Math.round((stats.retention_rate || 0) * 100) : null;
 
   return (
-    <section className="practice-hero">
-      <div className="practice-hero-top">
-        <div>
-          <p className="practice-hero-eyebrow">Lifelong learning · {date.meta}</p>
-          <h1 className="practice-hero-title">{date.day}</h1>
-          {learningFocus && (
-            <p className="practice-hero-focus">Exploring · {learningFocus}</p>
-          )}
-          {nudge?.content && <p className="practice-hero-nudge">{nudge.content}</p>}
+    <div className="home-page">
+      {/* ── Section 1: Header ───────────────────────────── */}
+      <header className="home-header">
+        <div className="home-header-main">
+          <p className="home-eyebrow">{date.meta}</p>
+          <h1 className="home-title">{date.day}</h1>
         </div>
-        <div className="practice-hero-streak" title={`Best rhythm: ${stats?.longest_streak ?? 0} days`}>
-          <span className="practice-hero-streak-num">{streak}</span>
-          <span className="practice-hero-streak-label">day rhythm</span>
-        </div>
-      </div>
-
-      <div className="practice-hero-progress">
-        <div className="practice-hero-ring" style={{ ["--pct" as string]: String(minutesPct) }}>
-          <svg viewBox="0 0 36 36" aria-hidden>
-            <path
-              className="practice-hero-ring-bg"
-              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-            />
-            <path
-              className="practice-hero-ring-fill"
-              strokeDasharray={`${minutesPct}, 100`}
-              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-            />
-          </svg>
-          <span className="practice-hero-ring-label">{minutesPct}%</span>
-        </div>
-
-        <div className="practice-hero-stats">
-          <div className="practice-hero-stat">
-            <strong>{minutesToday}</strong>
-            <span>min today</span>
-            <span className="muted">{minutesGoal}m planned</span>
+        <div className="home-header-strip">
+          <div className="home-strip-stat" title="Current streak">
+            <strong>{streak}</strong>
+            <span>day streak</span>
           </div>
-          <div className="practice-hero-stat">
-            <strong>{reviewsToday}</strong>
-            <span>reviews today</span>
-          </div>
-          <div className="practice-hero-stat">
-            <strong>{blocksDone}/{blocksTotal || "—"}</strong>
+          <div className="home-strip-sep" aria-hidden />
+          <div className="home-strip-stat" title="Blocks completed today">
+            <strong>{blocksDoneDisplay}</strong>
             <span>blocks today</span>
           </div>
-          {totalMaterials > 0 && (
-            <div className="practice-hero-stat">
-              <strong>{mastered}</strong>
-              <span>mastered</span>
-              <span className="muted">of {totalMaterials} total</span>
-            </div>
+          {retention !== null && (
+            <>
+              <div className="home-strip-sep" aria-hidden />
+              <div className="home-strip-stat" title="Overall retention rate">
+                <strong>{retention}%</strong>
+                <span>retention</span>
+              </div>
+            </>
           )}
+          <div className="home-strip-sep" aria-hidden />
+          <Link href="/profile" className="home-strip-link">
+            View profile →
+          </Link>
         </div>
-      </div>
+      </header>
 
-      <button
-        type="button"
-        className="v2-btn primary practice-hero-cta"
-        onClick={onStart}
-        disabled={!canStart}
-      >
-        {ctaLabel} <span aria-hidden>→</span>
-      </button>
+      {/* ── Section 2: Today's target ───────────────────── */}
+      <section className="home-target">
+        <h2 className="home-section-title">Today&apos;s target</h2>
 
-      <p className="practice-hero-foot">
-        Finish a track?{" "}
-        <Link href="/curriculum/edit">Add more to your library</Link>
-        {" "}— each small block compounds into the next.
-      </p>
-    </section>
+        {blocks.length === 0 ? (
+          <div className="empty-today">
+            <h3 className="empty-today-title">Your canvas is empty.</h3>
+            <p className="empty-today-sub">
+              Create tracks from scratch, generate a personalized roadmap, or import
+              example tracks to get started.
+            </p>
+            <Link href="/curriculum/build" className="v2-btn primary" style={{ marginTop: 12 }}>
+              Build my roadmap →
+            </Link>
+            <p className="empty-today-sub" style={{ marginTop: 10, fontSize: 12 }}>
+              Or open the <Link href="/curriculum">roadmap canvas</Link> and{" "}
+              <Link href="/schedule">weekly calendar</Link>.
+            </p>
+          </div>
+        ) : (
+          <>
+            {firstOpenBlock && !allBlocksDone && (
+              <BlockChecklistPreview
+                block={firstOpenBlock}
+                onOpen={() => startBlock(firstOpenBlock)}
+              />
+            )}
+
+            {allBlocksDone && (
+              <div className="home-all-done">
+                All {activeBlocks.length} block{activeBlocks.length === 1 ? "" : "s"} done for today.
+                Great work.
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="today-schedule-toggle"
+              onClick={() => setShowSchedule((v) => !v)}
+              aria-expanded={showSchedule}
+            >
+              {showSchedule
+                ? "Hide schedule"
+                : `Full schedule · ${activeBlocks.length} block${activeBlocks.length === 1 ? "" : "s"}`}
+              <span aria-hidden>{showSchedule ? " ▾" : " ▸"}</span>
+            </button>
+
+            {showSchedule && (
+              <div className="today-blocks">
+                {blocks.map((block) => (
+                  <BlockRow
+                    key={block.slot}
+                    block={block}
+                    extra={extraByTrack[block.track_slug] ?? []}
+                    completed={completedSlots.includes(block.slot)}
+                    onStart={() => startBlock(block)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* ── Section 3: AI Coach ─────────────────────────── */}
+      <HomeCoach />
+    </div>
   );
 }
 
@@ -506,42 +309,5 @@ function BlockRow({
         </button>
       </div>
     </article>
-  );
-}
-
-function ThisWeek({ tracks }: { tracks: Record<string, { name: string; slug: string; color: string }> }) {
-  const [schedule, setSchedule] = useState<Record<string, { block: number; track: string }[]> | null>(null);
-  useEffect(() => {
-    api.getWeeklySchedule().then(setSchedule).catch(() => {});
-  }, []);
-  const today = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
-  return (
-    <div className="week-list">
-      {DAY_ABBR.map((abbr, i) => {
-        const slugs = (schedule?.[DAY_KEYS[i]] ?? []).map((b) => b.track);
-        const isToday = i === today;
-        return (
-          <div key={abbr} className={`week-row${isToday ? " today" : ""}`}>
-            <span className="week-day">{abbr}</span>
-            <span className="week-tracks">
-              {slugs.map((slug) => {
-                const t = tracks[slug];
-                if (!t) return null;
-                return (
-                  <span key={slug} title={t.name}>
-                    <span
-                      className="week-dot"
-                      style={{ background: trackAccent(slug, t.color) }}
-                      aria-hidden
-                    />
-                    {t.name.split(" ").map((w) => w[0]).join("").slice(0, 3).toUpperCase()}
-                  </span>
-                );
-              })}
-            </span>
-          </div>
-        );
-      })}
-    </div>
   );
 }
