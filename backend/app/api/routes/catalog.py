@@ -121,6 +121,14 @@ class LeaderboardResponse(BaseModel):
     creators: list[CreatorProfileResponse]
 
 
+class ExplorePageResponse(BaseModel):
+    """Single payload for the Explore page (avoids multiple round-trips from the web app)."""
+
+    tracks: list[CatalogTrackResponse]
+    collections: list[CatalogCollectionResponse]
+    leaderboards: LeaderboardResponse
+
+
 def _unique_slug(db: Session, user: User, base: str) -> str:
     slug = base
     i = 2
@@ -170,6 +178,25 @@ def _catalog_response(db: Session, track: Track, user: User) -> CatalogTrackResp
         created_at=track.created_at,
         published_at=track.published_at,
     )
+
+
+@router.get("/explore", response_model=ExplorePageResponse)
+def get_explore_page(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ExplorePageResponse:
+    tracks = list_catalog_tracks(
+        q=None,
+        featured=False,
+        sort="ranking",
+        limit=100,
+        offset=0,
+        db=db,
+        user=user,
+    )
+    collections = list_collections(limit=12, offset=0, track_limit=8, track_offset=0, db=db, user=user)
+    leaderboards = get_leaderboards(track_limit=20, track_offset=0, creator_limit=10, db=db, user=user)
+    return ExplorePageResponse(tracks=tracks, collections=collections, leaderboards=leaderboards)
 
 
 @router.get("/tracks", response_model=list[CatalogTrackResponse])

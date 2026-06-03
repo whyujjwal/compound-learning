@@ -345,16 +345,22 @@ export default function SchedulePage() {
                     block.track === "review"
                       ? "#94a3b8"
                       : trackAccent(block.track, tracksBySlug[block.track]?.color);
+                  const trackLabel = labelForTrack(block.track, tracksBySlug);
                   return (
                     <div
                       key={`${day.key}-${index}-${block.track}`}
                       className="week-block"
                       style={{ ["--track-color" as string]: accent }}
                     >
-                      <div className="week-block-top">
-                        <span className="week-block-number">{index + 1}</span>
+                      <div className="week-block-head">
+                        <span className="week-block-number" aria-hidden>
+                          {index + 1}
+                        </span>
                         <select
+                          className="week-block-track"
                           value={block.track}
+                          title={trackLabel}
+                          aria-label={`Block ${index + 1} track`}
                           onChange={(e) => updateBlock(day.key, index, { track: e.target.value })}
                         >
                           {tracks.map((track) => (
@@ -364,30 +370,41 @@ export default function SchedulePage() {
                           ))}
                           <option value="review">Review pass</option>
                         </select>
+                        <button
+                          type="button"
+                          className="week-block-remove"
+                          onClick={() => removeBlock(day.key, index)}
+                          title={`Remove ${trackLabel}`}
+                          aria-label={`Remove ${trackLabel}`}
+                        >
+                          ×
+                        </button>
                       </div>
-                      <div className="week-block-bottom">
-                        <label>
-                          <span>Minutes</span>
+                      <div className="week-block-foot">
+                        <label className="week-block-minutes">
+                          <span className="week-block-minutes-label">Min</span>
                           <input
                             type="number"
                             min={5}
                             max={480}
                             step={5}
                             value={block.minutes ?? 45}
+                            aria-label={`Minutes for ${trackLabel}`}
                             onChange={(e) =>
                               updateBlock(day.key, index, { minutes: Number(e.target.value) })
                             }
                           />
                         </label>
-                        <div className="week-block-tools">
+                        <div className="week-block-reorder" role="group" aria-label="Reorder block">
                           <button
                             type="button"
                             className="week-icon-btn"
                             onClick={() => moveBlock(day.key, index, -1)}
                             disabled={index === 0}
                             title="Move earlier"
+                            aria-label="Move earlier"
                           >
-                            ^
+                            ↑
                           </button>
                           <button
                             type="button"
@@ -395,22 +412,12 @@ export default function SchedulePage() {
                             onClick={() => moveBlock(day.key, index, 1)}
                             disabled={index === schedule[day.key].length - 1}
                             title="Move later"
+                            aria-label="Move later"
                           >
-                            v
-                          </button>
-                          <button
-                            type="button"
-                            className="week-icon-btn danger"
-                            onClick={() => removeBlock(day.key, index)}
-                            title="Remove"
-                          >
-                            x
+                            ↓
                           </button>
                         </div>
                       </div>
-                      <p className="week-block-caption">
-                        {labelForTrack(block.track, tracksBySlug)}
-                      </p>
                     </div>
                   );
                 })
