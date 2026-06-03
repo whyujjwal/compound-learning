@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-
-export default function StatsRedirectPage() {
-  redirect("/progress");
+export default function Page() {
+  redirect("/profile");
 }
