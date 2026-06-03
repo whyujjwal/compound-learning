@@ -24,6 +24,7 @@ from app.api.routes import (
     tracks,
     user,
 )
+from app.domains.syllabus.router import router as syllabus_router
 import app.models  # noqa: F401 - register all SQLAlchemy models before create_all.
 from app.config import settings
 from app.database import Base, SessionLocal, engine
@@ -106,6 +107,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(tracks.router, prefix="/api")
+app.include_router(syllabus_router, prefix="/api")
 app.include_router(materials.router, prefix="/api")
 app.include_router(cards.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")

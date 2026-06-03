@@ -401,7 +401,7 @@ def optimize_fsrs(
 
 class TrackAIUpdateRequest(BaseModel):
     instruction: str = Field(min_length=3, max_length=4000)
-    apply: bool = True
+    apply: bool = False
 
 
 class TrackAIUpdateResponse(BaseModel):
@@ -454,6 +454,35 @@ def request_track_ai_update(
         )
 
     added = 0
+    if not payload.apply:
+        from app.domains.syllabus import proposals as proposal_service
+
+        proposal = proposal_service.create_ai_proposal(db, user, track.id, payload.instruction)
+        row = TrackAIUpdate(
+            track_id=track.id,
+            user_id=user.id,
+            instruction=payload.instruction,
+            status=proposal.status,
+            result={
+                "proposal_id": str(proposal.id),
+                "summary": proposal.summary,
+                "operation_count": len(proposal.operations),
+            },
+            error=proposal.error,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return TrackAIUpdateResponse(
+            id=row.id,
+            track_id=track.id,
+            status=row.status,
+            added_materials=0,
+            result=row.result,
+            error=row.error,
+            created_at=row.created_at,
+        )
+
     if payload.apply:
         next_sequence = max([m.sequence for m in materials], default=0) + 1
         for i, item in enumerate(result.get("materials") or []):

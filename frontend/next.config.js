@@ -19,6 +19,13 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      { source: "/curriculum", destination: "/library", permanent: false },
+      { source: "/track/:slug", destination: "/library/:slug", permanent: false },
+      { source: "/curriculum/edit", destination: "/library", permanent: false },
+    ];
+  },
 };
 
 module.exports = nextConfig;

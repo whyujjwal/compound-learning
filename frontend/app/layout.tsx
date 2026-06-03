@@ -3,6 +3,7 @@ import Script from "next/script";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/components/Toast";
 import { ShellGate } from "@/components/ui/ShellGate";
+import { QueryProvider } from "@/lib/query/client";
 import { sans, mono, serif } from "./fonts";
 import "./globals.css";
 
@@ -28,7 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script src="/theme-init.js" strategy="beforeInteractive" />
         <ThemeProvider>
           <ToastProvider>
-            <ShellGate>{children}</ShellGate>
+            <QueryProvider>
+              <ShellGate>{children}</ShellGate>
+            </QueryProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>

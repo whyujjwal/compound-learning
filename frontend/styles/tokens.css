@@ -1,0 +1,170 @@
+:root {
+  /* Background scale (near-black, slightly cool) */
+  --bg: #07070a;
+  --surface-1: #0e0e12;
+  --surface-2: #16161c;
+  --surface-3: #1f1f27;
+
+  /* Hairlines — never solid borders */
+  --hairline: rgba(255, 255, 255, 0.06);
+  --hairline-strong: rgba(255, 255, 255, 0.10);
+  --hairline-bold: rgba(255, 255, 255, 0.16);
+
+  /* Foreground scale */
+  --fg: #f0f0f2;
+  --fg-soft: #b0b0b6;
+  --fg-mute: #6c6c74;
+  --fg-faint: #4a4a52;
+
+  /* Singular brand accent (warm bronze) */
+  --accent: #c89b6b;
+  --accent-bright: #e6b787;
+  --accent-soft: rgba(200, 155, 107, 0.14);
+  --accent-glow: 0 0 0 1px rgba(200, 155, 107, 0.35),
+                 0 0 24px -4px rgba(200, 155, 107, 0.45);
+
+  /* Curated track palette */
+  --track-dsa: #f59e0b;
+  --track-math: #38bdf8;
+  --track-llm: #34d399;
+  --track-sd: #f472b6;
+  --track-review: #a78bfa;
+
+  /* Semantic */
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --info: #60a5fa;
+
+  /* Radii */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  /* Spatial — 4px grid */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 40px;
+  --s-8: 48px;
+
+  /* Typography */
+  --font-sans-stack: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  --font-mono-stack: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-serif-stack: var(--font-serif), "Iowan Old Style", "Source Serif 4", Georgia, serif;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-in-out: cubic-bezier(0.42, 0, 0.2, 1);
+  --dur-fast: 140ms;
+  --dur: 200ms;
+  --dur-slow: 360ms;
+
+  /* App shell metrics */
+  --bar-h: 52px;
+  --rail-w: 248px;
+  --panel-w: 340px;
+  --content-max: 1080px;
+
+  /* Theme composites (dark default) */
+  --ambient-bg:
+    radial-gradient(120% 90% at 80% -10%, rgba(200, 155, 107, 0.10), transparent 55%),
+    radial-gradient(90% 80% at 0% 100%, rgba(120, 110, 150, 0.06), transparent 60%);
+  --grain-opacity: 0.035;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.08);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.15);
+  --selection-bg: rgba(200, 155, 107, 0.3);
+  --selection-fg: #ffffff;
+  --overlay-hover: rgba(255, 255, 255, 0.04);
+  --overlay-hover-strong: rgba(255, 255, 255, 0.06);
+  --overlay-subtle: rgba(255, 255, 255, 0.03);
+  --overlay-muted: rgba(255, 255, 255, 0.08);
+  --overlay-faint: rgba(255, 255, 255, 0.05);
+  --appbar-bg: rgba(7, 7, 10, 0.82);
+  --shell-overlay-bg: rgba(12, 12, 16, 0.96);
+  --panel-overlay-bg: rgba(12, 12, 16, 0.97);
+  --scrim: rgba(0, 0, 0, 0.45);
+  --scrim-strong: rgba(0, 0, 0, 0.55);
+  --shadow-lg: rgba(0, 0, 0, 0.5);
+  --shadow-xl: rgba(0, 0, 0, 0.7);
+  --shadow-card: rgba(0, 0, 0, 0.9);
+  --code-inline-bg: rgba(255, 255, 255, 0.06);
+  --pre-bg: rgba(0, 0, 0, 0.35);
+  --inset-highlight: rgba(255, 255, 255, 0.03);
+  --inset-highlight-strong: rgba(255, 255, 255, 0.04);
+  --skeleton-from: rgba(255, 255, 255, 0.04);
+  --skeleton-mid: rgba(255, 255, 255, 0.10);
+  --heatmap-empty: rgba(255, 255, 255, 0.04);
+  --login-page-bg:
+    radial-gradient(70% 50% at 50% 0%, rgba(200, 155, 107, 0.18), transparent 65%),
+    radial-gradient(50% 40% at 100% 100%, rgba(120, 110, 150, 0.08), transparent 55%),
+    var(--bg);
+  --login-card-bg: linear-gradient(165deg, rgba(22, 22, 28, 0.96), rgba(14, 14, 18, 0.98));
+  --login-card-shadow: 0 48px 96px -48px rgba(0, 0, 0, 0.95);
+  --kbd-bg: rgba(0, 0, 0, 0.2);
+  --kbd-border: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="light"] {
+  --bg: #f6f3ed;
+  --surface-1: #fffdf9;
+  --surface-2: #f0ebe3;
+  --surface-3: #e5ded3;
+
+  --hairline: rgba(0, 0, 0, 0.07);
+  --hairline-strong: rgba(0, 0, 0, 0.11);
+  --hairline-bold: rgba(0, 0, 0, 0.16);
+
+  --fg: #1a1612;
+  --fg-soft: #4d4843;
+  --fg-mute: #7a736c;
+  --fg-faint: #a39b93;
+
+  --accent: #9a6b3a;
+  --accent-bright: #7d5528;
+  --accent-soft: rgba(154, 107, 58, 0.12);
+  --accent-glow: 0 0 0 1px rgba(154, 107, 58, 0.22),
+                 0 0 24px -4px rgba(154, 107, 58, 0.18);
+
+  --ambient-bg:
+    radial-gradient(120% 90% at 80% -10%, rgba(200, 155, 107, 0.16), transparent 55%),
+    radial-gradient(90% 80% at 0% 100%, rgba(120, 110, 150, 0.05), transparent 60%);
+  --grain-opacity: 0.02;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.22);
+  --selection-bg: rgba(154, 107, 58, 0.22);
+  --selection-fg: #1a1612;
+  --overlay-hover: rgba(0, 0, 0, 0.04);
+  --overlay-hover-strong: rgba(0, 0, 0, 0.06);
+  --overlay-subtle: rgba(0, 0, 0, 0.02);
+  --overlay-muted: rgba(0, 0, 0, 0.07);
+  --overlay-faint: rgba(0, 0, 0, 0.04);
+  --appbar-bg: rgba(246, 243, 237, 0.88);
+  --shell-overlay-bg: rgba(255, 253, 249, 0.97);
+  --panel-overlay-bg: rgba(255, 253, 249, 0.98);
+  --scrim: rgba(0, 0, 0, 0.28);
+  --scrim-strong: rgba(0, 0, 0, 0.38);
+  --shadow-lg: rgba(0, 0, 0, 0.12);
+  --shadow-xl: rgba(0, 0, 0, 0.16);
+  --shadow-card: rgba(0, 0, 0, 0.14);
+  --code-inline-bg: rgba(0, 0, 0, 0.06);
+  --pre-bg: rgba(0, 0, 0, 0.05);
+  --inset-highlight: rgba(255, 255, 255, 0.55);
+  --inset-highlight-strong: rgba(255, 255, 255, 0.75);
+  --skeleton-from: rgba(0, 0, 0, 0.04);
+  --skeleton-mid: rgba(0, 0, 0, 0.08);
+  --heatmap-empty: rgba(0, 0, 0, 0.06);
+  --login-page-bg:
+    radial-gradient(70% 50% at 50% 0%, rgba(200, 155, 107, 0.22), transparent 65%),
+    radial-gradient(50% 40% at 100% 100%, rgba(120, 110, 150, 0.06), transparent 55%),
+    var(--bg);
+  --login-card-bg: linear-gradient(165deg, rgba(255, 253, 249, 0.98), rgba(246, 243, 237, 0.99));
+  --login-card-shadow: 0 48px 96px -48px rgba(0, 0, 0, 0.14);
+  --kbd-bg: rgba(0, 0, 0, 0.06);
+  --kbd-border: rgba(0, 0, 0, 0.12);
+}

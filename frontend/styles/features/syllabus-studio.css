@@ -1,0 +1,187 @@
+.studio-editor {
+  display: grid;
+  gap: 20px;
+}
+
+@media (min-width: 900px) {
+  .studio-editor {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.studio-panel {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 16px;
+  background: var(--surface-1);
+}
+
+.studio-panel h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.studio-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.studio-inline-form .v2-input {
+  flex: 1 1 160px;
+}
+
+.studio-module-body {
+  padding: 0 14px 12px;
+}
+
+.studio-module-head {
+  cursor: default;
+}
+
+.studio-module-toggle {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-module .module-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.studio-ai-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.proposal-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.virtual-material-list {
+  max-height: min(70vh, 720px);
+  overflow: auto;
+}
+
+.proposal-diff {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 16px;
+  background: var(--surface-1);
+}
+
+.proposal-diff-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.proposal-diff-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.proposal-op-group {
+  margin-top: 12px;
+}
+
+.proposal-op-row {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--hairline);
+  cursor: pointer;
+}
+
+.proposal-op-row strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.proposal-op-head {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.syllabus-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.syllabus-studio {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.syllabus-studio-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.module-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.module-card {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+
+.module-card-head {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.module-material-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.module-material-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg-soft);
+}

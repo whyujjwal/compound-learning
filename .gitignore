@@ -16,3 +16,8 @@ frontend/.playwright-cli/
 frontend/tsconfig.tsbuildinfo
 *.tsbuildinfo
 output/
+.pytest_cache/
+
+# Playwright / Vitest artifacts
+frontend/test-results/
+frontend/playwright-report/

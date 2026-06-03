@@ -18,10 +18,9 @@ A fourth layer — **Coach** — is an AI advisor with tool access to your stats
 
 ## Personalized roadmaps
 
-New users start with an empty library and build their own. On **Build roadmap**
-(`/curriculum/build`) you describe your goals ("master backend engineering: Go, databases,
-system design, distributed systems") and weekly hours. Compound asks the configured AI provider
-to design a complete curriculum:
+New users start with an empty **Library** and build their own syllabi. Use **New Syllabus**
+(`/library/new`) for manual creation or adopt from **Explore**. AI-generated changes go through
+**Syllabus Studio** as reviewable proposals before applying.
 
 - **One track per goal** — ordered, beginner → advanced.
 - **Real resources** — official docs, MIT OCW, freeCodeCamp, 3Blue1Brown, arXiv, etc. (no invented URLs).
@@ -110,25 +109,29 @@ Coach gracefully degrades: without an API key, the chat UI still lets you create
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  Frontend (Next.js)                                          │
-│  • Today (review session, kbd shortcuts)                     │
-│  • Coach (AI chat with conversation memory)                  │
-│  • Tracks / Materials / Cards / Stats / Settings             │
+│  Today · Library · Explore · Coach · Progress · Settings     │
+│  Syllabus tabs: Overview · Studio · Map · Materials · …    │
+│  features/syllabus — cards, Studio, proposals, TanStack Query│
 └────────────────────────┬─────────────────────────────────────┘
                          │ REST
 ┌────────────────────────▼─────────────────────────────────────┐
 │  FastAPI                                                     │
+│  /api/syllabi          — canonical syllabus + proposals      │
 │  /api/queue/daily      — HEFT + priority queue               │
 │  /api/cards/{id}/review — FSRS-6 review                      │
 │  /api/chat/*           — Coach (Anthropic / OpenAI tools)    │
-│  /api/stats /tracks /materials /user                         │
+│  /api/tracks /materials — legacy compatibility               │
 └────────────────────────┬─────────────────────────────────────┘
                          │
 ┌────────────────────────▼─────────────────────────────────────┐
 │  PostgreSQL                                                  │
-│  users, tracks, study_materials, cards, review_logs,         │
-│  scheduler_parameters, conversations, messages               │
+│  users, tracks, study_materials, cards, syllabus_proposals,  │
+│  syllabus_change_log, review_logs, conversations, messages   │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+Legacy routes (`/curriculum`, `/track/[slug]`, `/stats`, `/tracks`, `/materials`) redirect to
+the new Library, Progress, and Studio surfaces.
 
 Local-day endpoints read `X-Compound-Timezone` (for example `Asia/Kolkata` or
 `America/Los_Angeles`) and fall back to UTC if the header/query value is absent or invalid.
@@ -141,10 +144,14 @@ aligned around the learner's midnight.
 
 ```bash
 cd backend && pytest -v
+cd frontend && npm run typecheck && npm run build
+cd frontend && npm test              # Vitest component tests
+cd frontend && npm run test:e2e        # Playwright smoke (starts dev server)
 ```
 
-31 tests cover the queue, local-day selection, FSRS review flow, CRUD endpoints, stats, chat,
-sessions, and roadmap generation.
+Backend tests cover the queue, FSRS review flow, canonical `/api/syllabi`, proposal engine,
+and legacy API compatibility. Frontend Vitest covers syllabus components; Playwright smoke
+tests cover Library, Progress, Today, and legacy redirects.
 
 ---
 
@@ -178,19 +185,12 @@ All settings via env vars (see `backend/.env.example`):
 ## Project layout
 
 ```
-backend/
-  app/
-    api/routes/         FastAPI endpoints
-    models/             SQLAlchemy ORM
-    schemas/            Pydantic request/response models
-    services/           FSRS, HEFT, stats, AI tools, AI agent
-    config.py, database.py, main.py
-  tests/                pytest suite
-  Dockerfile, requirements.txt, .env.example
-
-frontend/
-  app/                  Next.js App Router pages
-  components/           Nav, ReviewSession, StatCard, Markdown
-  lib/api.ts            Typed fetch client
-  Dockerfile, package.json
+backend/                 FastAPI app, services, SQLAlchemy models, Alembic migrations, tests
+frontend/                Next.js app, reusable UI components, typed API helpers
+docs/                    Product docs, setup guides, generated curriculum, structure guide
+scripts/                 Local development and deployment helpers
+docker-compose.yml       Local Postgres, backend, and frontend orchestration
 ```
+
+See [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md) for the fuller "where things go"
+guide.

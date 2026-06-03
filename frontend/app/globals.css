@@ -1,4 +1,9 @@
 @import "@xyflow/react/dist/style.css";
+@import "../styles/tokens.css";
+@import "../styles/reset.css";
+@import "../styles/primitives/button.css";
+@import "../styles/features/library.css";
+@import "../styles/features/syllabus-studio.css";
 
 /* ============================================================
    Compound — globals

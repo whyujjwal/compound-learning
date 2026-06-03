@@ -87,9 +87,9 @@ export function CommandPalette({
             <span className="cmdk-item-icon">◐</span>
             Today
           </Command.Item>
-          <Command.Item value="learn library roadmap curriculum" onSelect={() => go("/curriculum")}>
+          <Command.Item value="library syllabi my library" onSelect={() => go("/library")}>
             <span className="cmdk-item-icon">▦</span>
-            Learn
+            Library
           </Command.Item>
           <Command.Item value="explore catalog public roadmaps" onSelect={() => go("/explore")}>
             <span className="cmdk-item-icon">◎</span>
@@ -103,32 +103,16 @@ export function CommandPalette({
             <span className="cmdk-item-icon">◇</span>
             Coach
           </Command.Item>
-          <Command.Item value="build roadmap ai generate" onSelect={() => go("/curriculum/build")}>
+          <Command.Item value="new syllabus create library" onSelect={() => go("/library/new")}>
             <span className="cmdk-item-icon">✦</span>
-            Build roadmap with AI
+            New syllabus
           </Command.Item>
         </Command.Group>
 
         <Command.Group heading="Manage">
-          <Command.Item value="stats analytics progress" onSelect={() => go("/stats")}>
+          <Command.Item value="stats analytics progress" onSelect={() => go("/progress")}>
             <span className="cmdk-item-icon">▤</span>
-            Stats
-          </Command.Item>
-          <Command.Item value="materials resources" onSelect={() => go("/materials")}>
-            <span className="cmdk-item-icon">≡</span>
-            Materials
-          </Command.Item>
-          <Command.Item value="cards reviews fsrs" onSelect={() => go("/cards")}>
-            <span className="cmdk-item-icon">□</span>
-            Cards
-          </Command.Item>
-          <Command.Item value="track admin tracks" onSelect={() => go("/tracks")}>
-            <span className="cmdk-item-icon">◫</span>
-            Track admin
-          </Command.Item>
-          <Command.Item value="curriculum editor edit" onSelect={() => go("/curriculum/edit")}>
-            <span className="cmdk-item-icon">✎</span>
-            Editor
+            Progress
           </Command.Item>
           <Command.Item value="settings" onSelect={() => go("/settings")}>
             <span className="cmdk-item-icon">⚙</span>
@@ -136,12 +120,12 @@ export function CommandPalette({
           </Command.Item>
         </Command.Group>
 
-        <Command.Group heading="Tracks">
+        <Command.Group heading="Syllabi">
           {tracks.map((t) => (
             <Command.Item
               key={t.id}
-              value={`track ${t.name} ${t.slug}`}
-              onSelect={() => go(`/track/${t.slug}`)}
+              value={`syllabus ${t.name} ${t.slug}`}
+              onSelect={() => go(`/library/${t.slug}`)}
             >
               <span className="cmdk-item-icon" style={{ color: t.color }}>●</span>
               {t.name}

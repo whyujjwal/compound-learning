@@ -5,31 +5,18 @@ import { usePathname } from "next/navigation";
 import { trackAccent } from "@/lib/trackColors";
 import type { Track, CurriculumOverview } from "@/lib/api";
 
-const WORKSPACE = [
+const PRIMARY = [
   { href: "/", label: "Today", note: "Queue", match: (p: string) => p === "/" },
-  { href: "/schedule", label: "Weekly calendar", note: "Plan", match: (p: string) => p.startsWith("/schedule") },
-  { href: "/stats", label: "Progress", note: "Stats", match: (p: string) => p.startsWith("/stats") },
-  { href: "/coach", label: "Coach", note: "AI", match: (p: string) => p.startsWith("/coach") },
-];
-
-const LEARN = [
+  { href: "/library", label: "Library", note: "Syllabi", match: (p: string) => p.startsWith("/library") || p.startsWith("/track/") },
   { href: "/explore", label: "Explore", note: "Catalog", match: (p: string) => p.startsWith("/explore") },
-  { href: "/curriculum", label: "My library", note: "Roadmap", match: (p: string) => p === "/curriculum" || p.startsWith("/track/") },
-  {
-    href: "/curriculum/build",
-    label: "Build roadmap",
-    note: "Generate",
-    match: (p: string) => p.startsWith("/curriculum/build"),
-  },
-  { href: "/curriculum/edit", label: "Roadmap editor", note: "Edit", match: (p: string) => p.startsWith("/curriculum/edit") },
+  { href: "/coach", label: "Coach", note: "AI", match: (p: string) => p.startsWith("/coach") },
+  { href: "/progress", label: "Progress", note: "Stats", match: (p: string) => p.startsWith("/progress") || p.startsWith("/stats") },
+  { href: "/settings", label: "Settings", note: "Profile", match: (p: string) => p.startsWith("/settings") },
 ];
 
-const FOOTER = [
-  { href: "/tracks", label: "Tracks", note: "Admin", match: (p: string) => p === "/tracks" },
-  { href: "/materials", label: "Materials", note: "Resources", match: (p: string) => p.startsWith("/materials") },
-  { href: "/cards", label: "Cards", note: "FSRS", match: (p: string) => p.startsWith("/cards") },
-  { href: "/team", label: "Team", note: "Org", match: (p: string) => p.startsWith("/team") },
-  { href: "/settings", label: "Settings", note: "Profile", match: (p: string) => p.startsWith("/settings") },
+const SECONDARY = [
+  { href: "/library/new", label: "New syllabus", note: "Create", match: (p: string) => p.startsWith("/library/new") },
+  { href: "/schedule", label: "Week", note: "Plan", match: (p: string) => p.startsWith("/schedule") },
 ];
 
 export function LeftRail({
@@ -51,9 +38,9 @@ export function LeftRail({
 
   return (
     <aside className="rail">
-      <div className="rail-section" aria-label="Workspace">
-        <div className="rail-label">Workspace</div>
-        {WORKSPACE.map((l) => (
+      <div className="rail-section" aria-label="Primary navigation">
+        <div className="rail-label">Navigate</div>
+        {PRIMARY.map((l) => (
           <Link
             key={l.href}
             href={l.href}
@@ -65,9 +52,9 @@ export function LeftRail({
         ))}
       </div>
 
-      <div className="rail-section" aria-label="Learn">
-        <div className="rail-label">Learn</div>
-        {LEARN.map((l) => (
+      <div className="rail-section" aria-label="Create and plan">
+        <div className="rail-label">Create</div>
+        {SECONDARY.map((l) => (
           <Link
             key={l.href}
             href={l.href}
@@ -79,19 +66,19 @@ export function LeftRail({
         ))}
       </div>
 
-      <div className="rail-section" aria-label="Tracks">
-        <div className="rail-label">Active tracks</div>
+      <div className="rail-section" aria-label="Active syllabi">
+        <div className="rail-label">Active syllabi</div>
         {tracks.length === 0 ? (
-          <p className="rail-empty">No tracks yet. Generate one in AI Studio or explore public roadmaps.</p>
+          <p className="rail-empty">No syllabi yet. Generate one or explore public syllabi.</p>
         ) : (
           tracks.map((t) => {
             const accent = trackAccent(t.slug, t.color);
             const pct = trackProgress[t.slug]?.pct ?? 0;
-            const isActive = pathname === `/track/${t.slug}`;
+            const isActive = pathname === `/library/${t.slug}` || pathname === `/track/${t.slug}`;
             return (
               <Link
                 key={t.id}
-                href={`/track/${t.slug}`}
+                href={`/library/${t.slug}`}
                 className={`rail-track${isActive ? " active" : ""}`}
                 style={{ ["--track-color" as string]: accent }}
                 title={t.name}
@@ -105,20 +92,6 @@ export function LeftRail({
             );
           })
         )}
-      </div>
-
-      <div className="rail-footer">
-        <div className="rail-label">Tools</div>
-        {FOOTER.map((v) => (
-          <Link
-            key={v.href}
-            href={v.href}
-            className={`rail-link rail-link-muted${v.match(pathname) ? " active" : ""}`}
-          >
-            <span>{v.label}</span>
-            <span className="rail-link-note">{v.note}</span>
-          </Link>
-        ))}
       </div>
     </aside>
   );
