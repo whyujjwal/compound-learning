@@ -103,8 +103,9 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> AuthRes
         db.add(user)
     db.flush()
     seed_default_organization(db, user)
-    # New users start with an empty library and build their own personalized
-    # roadmap via /curriculum/build (the onboarding flow). No bundled import.
+    from app.domains.course.clone_service import seed_user_default_tracks
+
+    seed_user_default_tracks(db, user)
     db.commit()
     token = create_access_token(user.id, user.email)
     return AuthResponse(
