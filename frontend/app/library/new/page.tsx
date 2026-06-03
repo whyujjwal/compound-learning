@@ -4,55 +4,59 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { syllabusApi } from "@/features/syllabus/api/endpoints";
-import { api } from "@/lib/api";
+import { generateCourse } from "@/features/course/api/mutations";
 import { useShell } from "@/components/ui/Shell";
+
+function autoSlug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
 
 export default function NewSyllabusPage() {
   const router = useRouter();
   const { reloadAll } = useShell();
   const [name, setName] = useState("");
-  const [summary, setSummary] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [goal, setGoal] = useState("");
+  const [level, setLevel] = useState("");
+  const [busy, setBusy] = useState<null | "ai" | "empty">(null);
   const [error, setError] = useState<string | null>(null);
 
-  function autoSlug(value: string) {
-    return value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
+  async function generateWithAi(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !goal.trim()) return;
+    setBusy("ai");
+    setError(null);
+    try {
+      const res = await generateCourse({
+        name: name.trim(),
+        goal: goal.trim(),
+        level: level.trim() || undefined,
+      });
+      await reloadAll();
+      router.push(`/library/${res.syllabus.slug}?tab=studio`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Generation failed. Try a more specific goal.");
+    } finally {
+      setBusy(null);
+    }
   }
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function startEmpty() {
     if (!name.trim()) return;
-    setCreating(true);
+    setBusy("empty");
     setError(null);
-    const slug = autoSlug(name);
     try {
-      try {
-        const created = await syllabusApi.createSyllabus({
-          slug,
-          name: name.trim(),
-          summary: summary.trim() || undefined,
-          visibility: "PRIVATE",
-        });
-        await reloadAll();
-        router.push(`/library/${created.slug}?tab=studio`);
-        return;
-      } catch {
-        await api.createTrack({
-          slug,
-          name: name.trim(),
-          description: summary.trim() || undefined,
-          color: "#14b8a6",
-        });
-        await reloadAll();
-        router.push(`/library/${slug}?tab=studio`);
-      }
+      const created = await syllabusApi.createSyllabus({
+        slug: autoSlug(name),
+        name: name.trim(),
+        summary: goal.trim() || undefined,
+        visibility: "PRIVATE",
+      });
+      await reloadAll();
+      router.push(`/library/${created.slug}?tab=studio`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create syllabus.");
     } finally {
-      setCreating(false);
+      setBusy(null);
     }
   }
 
@@ -64,7 +68,7 @@ export default function NewSyllabusPage() {
           <h1 className="roadmap-title">New Syllabus</h1>
         </div>
       </header>
-      <form className="canvas-create" onSubmit={onSubmit}>
+      <form className="canvas-create" onSubmit={generateWithAi}>
         <label>
           <span>Name</span>
           <input
@@ -76,24 +80,49 @@ export default function NewSyllabusPage() {
           />
         </label>
         <label>
-          <span>Goal / summary</span>
+          <span>What do you want to master?</span>
           <textarea
             className="v2-input"
             rows={3}
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-            placeholder="What you want to learn and why."
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            placeholder="Build production HTTP services in Go: concurrency, testing, deployment."
+          />
+        </label>
+        <label>
+          <span>Level (optional)</span>
+          <input
+            className="v2-input"
+            value={level}
+            onChange={(e) => setLevel(e.target.value)}
+            placeholder="beginner / intermediate / advanced"
           />
         </label>
         {error && <p className="week-canvas-message">{error}</p>}
         <div style={{ display: "flex", gap: 8 }}>
-          <button type="submit" className="v2-btn primary" disabled={creating}>
-            {creating ? "Creating..." : "Create and open Studio"}
+          <button
+            type="submit"
+            className="v2-btn primary"
+            disabled={busy !== null || !name.trim() || !goal.trim()}
+          >
+            {busy === "ai" ? "Generating course…" : "Generate with AI"}
+          </button>
+          <button
+            type="button"
+            className="v2-btn"
+            disabled={busy !== null || !name.trim()}
+            onClick={startEmpty}
+          >
+            {busy === "empty" ? "Creating…" : "Start empty"}
           </button>
           <Link href="/library" className="v2-btn ghost">
             Cancel
           </Link>
         </div>
+        <p style={{ color: "var(--fg-mute)", fontSize: 12.5 }}>
+          AI builds a 3-level structure and sources open-source materials. You review every change as a diff
+          before anything is applied.
+        </p>
       </form>
     </>
   );
