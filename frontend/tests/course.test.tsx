@@ -106,6 +106,44 @@ describe("roadmapLayout", () => {
   });
 });
 
+import { buildManualProposalBody } from "@/features/course/api/mutations";
+import { SectionEditor } from "@/features/course/components/SectionEditor";
+import type { CourseModule } from "@/features/course/types";
+
+describe("buildManualProposalBody", () => {
+  it("wraps a single operation as a MANUAL proposal with a stable op id", () => {
+    const body = buildManualProposalBody({
+      type: "section.add",
+      target: { module_id: "mod1" },
+      payload: { title: "Intro" },
+    });
+    expect(body.source).toBe("MANUAL");
+    expect(body.operations).toHaveLength(1);
+    expect(body.operations[0].type).toBe("section.add");
+    expect(typeof body.operations[0].id).toBe("string");
+    expect(body.operations[0].id.length).toBeGreaterThan(0);
+  });
+});
+
+const editableModule: CourseModule = {
+  id: "mod1", title: "Basics", objective: null, label: null, kind: "core",
+  learning_outcomes: [], sequence: 0, estimated_minutes: 0, difficulty: null,
+  material_count: 0, started_count: 0, mastered_count: 0,
+  sections: [{
+    id: "sec1", title: "Representations", objective: null, label: null, kind: "core",
+    learning_outcomes: [], sequence: 0, estimated_minutes: 0, material_count: 0,
+    started_count: 0, mastered_count: 0, materials: [],
+  }],
+};
+
+describe("SectionEditor", () => {
+  it("lists sections and exposes an add-section input", () => {
+    render(<SectionEditor syllabusId="s1" module={editableModule} onChange={() => {}} />);
+    expect(screen.getByRole("button", { name: /Remove section/ })).toBeTruthy();
+    expect(screen.getByPlaceholderText(/New section/)).toBeTruthy();
+  });
+});
+
 describe("RoadmapCanvas", () => {
   beforeAll(() => {
     global.ResizeObserver = class ResizeObserver {

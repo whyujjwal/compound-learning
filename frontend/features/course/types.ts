@@ -1,3 +1,5 @@
+import type { SyllabusDetail, SyllabusProposal } from "@/features/syllabus/types";
+
 export type NodeKind = "core" | "optional" | "bonus";
 export type MaterialStatus = "not_started" | "started" | "mastered";
 
@@ -98,4 +100,24 @@ export interface RoadmapGraph {
   color: string;
   nodes: RoadmapNode[];
   edges: RoadmapEdge[];
+}
+
+export interface GenerateCourseRequest {
+  name: string;
+  goal: string;
+  level?: string;
+  weekly_hours?: number;
+  color?: string;
+}
+
+export interface GenerateCourseResponse {
+  syllabus: SyllabusDetail;
+  proposal: SyllabusProposal;
+}
+
+export interface ManualOperation {
+  type: string;
+  target?: { syllabus_id?: string; module_id?: string; section_id?: string; material_id?: string };
+  payload?: Record<string, unknown>;
+  reason?: string;
 }
