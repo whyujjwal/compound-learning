@@ -1,9 +1,10 @@
+from collections import defaultdict
 from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -16,6 +17,7 @@ from app.models.track_module import TrackModule
 from app.models.track_rating import TrackRating
 from app.models.track_star import TrackStar
 from app.models.user import User
+from app.services.catalog_batch import catalog_list_item, load_catalog_batch
 from app.services.catalog_quality import quality_breakdown, rank_score, refresh_track_quality, refresh_track_rating
 from app.services.bootstrap import ensure_scheduler_params
 from app.services.syllabus import clean_list, default_outcomes, syllabus_modules
@@ -138,6 +140,72 @@ def _unique_slug(db: Session, user: User, base: str) -> str:
     return slug
 
 
+def _public_tracks_query(
+    db: Session,
+    *,
+    q: str | None,
+    featured: bool,
+    sort: str,
+):
+    query = db.query(Track).filter(Track.is_public.is_(True))
+    if featured:
+        query = query.filter(Track.is_featured.is_(True))
+    if q:
+        needle = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                Track.name.ilike(needle),
+                Track.description.ilike(needle),
+                Track.generation_prompt.ilike(needle),
+                Track.id.in_(
+                    db.query(StudyMaterial.track_id).filter(
+                        or_(
+                            StudyMaterial.title.ilike(needle),
+                            StudyMaterial.block_label.ilike(needle),
+                            StudyMaterial.resource_type.ilike(needle),
+                        )
+                    )
+                ),
+            )
+        )
+    if sort == "stars":
+        query = query.order_by(Track.star_count.desc(), Track.created_at.desc())
+    elif sort == "new":
+        query = query.order_by(Track.created_at.desc())
+    else:
+        query = query.order_by(
+            Track.is_featured.desc(),
+            Track.quality_score.desc(),
+            Track.star_count.desc(),
+            Track.adoption_count.desc(),
+            Track.created_at.desc(),
+        )
+    return query
+
+
+def _catalog_list_responses(db: Session, tracks: list[Track], user: User) -> list[CatalogTrackResponse]:
+    ctx = load_catalog_batch(db, tracks, user)
+    return [catalog_list_item(track, user, ctx, response_cls=CatalogTrackResponse) for track in tracks]
+
+
+def _creator_totals(db: Session, creator_id: UUID) -> tuple[int, int, int, float]:
+    row = (
+        db.query(
+            func.count(Track.id),
+            func.coalesce(func.sum(Track.star_count), 0),
+            func.coalesce(func.sum(Track.adoption_count), 0),
+            func.avg(case((Track.rating_count > 0, Track.rating_avg), else_=None)),
+        )
+        .filter(Track.user_id == creator_id, Track.is_public.is_(True))
+        .one()
+    )
+    track_count = int(row[0] or 0)
+    total_stars = int(row[1] or 0)
+    total_adoptions = int(row[2] or 0)
+    avg_rating = round(float(row[3] or 0), 2) if row[3] is not None else 0.0
+    return track_count, total_stars, total_adoptions, avg_rating
+
+
 def _catalog_response(db: Session, track: Track, user: User) -> CatalogTrackResponse:
     materials = db.query(StudyMaterial).filter(StudyMaterial.track_id == track.id).all()
     modules = syllabus_modules(db, track, materials)
@@ -185,18 +253,103 @@ def get_explore_page(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ExplorePageResponse:
-    tracks = list_catalog_tracks(
-        q=None,
-        featured=False,
-        sort="ranking",
-        limit=100,
-        offset=0,
-        db=db,
-        user=user,
+    _ensure_default_collections(db)
+    explore_tracks = _public_tracks_query(db, q=None, featured=False, sort="ranking").offset(0).limit(100).all()
+    leaderboard_tracks = (
+        _public_tracks_query(db, q=None, featured=False, sort="ranking").offset(0).limit(20).all()
     )
-    collections = list_collections(limit=12, offset=0, track_limit=8, track_offset=0, db=db, user=user)
-    leaderboards = get_leaderboards(track_limit=20, track_offset=0, creator_limit=10, db=db, user=user)
-    return ExplorePageResponse(tracks=tracks, collections=collections, leaderboards=leaderboards)
+
+    collections_meta = (
+        db.query(CatalogCollection)
+        .order_by(CatalogCollection.sort_order.asc(), CatalogCollection.title.asc())
+        .offset(0)
+        .limit(12)
+        .all()
+    )
+    collection_ids = [c.id for c in collections_meta]
+    tracks_by_collection: dict[UUID, list[Track]] = defaultdict(list)
+    if collection_ids:
+        rows = (
+            db.query(CatalogCollectionItem, Track)
+            .join(Track, CatalogCollectionItem.track_id == Track.id)
+            .filter(CatalogCollectionItem.collection_id.in_(collection_ids), Track.is_public.is_(True))
+            .order_by(
+                CatalogCollectionItem.collection_id.asc(),
+                CatalogCollectionItem.sort_order.asc(),
+                Track.star_count.desc(),
+            )
+            .all()
+        )
+        for item, track in rows:
+            bucket = tracks_by_collection[item.collection_id]
+            if len(bucket) < 8:
+                bucket.append(track)
+
+    unique: dict[UUID, Track] = {}
+    for track in (*explore_tracks, *leaderboard_tracks):
+        unique[track.id] = track
+    for coll_tracks in tracks_by_collection.values():
+        for track in coll_tracks:
+            unique[track.id] = track
+
+    creator_ids: list[UUID] = []
+    for track in leaderboard_tracks:
+        if track.user_id not in creator_ids:
+            creator_ids.append(track.user_id)
+    creator_tracks_by_id: dict[UUID, list[Track]] = {}
+    for creator_id in creator_ids[:10]:
+        creator_tracks = (
+            db.query(Track)
+            .filter(Track.user_id == creator_id, Track.is_public.is_(True))
+            .order_by(Track.star_count.desc(), Track.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        creator_tracks_by_id[creator_id] = creator_tracks
+        for t in creator_tracks:
+            unique[t.id] = t
+
+    ctx = load_catalog_batch(db, list(unique.values()), user)
+
+    track_responses = [catalog_list_item(t, user, ctx, response_cls=CatalogTrackResponse) for t in explore_tracks]
+    collection_responses = [
+        CatalogCollectionResponse(
+            id=c.id,
+            slug=c.slug,
+            title=c.title,
+            description=c.description,
+            tracks=[catalog_list_item(t, user, ctx, response_cls=CatalogTrackResponse) for t in tracks_by_collection[c.id]],
+        )
+        for c in collections_meta
+    ]
+
+    leaderboard_track_responses = [
+        catalog_list_item(t, user, ctx, response_cls=CatalogTrackResponse) for t in leaderboard_tracks
+    ]
+    creator_profiles: list[CreatorProfileResponse] = []
+    for creator_id in creator_ids[:10]:
+        creator = db.query(User).filter(User.id == creator_id).first()
+        if not creator:
+            continue
+        track_count, total_stars, total_adoptions, avg_rating = _creator_totals(db, creator.id)
+        creator_tracks = creator_tracks_by_id.get(creator_id, [])
+        creator_profiles.append(
+            CreatorProfileResponse(
+                id=creator.id,
+                display_name=creator.display_name,
+                track_count=track_count,
+                total_stars=total_stars,
+                total_adoptions=total_adoptions,
+                avg_rating=avg_rating,
+                tracks=[catalog_list_item(t, user, ctx, response_cls=CatalogTrackResponse) for t in creator_tracks],
+            )
+        )
+
+    return ExplorePageResponse(
+        tracks=track_responses,
+        collections=collection_responses,
+        leaderboards=LeaderboardResponse(tracks=leaderboard_track_responses, creators=creator_profiles),
+    )
 
 
 @router.get("/tracks", response_model=list[CatalogTrackResponse])
@@ -209,43 +362,8 @@ def list_catalog_tracks(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[CatalogTrackResponse]:
-    query = db.query(Track).filter(Track.is_public.is_(True))
-    if featured:
-        query = query.filter(Track.is_featured.is_(True))
-    if q:
-        needle = f"%{q.strip()}%"
-        query = query.filter(
-            or_(
-                Track.name.ilike(needle),
-                Track.description.ilike(needle),
-                Track.generation_prompt.ilike(needle),
-                Track.id.in_(
-                    db.query(StudyMaterial.track_id).filter(
-                        or_(
-                            StudyMaterial.title.ilike(needle),
-                            StudyMaterial.block_label.ilike(needle),
-                            StudyMaterial.resource_type.ilike(needle),
-                        )
-                    )
-                ),
-            )
-        )
-
-    if sort == "stars":
-        query = query.order_by(Track.star_count.desc(), Track.created_at.desc())
-    elif sort == "new":
-        query = query.order_by(Track.created_at.desc())
-    else:
-        query = query.order_by(
-            Track.is_featured.desc(),
-            Track.quality_score.desc(),
-            Track.star_count.desc(),
-            Track.adoption_count.desc(),
-            Track.created_at.desc(),
-        )
-
-    tracks = query.offset(offset).limit(limit).all()
-    return [_catalog_response(db, track, user) for track in tracks]
+    tracks = _public_tracks_query(db, q=q, featured=featured, sort=sort).offset(offset).limit(limit).all()
+    return _catalog_list_responses(db, tracks, user)
 
 
 @router.get("/tracks/{track_id}", response_model=CatalogTrackDetail)
@@ -468,7 +586,8 @@ def _collection_tracks(
         .limit(limit)
         .all()
     )
-    return [_catalog_response(db, row.track, user) for row in rows]
+    tracks = [row.track for row in rows]
+    return _catalog_list_responses(db, tracks, user)
 
 
 def _ensure_default_collections(db: Session) -> None:
@@ -538,24 +657,23 @@ def get_creator_profile(
     creator = db.query(User).filter(User.id == creator_id).first()
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
-    all_public_tracks = db.query(Track).filter(Track.user_id == creator.id, Track.is_public.is_(True))
     tracks = (
-        all_public_tracks.order_by(Track.star_count.desc(), Track.created_at.desc())
+        db.query(Track)
+        .filter(Track.user_id == creator.id, Track.is_public.is_(True))
+        .order_by(Track.star_count.desc(), Track.created_at.desc())
         .offset(offset)
         .limit(limit)
         .all()
     )
-    responses = [_catalog_response(db, track, user) for track in tracks]
-    totals = all_public_tracks.all()
-    ratings = [track.rating_avg for track in totals if track.rating_count > 0]
+    track_count, total_stars, total_adoptions, avg_rating = _creator_totals(db, creator.id)
     return CreatorProfileResponse(
         id=creator.id,
         display_name=creator.display_name,
-        track_count=len(totals),
-        total_stars=sum(t.star_count for t in totals),
-        total_adoptions=sum(t.adoption_count for t in totals),
-        avg_rating=round(sum(ratings) / len(ratings), 2) if ratings else 0.0,
-        tracks=responses,
+        track_count=track_count,
+        total_stars=total_stars,
+        total_adoptions=total_adoptions,
+        avg_rating=avg_rating,
+        tracks=_catalog_list_responses(db, tracks, user),
     )
 
 
@@ -567,20 +685,44 @@ def get_leaderboards(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> LeaderboardResponse:
-    tracks = db.query(Track).filter(Track.is_public.is_(True)).order_by(
-        Track.is_featured.desc(),
-        Track.quality_score.desc(),
-        Track.star_count.desc(),
-        Track.adoption_count.desc(),
-    ).offset(track_offset).limit(track_limit).all()
-    creators: list[CreatorProfileResponse] = []
-    creator_ids = []
+    tracks = _public_tracks_query(db, q=None, featured=False, sort="ranking").offset(track_offset).limit(track_limit).all()
+    creator_ids: list[UUID] = []
     for track in tracks:
         if track.user_id not in creator_ids:
             creator_ids.append(track.user_id)
+
+    creator_tracks_by_id: dict[UUID, list[Track]] = {}
+    batch_unique: dict[UUID, Track] = {t.id: t for t in tracks}
     for creator_id in creator_ids[:creator_limit]:
-        creators.append(get_creator_profile(creator_id, limit=10, offset=0, db=db, user=user))
-    return LeaderboardResponse(
-        tracks=[_catalog_response(db, track, user) for track in tracks],
-        creators=creators,
-    )
+        creator_tracks = (
+            db.query(Track)
+            .filter(Track.user_id == creator_id, Track.is_public.is_(True))
+            .order_by(Track.star_count.desc(), Track.created_at.desc())
+            .limit(10)
+            .all()
+        )
+        creator_tracks_by_id[creator_id] = creator_tracks
+        for t in creator_tracks:
+            batch_unique[t.id] = t
+
+    ctx = load_catalog_batch(db, list(batch_unique.values()), user)
+    track_responses = [catalog_list_item(t, user, ctx, response_cls=CatalogTrackResponse) for t in tracks]
+    creators: list[CreatorProfileResponse] = []
+    for creator_id in creator_ids[:creator_limit]:
+        creator = db.query(User).filter(User.id == creator_id).first()
+        if not creator:
+            continue
+        track_count, total_stars, total_adoptions, avg_rating = _creator_totals(db, creator.id)
+        creator_tracks = creator_tracks_by_id.get(creator_id, [])
+        creators.append(
+            CreatorProfileResponse(
+                id=creator.id,
+                display_name=creator.display_name,
+                track_count=track_count,
+                total_stars=total_stars,
+                total_adoptions=total_adoptions,
+                avg_rating=avg_rating,
+                tracks=[catalog_list_item(t, user, ctx, response_cls=CatalogTrackResponse) for t in creator_tracks],
+            )
+        )
+    return LeaderboardResponse(tracks=track_responses, creators=creators)

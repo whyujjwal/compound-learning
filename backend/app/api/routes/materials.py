@@ -16,8 +16,9 @@ from app.services.session_service import mark_material_complete
 router = APIRouter(prefix="/materials", tags=["materials"])
 
 
-def _material_response(db: Session, material: StudyMaterial) -> MaterialResponse:
-    card = db.query(Card).filter(Card.material_id == material.id).first()
+def _material_response(db: Session, material: StudyMaterial, card: Card | None = None) -> MaterialResponse:
+    if card is None:
+        card = db.query(Card).filter(Card.material_id == material.id).first()
     return MaterialResponse(
         id=material.id,
         track_id=material.track_id,
@@ -61,7 +62,12 @@ def list_materials(
         .limit(limit)
         .all()
     )
-    return [_material_response(db, m) for m in materials]
+    if not materials:
+        return []
+    material_ids = [m.id for m in materials]
+    cards = db.query(Card).filter(Card.material_id.in_(material_ids), Card.user_id == user.id).all()
+    card_by_material = {c.material_id: c for c in cards}
+    return [_material_response(db, m, card_by_material.get(m.id)) for m in materials]
 
 
 @router.get("/{material_id}", response_model=MaterialResponse)

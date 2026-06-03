@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.card import Card
@@ -128,10 +128,14 @@ def get_stats(
         .scalar()
     ) or 0.0
 
+    streak_lookback_start, _ = local_day_bounds(today - timedelta(days=400), timezone_name, user)
     review_dates = [
         r[0]
         for r in db.query(ReviewLog.reviewed_at)
-        .filter(ReviewLog.card_id.in_(user_card_ids))
+        .filter(
+            ReviewLog.card_id.in_(user_card_ids),
+            ReviewLog.reviewed_at >= streak_lookback_start,
+        )
         .order_by(ReviewLog.reviewed_at.desc())
         .all()
     ]
@@ -183,34 +187,58 @@ def get_stats(
     minutes_today = int(round(float(review_seconds_today) / 60)) + int(session_minutes_today)
 
     tracks = db.query(Track).filter(Track.user_id == user.id).all()
-    track_breakdown: list[TrackStats] = []
-    for track in tracks:
-        material_count = (
-            db.query(StudyMaterial).filter(StudyMaterial.track_id == track.id).count()
-        )
-        cards = (
-            db.query(Card)
-            .join(StudyMaterial)
-            .filter(StudyMaterial.track_id == track.id, Card.user_id == user.id)
+    track_ids = [t.id for t in tracks]
+    material_counts: dict[UUID, int] = {}
+    card_counts: dict[UUID, int] = {}
+    due_counts: dict[UUID, int] = {}
+    review_counts: dict[UUID, int] = {}
+    if track_ids:
+        material_counts = {
+            row[0]: int(row[1])
+            for row in db.query(StudyMaterial.track_id, func.count(StudyMaterial.id))
+            .filter(StudyMaterial.track_id.in_(track_ids))
+            .group_by(StudyMaterial.track_id)
+            .all()
+        }
+        card_rows = (
+            db.query(
+                StudyMaterial.track_id,
+                func.count(Card.id),
+                func.sum(
+                    case(
+                        ((Card.reps > 0) & (Card.due_at <= now), 1),
+                        else_=0,
+                    )
+                ),
+            )
+            .join(Card, Card.material_id == StudyMaterial.id)
+            .filter(StudyMaterial.track_id.in_(track_ids), Card.user_id == user.id)
+            .group_by(StudyMaterial.track_id)
             .all()
         )
-        card_ids = [c.id for c in cards]
-        reviews_count = (
-            db.query(ReviewLog).filter(ReviewLog.card_id.in_(card_ids)).count()
-            if card_ids
-            else 0
-        )
+        for track_id, total_cards, due in card_rows:
+            card_counts[track_id] = int(total_cards or 0)
+            due_counts[track_id] = int(due or 0)
+        review_counts = {
+            row[0]: int(row[1])
+            for row in db.query(StudyMaterial.track_id, func.count(ReviewLog.id))
+            .join(Card, Card.material_id == StudyMaterial.id)
+            .join(ReviewLog, ReviewLog.card_id == Card.id)
+            .filter(StudyMaterial.track_id.in_(track_ids), Card.user_id == user.id)
+            .group_by(StudyMaterial.track_id)
+            .all()
+        }
+    track_breakdown: list[TrackStats] = []
+    for track in tracks:
         track_breakdown.append(
             TrackStats(
                 track_id=track.id,
                 track_name=track.name,
                 track_color=track.color,
-                material_count=material_count,
-                card_count=len(cards),
-                due_count=sum(
-                    1 for c in cards if c.reps > 0 and _aware(c.due_at) <= now
-                ),
-                reviews_total=reviews_count,
+                material_count=material_counts.get(track.id, 0),
+                card_count=card_counts.get(track.id, 0),
+                due_count=due_counts.get(track.id, 0),
+                reviews_total=review_counts.get(track.id, 0),
             )
         )
 

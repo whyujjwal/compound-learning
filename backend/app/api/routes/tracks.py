@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,6 +12,7 @@ from app.models.card import Card
 from app.models.track_ai_update import TrackAIUpdate
 from app.models.material import StudyMaterial
 from app.models.track import Track
+from app.models.track_module import TrackModule
 from app.models.user import User
 from app.schemas.track import (
     TrackCreate,
@@ -76,6 +78,72 @@ def _syllabus_response(
             )
         )
     return modules
+
+
+def _track_list_responses(db: Session, tracks: list[Track]) -> list[TrackResponse]:
+    if not tracks:
+        return []
+    track_ids = [t.id for t in tracks]
+    now = datetime.now(UTC)
+    material_counts = {
+        row[0]: int(row[1])
+        for row in db.query(StudyMaterial.track_id, func.count(StudyMaterial.id))
+        .filter(StudyMaterial.track_id.in_(track_ids))
+        .group_by(StudyMaterial.track_id)
+        .all()
+    }
+    module_counts = {
+        row[0]: int(row[1])
+        for row in db.query(TrackModule.track_id, func.count(TrackModule.id))
+        .filter(TrackModule.track_id.in_(track_ids))
+        .group_by(TrackModule.track_id)
+        .all()
+    }
+    due_counts = {
+        row[0]: int(row[1])
+        for row in db.query(StudyMaterial.track_id, func.count(Card.id))
+        .join(Card, Card.material_id == StudyMaterial.id)
+        .filter(
+            StudyMaterial.track_id.in_(track_ids),
+            Card.reps > 0,
+            Card.due_at <= now,
+        )
+        .group_by(StudyMaterial.track_id)
+        .all()
+    }
+    return [
+        TrackResponse(
+            id=track.id,
+            user_id=track.user_id,
+            slug=track.slug,
+            name=track.name,
+            description=track.description,
+            color=track.color,
+            cognitive_multiplier=track.cognitive_multiplier,
+            is_system=track.is_system,
+            is_public=track.is_public,
+            is_featured=track.is_featured,
+            star_count=track.star_count,
+            adoption_count=track.adoption_count,
+            rating_count=track.rating_count,
+            rating_avg=track.rating_avg,
+            quality_score=track.quality_score,
+            source_track_id=track.source_track_id,
+            generation_prompt=track.generation_prompt,
+            learning_outcomes=clean_list(track.learning_outcomes)
+            or default_outcomes(track, module_counts.get(track.id, 0)),
+            prerequisites=clean_list(track.prerequisites),
+            target_audience=track.target_audience,
+            estimated_hours=track.estimated_hours,
+            difficulty=track.difficulty,
+            syllabus_summary=track.syllabus_summary or track.description,
+            modules=[],
+            created_at=track.created_at,
+            material_count=material_counts.get(track.id, 0),
+            due_card_count=due_counts.get(track.id, 0),
+        )
+        for track in tracks
+    ]
 
 
 def _track_response(db: Session, track: Track) -> TrackResponse:
@@ -144,7 +212,7 @@ def list_tracks(
         .limit(limit)
         .all()
     )
-    return [_track_response(db, t) for t in tracks]
+    return _track_list_responses(db, tracks)
 
 
 @router.post("", response_model=TrackResponse, status_code=201)

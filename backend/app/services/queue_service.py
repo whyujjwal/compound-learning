@@ -66,15 +66,21 @@ class _Card:
     track: Track
 
 
+_QUEUE_CONTENT_MAX = 400
+
+
 def _to_item(c: _Card, *, kind: str, now: datetime) -> QueueItem:
     track = c.track
     material = c.material
     card = c.card
+    content = material.raw_content
+    if content and len(content) > _QUEUE_CONTENT_MAX:
+        content = content[:_QUEUE_CONTENT_MAX]
     return QueueItem(
         card_id=card.id,
         material_id=material.id,
         material_title=material.title,
-        material_content=material.raw_content,
+        material_content=content,
         material_url=material.external_url,
         block_label=material.block_label,
         resource_type=material.resource_type,
