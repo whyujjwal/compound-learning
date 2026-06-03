@@ -18,6 +18,14 @@ class StudyMaterial(Base):
     module_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("track_modules.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    section_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("track_sections.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    provider: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    author: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    license: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="core", server_default="core")
+    label: Mapped[str | None] = mapped_column(String(80), nullable=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     raw_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     external_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
@@ -39,6 +47,7 @@ class StudyMaterial(Base):
 
     track = relationship("Track", back_populates="materials")
     module = relationship("TrackModule", back_populates="materials")
+    section = relationship("TrackSection", back_populates="materials")
     cards = relationship("Card", back_populates="material", cascade="all, delete-orphan")
     prerequisite = relationship("StudyMaterial", remote_side="StudyMaterial.id")
     study_sessions = relationship("StudySession", back_populates="material", cascade="all, delete-orphan")
