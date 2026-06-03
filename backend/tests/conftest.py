@@ -17,6 +17,8 @@ TEST_CURRICULUM = {
             "slug": "dsa",
             "name": "Data Structures & Algorithms",
             "color": "#22c55e",
+            "is_system": True,
+            "is_public": False,
             "materials": [
                 {
                     "title": "Two Sum (test)",
@@ -39,6 +41,8 @@ TEST_CURRICULUM = {
             "slug": "ai-math",
             "name": "Mathematics for AI",
             "color": "#a87f9e",
+            "is_system": True,
+            "is_public": False,
             "materials": [
                 {
                     "title": "Gradient intuition (test)",
@@ -60,6 +64,8 @@ TEST_CURRICULUM = {
             "slug": "system-design",
             "name": "System Design",
             "color": "#0ea5e9",
+            "is_system": True,
+            "is_public": False,
             "materials": [
                 {
                     "title": "CAP theorem (test)",

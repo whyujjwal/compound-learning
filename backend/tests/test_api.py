@@ -486,27 +486,39 @@ def test_generate_roadmap_chunked_fallback(client, monkeypatch):
 
 
 def test_public_catalog_search_star_and_adopt(client):
-    tracks = client.get("/api/catalog/tracks?q=system&sort=ranking").json()
-    assert any(t["slug"] == "system-design" for t in tracks)
-    system = next(t for t in tracks if t["slug"] == "system-design")
-    assert system["material_count"] >= 1
+    created = client.post(
+        "/api/syllabi",
+        json={"slug": "pub-catalog-adopt", "name": "Pub Catalog Adopt", "visibility": "PUBLIC"},
+    ).json()
+    client.post(
+        f"/api/syllabi/{created['id']}/materials",
+        json={
+            "title": "Catalog adopt material",
+            "url": "https://example.com/catalog-adopt",
+            "estimated_minutes": 15,
+        },
+    )
+    tracks = client.get("/api/catalog/tracks?q=Pub+Catalog&sort=ranking").json()
+    assert any(t["slug"] == "pub-catalog-adopt" for t in tracks)
+    public_track = next(t for t in tracks if t["slug"] == "pub-catalog-adopt")
+    assert public_track["material_count"] >= 1
 
-    starred = client.post(f"/api/catalog/tracks/{system['id']}/star")
+    starred = client.post(f"/api/catalog/tracks/{public_track['id']}/star")
     assert starred.status_code == 200
     assert starred.json()["is_starred"] is True
-    assert starred.json()["star_count"] >= system["star_count"]
+    assert starred.json()["star_count"] >= public_track["star_count"]
 
-    unstarred = client.delete(f"/api/catalog/tracks/{system['id']}/star")
+    unstarred = client.delete(f"/api/catalog/tracks/{public_track['id']}/star")
     assert unstarred.status_code == 200
     assert unstarred.json()["is_starred"] is False
 
-    adopted = client.post(f"/api/catalog/tracks/{system['id']}/adopt")
+    adopted = client.post(f"/api/catalog/tracks/{public_track['id']}/adopt")
     assert adopted.status_code == 201
     body = adopted.json()
-    assert body["materials_created"] == system["material_count"]
+    assert body["materials_created"] == public_track["material_count"]
     copied = client.get(f"/api/tracks/{body['track_id']}")
     assert copied.status_code == 200
-    assert copied.json()["source_track_id"] == system["id"]
+    assert copied.json()["source_track_id"] == public_track["id"]
     assert copied.json()["is_public"] is False
 
 

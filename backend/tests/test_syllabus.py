@@ -26,7 +26,7 @@ def test_get_syllabus_by_slug(client):
     assert body["name"]
     assert isinstance(body["modules"], list)
     assert body["version"] >= 1
-    assert body["permissions"]["can_edit"] is True
+    assert body["permissions"]["can_edit"] is False
 
 
 def test_get_syllabus_by_id(client):

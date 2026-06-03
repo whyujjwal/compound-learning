@@ -42,6 +42,7 @@ class CatalogTrackResponse(BaseModel):
     quality_score: float
     is_featured: bool
     is_starred: bool
+    already_in_library: bool = False
     rank_score: float
     source_track_id: UUID | None = None
     learning_outcomes: list[str] = []
@@ -147,7 +148,7 @@ def _public_tracks_query(
     featured: bool,
     sort: str,
 ):
-    query = db.query(Track).filter(Track.is_public.is_(True))
+    query = db.query(Track).filter(Track.is_public.is_(True), Track.is_system.is_(False))
     if featured:
         query = query.filter(Track.is_featured.is_(True))
     if q:
@@ -234,6 +235,12 @@ def _catalog_response(db: Session, track: Track, user: User) -> CatalogTrackResp
         quality_score=track.quality_score,
         is_featured=track.is_featured,
         is_starred=starred,
+        already_in_library=(
+            db.query(Track.id)
+            .filter(Track.user_id == user.id, Track.source_track_id == track.id)
+            .first()
+            is not None
+        ),
         rank_score=rank_score(track, len(materials)),
         source_track_id=track.source_track_id,
         learning_outcomes=clean_list(track.learning_outcomes) or default_outcomes(track, len(modules)),

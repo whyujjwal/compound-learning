@@ -24,6 +24,7 @@ class CatalogBatchContext:
     module_count_by_track: dict[UUID, int] = field(default_factory=dict)
     preview_by_track: dict[UUID, list[str]] = field(default_factory=dict)
     starred_ids: set[UUID] = field(default_factory=set)
+    adopted_source_ids: set[UUID] = field(default_factory=set)
     creators: dict[UUID, User] = field(default_factory=dict)
 
 
@@ -91,11 +92,20 @@ def load_catalog_batch(db: Session, tracks: list[Track], user: User) -> CatalogB
         for u in db.query(User).filter(User.id.in_(creator_ids)).all()
     }
 
+    adopted_source_ids = {
+        row[0]
+        for row in db.query(Track.source_track_id)
+        .filter(Track.user_id == user.id, Track.source_track_id.isnot(None))
+        .all()
+        if row[0] is not None
+    }
+
     return CatalogBatchContext(
         materials_by_track=dict(materials_by_track),
         module_count_by_track=module_count_by_track,
         preview_by_track=preview_by_track,
         starred_ids=starred_ids,
+        adopted_source_ids=adopted_source_ids,
         creators=creators,
     )
 
@@ -128,6 +138,7 @@ def catalog_list_item(
         quality_score=track.quality_score,
         is_featured=track.is_featured,
         is_starred=track.id in ctx.starred_ids,
+        already_in_library=track.id in ctx.adopted_source_ids,
         rank_score=rank_score(track, len(materials)),
         source_track_id=track.source_track_id,
         learning_outcomes=clean_list(track.learning_outcomes) or default_outcomes(track, module_count),

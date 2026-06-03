@@ -107,7 +107,17 @@ def seed_default_organization(db: Session, user: User) -> None:
 
 def seed_system_tracks(db: Session, user: User) -> None:
     for track_data in SYSTEM_TRACKS:
-        track = Track(user_id=user.id, is_system=True, **track_data)
+        track = (
+            db.query(Track)
+            .filter(Track.user_id == user.id, Track.slug == track_data["slug"])
+            .first()
+        )
+        if track:
+            track.is_system = True
+            track.is_public = False
+            track.published_at = None
+            continue
+        track = Track(user_id=user.id, is_system=True, is_public=False, **track_data)
         db.add(track)
         db.flush()
         ensure_scheduler_params(db, user, track)
