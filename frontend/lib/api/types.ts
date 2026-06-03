@@ -73,6 +73,7 @@ export type CatalogTrack = {
   quality_score: number;
   is_featured: boolean;
   is_starred: boolean;
+  already_in_library: boolean;
   rank_score: number;
   source_track_id: string | null;
   learning_outcomes: string[];
