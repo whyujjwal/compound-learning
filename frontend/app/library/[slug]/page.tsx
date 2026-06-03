@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { TrackMap } from "@/components/learning/TrackMap";
-import { ModuleList } from "@/features/syllabus/components/ModuleList";
+import { OutlineTree } from "@/features/course/components/OutlineTree";
+import { RoadmapCanvas } from "@/features/course/roadmap/RoadmapCanvas";
+import { useCourseTree } from "@/features/course/hooks/useCourseTree";
+import { useRoadmap } from "@/features/course/hooks/useRoadmap";
 import { VirtualMaterialList } from "@/features/syllabus/components/VirtualMaterialList";
 import { SyllabusHeader } from "@/features/syllabus/components/SyllabusHeader";
 import { SyllabusTabs } from "@/features/syllabus/components/SyllabusTabs";
@@ -24,12 +26,13 @@ export default function SyllabusDetailPage() {
 
   const initialTab = (searchParams.get("tab") as SyllabusTab | null) ?? "overview";
   const [tab, setTab] = useState<SyllabusTab>(initialTab);
-  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [proposals, setProposals] = useState<SyllabusProposal[]>([]);
   const [history, setHistory] = useState<ChangeLogEntry[]>([]);
   const [activeProposal, setActiveProposal] = useState<SyllabusProposal | null>(null);
 
   const { data: syllabus, isLoading, refetch } = useSyllabusBySlug(slug);
+  const { data: courseTree } = useCourseTree(slug);
+  const { data: roadmap } = useRoadmap(slug);
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -86,15 +89,6 @@ export default function SyllabusDetailPage() {
     router.replace(`/library/${slug}?tab=${next}`, { scroll: false });
   }
 
-  function toggleModule(id: string) {
-    setExpandedModules((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   if (isLoading || !syllabus) {
     return (
       <>
@@ -113,21 +107,11 @@ export default function SyllabusDetailPage() {
 
       {tab === "overview" && (
         <section style={{ marginTop: 20 }}>
-          {syllabus.outcomes.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <h3>Outcomes</h3>
-              <ul>
-                {syllabus.outcomes.map((outcome) => (
-                  <li key={outcome}>{outcome}</li>
-                ))}
-              </ul>
-            </div>
+          {courseTree ? (
+            <OutlineTree tree={courseTree} />
+          ) : (
+            <p style={{ color: "var(--fg-mute)" }}>Loading outline…</p>
           )}
-          <ModuleList
-            modules={syllabus.modules}
-            expanded={expandedModules}
-            onToggle={toggleModule}
-          />
         </section>
       )}
 
@@ -156,8 +140,12 @@ export default function SyllabusDetailPage() {
       )}
 
       {tab === "map" && (
-        <div style={{ marginTop: 20, height: 520 }}>
-          <TrackMap modules={syllabus.modules} accent={syllabus.color} title={`${syllabus.name} map`} />
+        <div style={{ marginTop: 20, height: 600 }}>
+          {roadmap ? (
+            <RoadmapCanvas graph={roadmap} />
+          ) : (
+            <p style={{ color: "var(--fg-mute)" }}>Loading roadmap…</p>
+          )}
         </div>
       )}
 
