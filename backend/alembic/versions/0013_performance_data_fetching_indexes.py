@@ -3,7 +3,7 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0013_performance_data_fetching_indexes"
+revision = "0013_perf_fetch_indexes"
 down_revision = "0012_syllabus_proposals"
 branch_labels = None
 depends_on = None

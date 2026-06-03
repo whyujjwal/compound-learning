@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0014_course_sections_and_graph"
-down_revision = "0013_performance_data_fetching_indexes"
+down_revision = "0013_perf_fetch_indexes"
 branch_labels = None
 depends_on = None
 
