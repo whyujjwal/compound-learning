@@ -13,7 +13,7 @@ def _status(mat: CourseMaterial) -> str:
     return "not_started"
 
 
-def build_roadmap(tree: CourseTree) -> RoadmapGraph:
+def build_roadmap(tree: CourseTree, extra_edges: list[dict] | None = None) -> RoadmapGraph:
     nodes: list[RoadmapNode] = []
     edges: list[RoadmapEdge] = []
     prev_module_id: str | None = None
@@ -53,6 +53,15 @@ def build_roadmap(tree: CourseTree) -> RoadmapGraph:
                     id=f"e-{section_node_id}-{mat_node_id}",
                     source=section_node_id, target=mat_node_id, kind="primary",
                 ))
+
+    node_ids = {n.id for n in nodes}
+    for e in extra_edges or []:
+        src = f"{e['from_node_type']}-{e['from_node_id']}"
+        tgt = f"{e['to_node_type']}-{e['to_node_id']}"
+        if src in node_ids and tgt in node_ids:
+            edges.append(RoadmapEdge(
+                id=f"x-{e['id']}", source=src, target=tgt, kind=e.get("kind", "requires"),
+            ))
 
     return RoadmapGraph(
         syllabus_id=tree.id, slug=tree.slug, name=tree.name, color=tree.color,

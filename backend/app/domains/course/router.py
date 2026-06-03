@@ -40,6 +40,20 @@ def get_course_tree(slug: str, db: Session = Depends(get_db), user: User = Depen
 
 @router.get("/{slug}/roadmap", response_model=RoadmapGraph)
 def get_roadmap(slug: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> RoadmapGraph:
+    from app.models.syllabus_edge import SyllabusEdge
+
     track = _resolve_track(db, user, slug)
     tree = build_course_tree(db, track, user.id)
-    return build_roadmap(tree)
+    rows = db.query(SyllabusEdge).filter(SyllabusEdge.syllabus_id == track.id).all()
+    extra = [
+        {
+            "id": r.id,
+            "from_node_type": r.from_node_type,
+            "from_node_id": r.from_node_id,
+            "to_node_type": r.to_node_type,
+            "to_node_id": r.to_node_id,
+            "kind": r.kind,
+        }
+        for r in rows
+    ]
+    return build_roadmap(tree, extra)
