@@ -21,11 +21,13 @@ def _material_response(db: Session, material: StudyMaterial) -> MaterialResponse
     return MaterialResponse(
         id=material.id,
         track_id=material.track_id,
+        module_id=material.module_id,
         title=material.title,
         raw_content=material.raw_content,
         external_url=material.external_url,
         block_label=material.block_label,
         resource_type=material.resource_type,
+        difficulty=material.difficulty,
         sequence=material.sequence,
         cognitive_cost_multiplier=material.cognitive_cost_multiplier,
         estimated_minutes=material.estimated_minutes,
@@ -91,11 +93,13 @@ def create_material(
 
     material = StudyMaterial(
         track_id=payload.track_id,
+        module_id=payload.module_id,
         title=payload.title,
         raw_content=payload.raw_content,
         external_url=payload.external_url,
         block_label=payload.block_label,
         resource_type=payload.resource_type,
+        difficulty=payload.difficulty,
         sequence=payload.sequence,
         cognitive_cost_multiplier=payload.cognitive_cost_multiplier,
         estimated_minutes=payload.estimated_minutes,

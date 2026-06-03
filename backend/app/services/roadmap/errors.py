@@ -1,0 +1,2 @@
+class RoadmapError(Exception):
+    pass

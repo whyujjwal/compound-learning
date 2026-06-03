@@ -11,6 +11,12 @@ class TrackCreate(BaseModel):
     color: str = Field(default="#6366f1", pattern=r"^#[0-9a-fA-F]{6}$")
     cognitive_multiplier: float = Field(default=1.0, gt=0.0)
     is_public: bool = True
+    learning_outcomes: list[str] | None = None
+    prerequisites: list[str] | None = None
+    target_audience: str | None = None
+    estimated_hours: int | None = Field(default=None, ge=1, le=5000)
+    difficulty: str | None = None
+    syllabus_summary: str | None = None
 
 
 class TrackUpdate(BaseModel):
@@ -20,6 +26,40 @@ class TrackUpdate(BaseModel):
     cognitive_multiplier: float | None = Field(default=None, gt=0.0)
     is_public: bool | None = None
     is_featured: bool | None = None
+    learning_outcomes: list[str] | None = None
+    prerequisites: list[str] | None = None
+    target_audience: str | None = None
+    estimated_hours: int | None = Field(default=None, ge=1, le=5000)
+    difficulty: str | None = None
+    syllabus_summary: str | None = None
+
+
+class TrackSyllabusMaterial(BaseModel):
+    id: UUID
+    title: str
+    external_url: str | None = None
+    resource_type: str | None = None
+    estimated_minutes: int
+    sequence: int
+    difficulty: str | None = None
+    resource_quality_score: float = 0.0
+    card_state: str | None = None
+
+
+class TrackSyllabusModule(BaseModel):
+    id: UUID
+    title: str
+    description: str | None = None
+    objective: str
+    sequence: int
+    estimated_minutes: int
+    difficulty: str
+    quiz_prompt: str | None = None
+    project_prompt: str | None = None
+    material_count: int
+    started_count: int = 0
+    mastered_count: int = 0
+    materials: list[TrackSyllabusMaterial] = []
 
 
 class TrackResponse(BaseModel):
@@ -40,6 +80,13 @@ class TrackResponse(BaseModel):
     quality_score: float
     source_track_id: UUID | None
     generation_prompt: str | None
+    learning_outcomes: list[str] = []
+    prerequisites: list[str] = []
+    target_audience: str | None = None
+    estimated_hours: int | None = None
+    difficulty: str | None = None
+    syllabus_summary: str | None = None
+    modules: list[TrackSyllabusModule] = []
     created_at: datetime
     material_count: int = 0
     due_card_count: int = 0
@@ -69,3 +116,4 @@ class TrackProgressResponse(BaseModel):
     next_material_url: str | None = None
     next_block_label: str | None = None
     blocks: list[TrackProgressBlock]
+    modules: list[TrackSyllabusModule] = []

@@ -63,6 +63,8 @@ export default function SchedulePage() {
   const [newDescription, setNewDescription] = useState("");
   const [newColor, setNewColor] = useState(COLORS[0]);
   const [creatingTrack, setCreatingTrack] = useState(false);
+  const [selectedTrackSlug, setSelectedTrackSlug] = useState("review");
+  const [selectedDay, setSelectedDay] = useState<WeekdayKey>("monday");
 
   useEffect(() => {
     setRightPanel(null);
@@ -91,6 +93,14 @@ export default function SchedulePage() {
     () => Object.fromEntries(tracks.map((track) => [track.slug, track])),
     [tracks]
   );
+  const activeTracks = tracks;
+
+  useEffect(() => {
+    if (selectedTrackSlug === "review") return;
+    if (!activeTracks.some((track) => track.slug === selectedTrackSlug)) {
+      setSelectedTrackSlug(activeTracks[0]?.slug ?? "review");
+    }
+  }, [activeTracks, selectedTrackSlug]);
 
   const totalBlocks = DAYS.reduce((sum, day) => sum + schedule[day.key].length, 0);
   const totalMinutes = DAYS.reduce(
@@ -109,7 +119,7 @@ export default function SchedulePage() {
     setMessage(null);
   }
 
-  function addBlock(day: WeekdayKey, track = tracks[0]?.slug ?? "review") {
+  function addBlock(day: WeekdayKey, track = selectedTrackSlug || activeTracks[0]?.slug || "review") {
     updateDay(day, (blocks) => [
       ...blocks,
       { block: blocks.length + 1, track, minutes: 45 },
@@ -234,42 +244,79 @@ export default function SchedulePage() {
       {message && <p className="week-canvas-message">{message}</p>}
 
       <section className="week-dock" aria-label="Create track">
-        <form onSubmit={createTrack} className="week-track-form week-track-form-inline">
+        <div className="week-planner-bar">
           <label>
-            <span>New track</span>
-            <input
-              className="v2-input"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Product Engineering"
-              required
-            />
+            <span>Active track</span>
+            <select
+              className="week-select"
+              value={selectedTrackSlug}
+              onChange={(e) => setSelectedTrackSlug(e.target.value)}
+            >
+              {activeTracks.map((track) => (
+                <option key={track.id} value={track.slug}>
+                  {track.name}
+                </option>
+              ))}
+              <option value="review">Review pass</option>
+            </select>
           </label>
           <label>
-            <span>Description</span>
-            <input
-              className="v2-input"
-              value={newDescription}
-              onChange={(e) => setNewDescription(e.target.value)}
-              placeholder="Outcome or roadmap theme"
-            />
+            <span>Add to</span>
+            <select
+              className="week-select"
+              value={selectedDay}
+              onChange={(e) => setSelectedDay(e.target.value as WeekdayKey)}
+            >
+              {DAYS.map((day) => (
+                <option key={day.key} value={day.key}>
+                  {day.label}
+                </option>
+              ))}
+            </select>
           </label>
-          <div className="week-color-row" role="radiogroup" aria-label="Track color">
-            {COLORS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                className={`week-color${newColor === color ? " active" : ""}`}
-                style={{ background: color }}
-                onClick={() => setNewColor(color)}
-                aria-label={color}
-              />
-            ))}
-          </div>
-          <button type="submit" className="v2-btn primary" disabled={creatingTrack}>
-            {creatingTrack ? "Creating..." : "Create"}
+          <button type="button" className="v2-btn primary" onClick={() => addBlock(selectedDay)}>
+            Add block
           </button>
-        </form>
+          <details className="week-new-track">
+            <summary>New track</summary>
+            <form onSubmit={createTrack} className="week-track-form week-track-form-inline">
+              <label>
+                <span>Name</span>
+                <input
+                  className="v2-input"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Product Engineering"
+                  required
+                />
+              </label>
+              <label>
+                <span>Description</span>
+                <input
+                  className="v2-input"
+                  value={newDescription}
+                  onChange={(e) => setNewDescription(e.target.value)}
+                  placeholder="Outcome or roadmap theme"
+                />
+              </label>
+              <div className="week-color-row" role="radiogroup" aria-label="Track color">
+                {COLORS.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`week-color${newColor === color ? " active" : ""}`}
+                    style={{ background: color }}
+                    onClick={() => setNewColor(color)}
+                    aria-label={color}
+                  />
+                ))}
+              </div>
+              <button type="submit" className="v2-btn primary" disabled={creatingTrack}>
+                {creatingTrack ? "Creating..." : "Create"}
+              </button>
+            </form>
+          </details>
+        </div>
       </section>
 
       <section className="week-board" aria-label="Editable weekly schedule">

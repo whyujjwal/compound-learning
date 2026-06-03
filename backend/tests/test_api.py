@@ -572,15 +572,15 @@ def test_generate_roadmap_chunked_fallback(client, monkeypatch):
         "weekly_schedule": {d: [] for d in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
     }
 
-    from app.services import roadmap_generator as rg
+    from app.services.roadmap import RoadmapError
+    from app.services.roadmap import generator as rg
 
     def fake_single(*args, **kwargs):
-        raise rg.RoadmapError("__truncated__")
+        raise RoadmapError("__truncated__")
 
-    monkeypatch.setattr(rg.settings, "gemini_api_key", "test-key")
-    monkeypatch.setattr(rg, "_generate_single_pass", fake_single)
-    monkeypatch.setattr(rg, "_generate_chunked", lambda *a, **k: fake_curriculum)
-    monkeypatch.setattr(rg, "_should_chunk_first", lambda goals: False)
+    monkeypatch.setattr(rg, "generate_single_pass", fake_single)
+    monkeypatch.setattr(rg, "generate_chunked", lambda *a, **k: fake_curriculum)
+    monkeypatch.setattr(rg, "should_chunk_first", lambda goals: False)
 
     res = client.post(
         "/api/curriculum/generate",

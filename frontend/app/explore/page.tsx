@@ -9,11 +9,6 @@ import { trackAccent } from "@/lib/trackColors";
 
 type SortMode = "ranking" | "stars" | "new";
 
-function modulesPreview(count: number): string[] {
-  if (count <= 0) return ["Roadmap", "Practice", "Review"];
-  return ["Foundations", "Core modules", "Practice", "Checkpoint", "Capstone"].slice(0, Math.max(3, Math.min(5, count)));
-}
-
 export default function ExplorePage() {
   const { reloadAll, setRightPanel } = useShell();
   const [tracks, setTracks] = useState<CatalogTrack[]>([]);
@@ -25,6 +20,7 @@ export default function ExplorePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [collections, setCollections] = useState<CatalogCollection[]>([]);
   const [leaderboards, setLeaderboards] = useState<Leaderboards | null>(null);
+  const [expandedTrackId, setExpandedTrackId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -216,7 +212,10 @@ export default function ExplorePage() {
       <div className="explore-grid">
         {tracks.map((track, index) => {
           const accent = trackAccent(track.slug, track.color);
-          const modules = modulesPreview(track.module_count);
+          const modules = track.syllabus_preview?.length
+            ? track.syllabus_preview
+            : ["Foundations", "Core modules", "Practice", "Checkpoint"].slice(0, Math.max(2, Math.min(4, track.module_count)));
+          const isExpanded = expandedTrackId === track.id;
           return (
             <article
               key={track.id}
@@ -238,6 +237,8 @@ export default function ExplorePage() {
               <div className="explore-card-meta">
                 <span>{track.material_count} materials</span>
                 <span>{track.module_count} modules</span>
+                {track.estimated_hours && <span>{track.estimated_hours} hours</span>}
+                {track.difficulty && <span>{track.difficulty}</span>}
                 <span>{track.star_count} stars</span>
                 <span>{track.adoption_count} adopted</span>
                 <span>{track.rating_avg.toFixed(1)} rating</span>
@@ -249,10 +250,27 @@ export default function ExplorePage() {
                   <span key={module}>{module}</span>
                 ))}
               </div>
+              {isExpanded && (
+                <div className="explore-syllabus-preview">
+                  <strong>{track.syllabus_summary ?? "Syllabus preview"}</strong>
+                  <div>
+                    {(track.learning_outcomes ?? []).slice(0, 3).map((outcome) => (
+                      <span key={outcome}>{outcome}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="explore-card-actions">
                 <Link href={`/explore/${track.id}`} className="v2-btn sm">
                   Details
                 </Link>
+                <button
+                  type="button"
+                  className="v2-btn sm ghost"
+                  onClick={() => setExpandedTrackId(isExpanded ? null : track.id)}
+                >
+                  {isExpanded ? "Hide syllabus" : "Preview syllabus"}
+                </button>
                 <button
                   type="button"
                   className="v2-btn sm ghost"

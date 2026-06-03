@@ -17,18 +17,76 @@ from app.schemas.track import (
     TrackProgressBlock,
     TrackProgressResponse,
     TrackResponse,
+    TrackSyllabusMaterial,
+    TrackSyllabusModule,
     TrackUpdate,
 )
 from app.services.bootstrap import ensure_scheduler_params
 from app.services.fsrs_optimizer import optimize_track_weights
 from app.services.mastery import is_mastered
 from app.services.roadmap_generator import RoadmapError, generate_track_update
+from app.services.syllabus import clean_list, default_outcomes, full_block_label, syllabus_modules
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 
+def _syllabus_response(
+    db: Session,
+    track: Track,
+    materials: list[StudyMaterial] | None = None,
+    card_by_material: dict[UUID, Card] | None = None,
+) -> list[TrackSyllabusModule]:
+    materials = materials if materials is not None else (
+        db.query(StudyMaterial)
+        .filter(StudyMaterial.track_id == track.id)
+        .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
+        .all()
+    )
+    card_by_material = card_by_material or {}
+    modules = []
+    for module in syllabus_modules(db, track, materials):
+        module_materials = module.pop("materials")
+        started = 0
+        mastered = 0
+        material_responses = []
+        for material in module_materials:
+            card = card_by_material.get(material.id) or db.query(Card).filter(Card.material_id == material.id).first()
+            if card and card.reps > 0:
+                started += 1
+            if card and is_mastered(card):
+                mastered += 1
+            material_responses.append(
+                TrackSyllabusMaterial(
+                    id=material.id,
+                    title=material.title,
+                    external_url=material.external_url,
+                    resource_type=material.resource_type,
+                    estimated_minutes=material.estimated_minutes,
+                    sequence=material.sequence,
+                    difficulty=material.difficulty,
+                    resource_quality_score=material.resource_quality_score,
+                    card_state=card.state.value if card else None,
+                )
+            )
+        modules.append(
+            TrackSyllabusModule(
+                **module,
+                started_count=started,
+                mastered_count=mastered,
+                materials=material_responses,
+            )
+        )
+    return modules
+
+
 def _track_response(db: Session, track: Track) -> TrackResponse:
     now = datetime.now(UTC)
-    material_count = db.query(StudyMaterial).filter(StudyMaterial.track_id == track.id).count()
+    materials = (
+        db.query(StudyMaterial)
+        .filter(StudyMaterial.track_id == track.id)
+        .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
+        .all()
+    )
+    material_count = len(materials)
     # In the new model, "due" = FSRS-due reviews (reps>0). New unstarted items aren't "due".
     due_count = (
         db.query(Card)
@@ -58,6 +116,13 @@ def _track_response(db: Session, track: Track) -> TrackResponse:
         quality_score=track.quality_score,
         source_track_id=track.source_track_id,
         generation_prompt=track.generation_prompt,
+        learning_outcomes=clean_list(track.learning_outcomes) or default_outcomes(track, len({m.block_label for m in materials})),
+        prerequisites=clean_list(track.prerequisites),
+        target_audience=track.target_audience,
+        estimated_hours=track.estimated_hours or max(1, round(sum(m.estimated_minutes for m in materials) / 60)) if materials else track.estimated_hours,
+        difficulty=track.difficulty,
+        syllabus_summary=track.syllabus_summary or track.description,
+        modules=_syllabus_response(db, track, materials),
         created_at=track.created_at,
         material_count=material_count,
         due_card_count=due_count,
@@ -105,6 +170,12 @@ def create_track(
         cognitive_multiplier=payload.cognitive_multiplier,
         is_system=False,
         is_public=payload.is_public,
+        learning_outcomes=payload.learning_outcomes,
+        prerequisites=payload.prerequisites,
+        target_audience=payload.target_audience,
+        estimated_hours=payload.estimated_hours,
+        difficulty=payload.difficulty,
+        syllabus_summary=payload.syllabus_summary,
         published_at=datetime.now(UTC) if payload.is_public else None,
     )
     db.add(track)
@@ -184,6 +255,7 @@ def get_track_progress(
         .all()
     )
     card_by_material = {c.material_id: c for c in cards}
+    modules = _syllabus_response(db, track, materials, card_by_material)
 
     started = [c for c in cards if c.reps > 0]
     mastered = [c for c in cards if is_mastered(c)]
@@ -243,6 +315,7 @@ def get_track_progress(
         next_material_url=next_material_url,
         next_block_label=next_block_label,
         blocks=sorted(block_map.values(), key=lambda b: b.label),
+        modules=modules,
     )
 
 
@@ -333,15 +406,26 @@ def request_track_ai_update(
                 external_url=item.get("url"),
                 block_label=item.get("block_label") or f"{track.name} · AI update",
                 resource_type=item.get("type"),
+                difficulty=item.get("difficulty"),
                 sequence=item.get("sequence") or next_sequence + i,
                 estimated_minutes=item.get("estimated_minutes", 20),
                 priority_percent=item.get("priority_percent", 50),
                 cognitive_cost_multiplier=item.get("cognitive_cost_multiplier", 1.0),
             )
+            module_title = item.get("module") or item.get("module_title")
+            material.block_label = item.get("block_label") or full_block_label(track, module_title or "AI update")
             db.add(material)
             db.flush()
             db.add(Card(user_id=user.id, material_id=material.id))
             added += 1
+        if added:
+            materials = (
+                db.query(StudyMaterial)
+                .filter(StudyMaterial.track_id == track.id)
+                .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
+                .all()
+            )
+            syllabus_modules(db, track, materials)
 
     row = TrackAIUpdate(
         track_id=track.id,

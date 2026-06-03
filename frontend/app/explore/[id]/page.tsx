@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { TrackMap } from "@/components/learning/TrackMap";
 import { useShell } from "@/components/ui/Shell";
 import { RightPanel, PanelSection } from "@/components/ui/RightPanel";
 import { api, type CatalogTrackDetail } from "@/lib/api";
@@ -16,20 +17,13 @@ export default function PublicTrackDetailPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [rating, setRating] = useState(5);
+  const [view, setView] = useState<"syllabus" | "map" | "materials">("syllabus");
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!id) return;
     api.getCatalogTrack(id).then(setTrack).catch((err) => setMessage(err instanceof Error ? err.message : "Could not load track."));
   }, [id]);
-
-  const modules = useMemo(() => {
-    const map = new Map<string, CatalogTrackDetail["materials"]>();
-    for (const material of track?.materials ?? []) {
-      const key = material.block_label || "Core";
-      map.set(key, [...(map.get(key) ?? []), material]);
-    }
-    return Array.from(map.entries());
-  }, [track]);
 
   useEffect(() => {
     setRightPanel(
@@ -99,6 +93,25 @@ export default function PublicTrackDetailPage() {
   }
 
   const accent = trackAccent(track.slug, track.color);
+  const modules = track.modules ?? [];
+  const defaultExpanded = new Set(modules.slice(0, 2).map((module) => module.id));
+  const expanded = expandedModules.size ? expandedModules : defaultExpanded;
+  const outcomes = track.learning_outcomes?.length
+    ? track.learning_outcomes
+    : [
+        track.description ?? "Understand the complete learning path before adopting this track.",
+        "Inspect each module, material, quiz, and project checkpoint.",
+        "Adopt a private copy when the syllabus matches your goals.",
+      ];
+
+  function toggleModule(id: string) {
+    setExpandedModules((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <>
@@ -110,6 +123,8 @@ export default function PublicTrackDetailPage() {
           <div className="explore-card-meta">
             <span>{track.material_count} materials</span>
             <span>{track.module_count} modules</span>
+            {track.estimated_hours && <span>{track.estimated_hours} hours</span>}
+            {track.difficulty && <span>{track.difficulty}</span>}
             <span>{Math.round(track.quality.resource_score)} resource score</span>
             <span>{track.quality.quiz_count} quizzes</span>
             <span>{track.quality.project_count} projects</span>
@@ -147,27 +162,46 @@ export default function PublicTrackDetailPage() {
         </button>
       </section>
 
-      <div className="catalog-module-list">
-        {modules.map(([module, materials]) => (
-          <article key={module} className="track-module" style={{ ["--track-color" as string]: accent }}>
+      <div className="track-syllabus-outcomes">
+        {outcomes.slice(0, 4).map((item) => <span key={item}>{item}</span>)}
+      </div>
+
+      <div className="track-view-tabs">
+        {(["syllabus", "map", "materials"] as const).map((mode) => (
+          <button key={mode} type="button" className={`explore-filter-btn${view === mode ? " active" : ""}`} onClick={() => setView(mode)}>
+            {mode === "map" ? "Map" : mode === "materials" ? "Materials" : "Syllabus"}
+          </button>
+        ))}
+      </div>
+
+      {view === "map" && <TrackMap modules={modules} accent={accent} title={track.name} />}
+
+      {view === "syllabus" && <div className="catalog-module-list">
+        {modules.map((module) => {
+          const isOpen = expanded.has(module.id);
+          return (
+          <article key={module.id} className="track-module" style={{ ["--track-color" as string]: accent }}>
             <div className="track-module-main">
-              <div className="track-module-head">
+              <button type="button" className="syllabus-module-toggle" onClick={() => toggleModule(module.id)}>
                 <div>
-                  <h2>{module}</h2>
-                  <p>{materials.length} materials · {materials.reduce((sum, m) => sum + m.estimated_minutes, 0)} minutes</p>
+                  <h2>{module.title}</h2>
+                  <p>{module.objective}</p>
                 </div>
-                <span className="track-module-pct">
-                  {Math.round(materials.reduce((sum, m) => sum + m.resource_quality_score, 0) / Math.max(1, materials.length))}
-                </span>
+                <span className="syllabus-module-chevron">{isOpen ? "-" : "+"}</span>
+              </button>
+              <div className="track-module-meta">
+                <span>{module.material_count} materials</span>
+                <span>{module.estimated_minutes} minutes</span>
+                <span>{module.difficulty}</span>
               </div>
               <div className="track-module-quality">
-                {materials.slice(0, 8).map((material) => (
+                {module.materials.slice(0, 8).map((material) => (
                   <span key={material.id}>{material.resource_type ?? "material"} · {material.resource_health_status}</span>
                 ))}
               </div>
             </div>
-            <div className="track-module-materials">
-              {materials.map((material) => (
+            {isOpen && <div className="track-module-materials">
+              {module.materials.map((material) => (
                 <a
                   key={material.id}
                   href={material.external_url ?? "#"}
@@ -176,13 +210,24 @@ export default function PublicTrackDetailPage() {
                   className="track-module-material"
                 >
                   <span>{material.title}</span>
-                  <small>{material.estimated_minutes}m · {Math.round(material.resource_quality_score)}</small>
+                  <small>{material.estimated_minutes}m · {Math.round(material.resource_quality_score ?? 0)}</small>
                 </a>
               ))}
-            </div>
+            </div>}
           </article>
-        ))}
-      </div>
+        );})}
+      </div>}
+
+      {view === "materials" && (
+        <div className="track-module-materials">
+          {track.materials.map((material) => (
+            <a key={material.id} href={material.external_url ?? "#"} target={material.external_url ? "_blank" : undefined} rel={material.external_url ? "noreferrer" : undefined} className="track-module-material">
+              <span>{material.title}</span>
+              <small>{material.resource_type ?? "material"} · {material.estimated_minutes}m</small>
+            </a>
+          ))}
+        </div>
+      )}
     </>
   );
 }

@@ -12,11 +12,13 @@ from app.models.catalog_collection import CatalogCollection, CatalogCollectionIt
 from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.track import Track
+from app.models.track_module import TrackModule
 from app.models.track_rating import TrackRating
 from app.models.track_star import TrackStar
 from app.models.user import User
 from app.services.catalog_quality import quality_breakdown, rank_score, refresh_track_quality, refresh_track_rating
 from app.services.bootstrap import ensure_scheduler_params
+from app.services.syllabus import clean_list, default_outcomes, syllabus_modules
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -40,24 +42,48 @@ class CatalogTrackResponse(BaseModel):
     is_starred: bool
     rank_score: float
     source_track_id: UUID | None = None
+    learning_outcomes: list[str] = []
+    prerequisites: list[str] = []
+    target_audience: str | None = None
+    estimated_hours: int | None = None
+    difficulty: str | None = None
+    syllabus_summary: str | None = None
+    syllabus_preview: list[str] = []
     created_at: datetime
     published_at: datetime | None = None
 
 
 class CatalogMaterialPreview(BaseModel):
     id: UUID
+    module_id: UUID | None = None
     title: str
     external_url: str | None
     block_label: str | None
     resource_type: str | None
+    difficulty: str | None = None
     estimated_minutes: int
     sequence: int
     resource_health_status: str = "UNKNOWN"
     resource_quality_score: float = 0.0
 
 
+class CatalogModulePreview(BaseModel):
+    id: UUID
+    title: str
+    description: str | None = None
+    objective: str
+    sequence: int
+    estimated_minutes: int
+    difficulty: str
+    quiz_prompt: str | None = None
+    project_prompt: str | None = None
+    material_count: int
+    materials: list[CatalogMaterialPreview] = []
+
+
 class CatalogTrackDetail(CatalogTrackResponse):
     materials: list[CatalogMaterialPreview]
+    modules: list[CatalogModulePreview]
     quality: dict
 
 
@@ -106,7 +132,7 @@ def _unique_slug(db: Session, user: User, base: str) -> str:
 
 def _catalog_response(db: Session, track: Track, user: User) -> CatalogTrackResponse:
     materials = db.query(StudyMaterial).filter(StudyMaterial.track_id == track.id).all()
-    modules = {m.block_label or "Core" for m in materials}
+    modules = syllabus_modules(db, track, materials)
     refresh_track_quality(db, track)
     starred = (
         db.query(TrackStar)
@@ -134,6 +160,13 @@ def _catalog_response(db: Session, track: Track, user: User) -> CatalogTrackResp
         is_starred=starred,
         rank_score=rank_score(track, len(materials)),
         source_track_id=track.source_track_id,
+        learning_outcomes=clean_list(track.learning_outcomes) or default_outcomes(track, len(modules)),
+        prerequisites=clean_list(track.prerequisites),
+        target_audience=track.target_audience,
+        estimated_hours=track.estimated_hours or max(1, round(sum(m.estimated_minutes for m in materials) / 60)) if materials else track.estimated_hours,
+        difficulty=track.difficulty,
+        syllabus_summary=track.syllabus_summary or track.description,
+        syllabus_preview=[m["title"] for m in modules[:5]],
         created_at=track.created_at,
         published_at=track.published_at,
     )
@@ -204,15 +237,36 @@ def get_catalog_track(
         .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
         .all()
     )
+    module_payload = []
+    for module in syllabus_modules(db, track, materials):
+        module_materials = [
+            CatalogMaterialPreview(
+                id=m.id,
+                module_id=m.module_id,
+                title=m.title,
+                external_url=m.external_url,
+                block_label=m.block_label,
+                resource_type=m.resource_type,
+                difficulty=m.difficulty,
+                estimated_minutes=m.estimated_minutes,
+                sequence=m.sequence,
+                resource_health_status=m.resource_health_status,
+                resource_quality_score=m.resource_quality_score,
+            )
+            for m in module.pop("materials")
+        ]
+        module_payload.append(CatalogModulePreview(**module, materials=module_materials))
     return CatalogTrackDetail(
         **base.model_dump(),
         materials=[
             CatalogMaterialPreview(
                 id=m.id,
+                module_id=m.module_id,
                 title=m.title,
                 external_url=m.external_url,
                 block_label=m.block_label,
                 resource_type=m.resource_type,
+                difficulty=m.difficulty,
                 estimated_minutes=m.estimated_minutes,
                 sequence=m.sequence,
                 resource_health_status=m.resource_health_status,
@@ -220,6 +274,7 @@ def get_catalog_track(
             )
             for m in materials
         ],
+        modules=module_payload,
         quality=quality_breakdown(materials),
     )
 
@@ -306,10 +361,34 @@ def adopt_track(
         is_featured=False,
         source_track_id=source.id,
         generation_prompt=source.generation_prompt,
+        learning_outcomes=source.learning_outcomes,
+        prerequisites=source.prerequisites,
+        target_audience=source.target_audience,
+        estimated_hours=source.estimated_hours,
+        difficulty=source.difficulty,
+        syllabus_summary=source.syllabus_summary,
     )
     db.add(track)
     db.flush()
     ensure_scheduler_params(db, user, track)
+
+    source_modules = syllabus_modules(db, source)
+    module_map = {}
+    for module in source_modules:
+        copy_module = TrackModule(
+            track_id=track.id,
+            title=module["title"],
+            description=module["description"],
+            objective=module["objective"],
+            sequence=module["sequence"],
+            estimated_minutes=module["estimated_minutes"],
+            difficulty=module["difficulty"],
+            quiz_prompt=module["quiz_prompt"],
+            project_prompt=module["project_prompt"],
+        )
+        db.add(copy_module)
+        db.flush()
+        module_map[module["id"]] = copy_module.id
 
     source_materials = (
         db.query(StudyMaterial)
@@ -321,11 +400,13 @@ def adopt_track(
     for material in source_materials:
         copy = StudyMaterial(
             track_id=track.id,
+            module_id=module_map.get(material.module_id),
             title=material.title,
             raw_content=material.raw_content,
             external_url=material.external_url,
             block_label=material.block_label,
             resource_type=material.resource_type,
+            difficulty=material.difficulty,
             sequence=material.sequence,
             cognitive_cost_multiplier=material.cognitive_cost_multiplier,
             estimated_minutes=material.estimated_minutes,

@@ -1,3 +1,5 @@
+@import "@xyflow/react/dist/style.css";
+
 /* ============================================================
    Compound — globals
    Workspace shell v2. Tokens, reset, and retained component CSS.
@@ -3070,6 +3072,279 @@ select.v2-input {
   border-top: 1px solid var(--hairline);
 }
 
+.track-view-tabs,
+.syllabus-module-toggle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.track-view-tabs {
+  margin: 0 0 var(--s-4);
+}
+
+.syllabus-module-toggle {
+  width: 100%;
+  justify-content: space-between;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.syllabus-module-toggle h2 {
+  margin: 0;
+}
+
+.syllabus-module-chevron {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hairline);
+  color: var(--fg-mute);
+}
+
+.track-syllabus-outcomes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: var(--s-4) 0 var(--s-5);
+}
+
+.track-syllabus-outcomes span {
+  border: 1px solid var(--hairline);
+  background: var(--surface-1);
+  border-radius: var(--r-sm);
+  padding: 12px;
+  color: var(--fg-soft);
+  font-size: 13px;
+}
+
+.track-map-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: var(--s-4);
+  margin: var(--s-4) 0 var(--s-6);
+}
+
+.track-map-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.track-map-toolbar span,
+.track-map-inspector span {
+  display: block;
+  color: var(--fg-mute);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.track-map-toolbar strong {
+  display: block;
+  color: var(--fg);
+  font-size: 18px;
+}
+
+.track-map-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.track-map-canvas {
+  height: min(620px, 68vh);
+  min-height: 440px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background:
+    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--track-color) 10%, transparent), transparent 34%),
+    var(--surface-1);
+  overflow: hidden;
+}
+
+.track-map-canvas .react-flow__controls,
+.track-map-canvas .react-flow__minimap {
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  box-shadow: none;
+}
+
+.track-map-canvas .react-flow__controls-button {
+  background: transparent;
+  border-bottom-color: var(--hairline);
+  color: var(--fg);
+}
+
+.track-map-node {
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface-1) 92%, var(--track-color));
+  color: var(--fg);
+  box-shadow: 0 18px 44px -36px var(--shadow-lg);
+}
+
+.track-map-node.module {
+  width: 292px;
+  min-height: 150px;
+  padding: 14px;
+}
+
+.track-map-node.material {
+  width: 138px;
+  min-height: 68px;
+  padding: 10px;
+}
+
+.track-map-node-top,
+.track-map-node-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.track-map-node-top span,
+.track-map-node.material span {
+  color: var(--track-color);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.track-map-node h3,
+.track-map-node p {
+  margin: 0;
+}
+
+.track-map-node h3 {
+  margin-top: 10px;
+  font-size: 18px;
+}
+
+.track-map-node p {
+  margin-top: 8px;
+  color: var(--fg-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.track-map-node-meta {
+  margin-top: 12px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.track-map-node-meta span,
+.track-map-node.material small {
+  color: var(--fg-mute);
+  font-size: 11px;
+}
+
+.track-map-node.material strong {
+  display: block;
+  margin: 5px 0;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.track-map-inspector {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  padding: var(--s-4);
+  min-height: 440px;
+}
+
+.track-map-inspector h3 {
+  margin: 6px 0 8px;
+  font-size: 22px;
+}
+
+.track-map-inspector p {
+  margin: 0;
+  color: var(--fg-soft);
+  line-height: 1.55;
+}
+
+.track-map-inspector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: var(--s-4) 0;
+}
+
+.track-map-inspector-grid span,
+.track-map-inspector-list a {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  padding: 10px;
+}
+
+.track-map-inspector-grid span {
+  color: var(--fg-soft);
+  font-size: 12px;
+  text-align: center;
+}
+
+.track-map-inspector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.track-map-inspector-list a strong,
+.track-map-inspector-list a small {
+  display: block;
+}
+
+.track-map-inspector-list a strong {
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.track-map-inspector-list a small {
+  margin-top: 4px;
+  color: var(--fg-mute);
+  font-size: 11px;
+}
+
+.explore-syllabus-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--track-color) 6%, var(--surface-1));
+  padding: 12px;
+}
+
+.explore-syllabus-preview strong {
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.explore-syllabus-preview div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.explore-syllabus-preview span {
+  color: var(--fg-soft);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 /* ────────────────────────────────────────────────────────────
    Explore catalog
    ──────────────────────────────────────────────────────────── */
@@ -6084,6 +6359,18 @@ body {
     padding-left: var(--s-4);
   }
 
+  .track-map-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .track-map-canvas {
+    min-height: 360px;
+  }
+
+  .track-map-inspector {
+    min-height: 0;
+  }
+
   .catalog-detail-hero,
   .creator-hero,
   .catalog-rating,
@@ -6739,6 +7026,177 @@ body::before {
 
   .week-board {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Weekly planner refinement */
+.week-canvas {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.week-canvas-head {
+  align-items: flex-start;
+  padding-bottom: var(--s-3);
+}
+
+.week-canvas-head .page-title {
+  margin-bottom: 8px;
+}
+
+.week-canvas-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-radius: var(--r-md);
+  box-shadow: none;
+  background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+}
+
+.week-dock {
+  margin-bottom: var(--s-5);
+}
+
+.week-planner-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.1fr) minmax(160px, 0.7fr) auto auto;
+  gap: var(--s-3);
+  align-items: end;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  padding: var(--s-4);
+}
+
+.week-planner-bar label,
+.week-new-track label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--fg-soft);
+  font-size: 12px;
+}
+
+.week-select {
+  width: 100%;
+  height: 40px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--fg);
+  padding: 0 34px 0 12px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.week-new-track {
+  position: relative;
+}
+
+.week-new-track summary {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  color: var(--fg-soft);
+  background: var(--surface-2);
+  list-style: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.week-new-track summary::-webkit-details-marker {
+  display: none;
+}
+
+.week-new-track[open] summary {
+  color: var(--fg);
+  border-color: var(--hairline-strong);
+}
+
+.week-new-track .week-track-form-inline {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  z-index: 8;
+  width: min(680px, 88vw);
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(200px, 1fr) auto auto;
+  gap: var(--s-3);
+  align-items: end;
+  border-radius: var(--r-md);
+  box-shadow: 0 24px 60px -36px var(--shadow-lg);
+}
+
+.week-board {
+  grid-template-columns: repeat(7, minmax(148px, 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+.week-day-column {
+  min-height: 0;
+  border-radius: var(--r-md);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.week-day-head {
+  min-height: 58px;
+  background: var(--surface-2);
+  background-size: auto;
+}
+
+.week-day-head h2 {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.week-block-list {
+  min-height: 180px;
+  gap: 8px;
+  padding: 8px;
+}
+
+.week-block {
+  border-radius: var(--r-sm);
+  padding: 10px;
+  background: color-mix(in srgb, var(--track-color) 7%, var(--surface-1));
+}
+
+.week-block-top select,
+.week-block-bottom input {
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+}
+
+.week-block-bottom {
+  gap: 8px;
+}
+
+.week-block-tools .week-icon-btn {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .week-board {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .week-planner-bar,
+  .week-new-track .week-track-form-inline {
+    grid-template-columns: 1fr;
+  }
+
+  .week-new-track .week-track-form-inline {
+    position: static;
+    width: 100%;
+    margin-top: 10px;
   }
 }
 

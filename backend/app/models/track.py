@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,6 +35,12 @@ class Track(Base):
         UUID(as_uuid=True), ForeignKey("tracks.id", ondelete="SET NULL"), nullable=True
     )
     generation_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    learning_outcomes: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    prerequisites: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    target_audience: Mapped[str | None] = mapped_column(Text, nullable=True)
+    estimated_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    difficulty: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    syllabus_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -43,6 +49,12 @@ class Track(Base):
     user = relationship("User", back_populates="tracks")
     source_track = relationship("Track", remote_side="Track.id")
     materials = relationship("StudyMaterial", back_populates="track", cascade="all, delete-orphan")
+    modules = relationship(
+        "TrackModule",
+        back_populates="track",
+        cascade="all, delete-orphan",
+        order_by="TrackModule.sequence",
+    )
     stars = relationship("TrackStar", back_populates="track", cascade="all, delete-orphan")
     ratings = relationship("TrackRating", back_populates="track", cascade="all, delete-orphan")
     ai_updates = relationship("TrackAIUpdate", back_populates="track", cascade="all, delete-orphan")

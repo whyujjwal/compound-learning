@@ -12,6 +12,7 @@ from app.models.block_session import BlockSession, BlockSessionStatus
 from app.models.study_session import CompletionStatus, StudySession
 from app.models.track import Track
 from app.models.track_ai_update import TrackAIUpdate
+from app.models.track_module import TrackModule
 from app.models.track_rating import TrackRating
 from app.models.track_star import TrackStar
 from app.models.user import User
@@ -21,6 +22,7 @@ __all__ = [
     "User",
     "Track",
     "TrackAIUpdate",
+    "TrackModule",
     "TrackRating",
     "TrackStar",
     "CatalogCollection",
