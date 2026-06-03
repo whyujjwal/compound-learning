@@ -6,6 +6,8 @@ import type { SyllabusDetail, SyllabusModule, SyllabusProposal } from "../types"
 import { syllabusApi } from "../api/endpoints";
 import { queryKeys } from "@/lib/query/keys";
 import { ProposalDiff } from "../proposals/ProposalDiff";
+import { SectionEditor } from "@/features/course/components/SectionEditor";
+import { useCourseTree } from "@/features/course/hooks/useCourseTree";
 
 export function StudioEditor({
   syllabus,
@@ -17,6 +19,7 @@ export function StudioEditor({
   onProposalChange: () => void;
 }) {
   const qc = useQueryClient();
+  const { data: courseTree, refetch: refetchTree } = useCourseTree(syllabus.slug);
   const [expanded, setExpanded] = useState<Set<string>>(new Set(syllabus.modules.map((m) => m.id)));
   const [busy, setBusy] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
@@ -27,6 +30,7 @@ export function StudioEditor({
 
   async function refresh() {
     await qc.invalidateQueries({ queryKey: queryKeys.syllabus(syllabus.slug) });
+    await refetchTree();
     onProposalChange();
   }
 
@@ -204,6 +208,13 @@ export function StudioEditor({
                       Add material
                     </button>
                   </div>
+                  {courseTree?.modules.find((cm) => cm.id === module.id) && (
+                    <SectionEditor
+                      syllabusId={syllabus.id}
+                      module={courseTree.modules.find((cm) => cm.id === module.id)!}
+                      onChange={refresh}
+                    />
+                  )}
                 </div>
               )}
             </div>
