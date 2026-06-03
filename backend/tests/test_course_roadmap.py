@@ -48,3 +48,13 @@ def test_build_roadmap_emits_spine_and_status():
     mat_node = next(n for n in graph.nodes if n.type == "material")
     assert mat_node.status == "started"
     assert next(n for n in graph.nodes if n.id.endswith("000000000002")).kind == "optional"
+
+
+def test_get_roadmap_endpoint(client):
+    res = client.get("/api/syllabi/dsa/roadmap")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["slug"] == "dsa"
+    assert isinstance(body["nodes"], list)
+    assert isinstance(body["edges"], list)
+    assert any(n["type"] == "module" for n in body["nodes"])

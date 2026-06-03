@@ -88,3 +88,19 @@ def test_build_course_tree_nests_and_counts(db_session):
     assert m.sections[0].materials[0].resource_type == "video"
     assert m.material_count == 1
     assert m.sections[0].mastered_count == 0
+
+
+def test_get_course_tree_endpoint(client):
+    res = client.get("/api/syllabi/dsa/tree")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["slug"] == "dsa"
+    assert isinstance(body["modules"], list)
+    assert "module_count" in body and "material_count" in body
+    if body["modules"]:
+        assert "sections" in body["modules"][0]
+
+
+def test_get_course_tree_unknown_slug_404(client):
+    res = client.get("/api/syllabi/does-not-exist/tree")
+    assert res.status_code == 404
