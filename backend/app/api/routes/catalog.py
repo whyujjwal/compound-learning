@@ -493,77 +493,10 @@ def adopt_track(
     if not source:
         raise HTTPException(status_code=404, detail="Public track not found")
 
-    slug = _unique_slug(db, user, source.slug)
-    track = Track(
-        user_id=user.id,
-        slug=slug,
-        name=source.name,
-        description=source.description,
-        color=source.color,
-        cognitive_multiplier=source.cognitive_multiplier,
-        is_system=False,
-        is_public=False,
-        is_featured=False,
-        source_track_id=source.id,
-        generation_prompt=source.generation_prompt,
-        learning_outcomes=source.learning_outcomes,
-        prerequisites=source.prerequisites,
-        target_audience=source.target_audience,
-        estimated_hours=source.estimated_hours,
-        difficulty=source.difficulty,
-        syllabus_summary=source.syllabus_summary,
-    )
-    db.add(track)
-    db.flush()
-    ensure_scheduler_params(db, user, track)
+    from app.domains.course.clone_service import clone_track
 
-    source_modules = syllabus_modules(db, source)
-    module_map = {}
-    for module in source_modules:
-        copy_module = TrackModule(
-            track_id=track.id,
-            title=module["title"],
-            description=module["description"],
-            objective=module["objective"],
-            sequence=module["sequence"],
-            estimated_minutes=module["estimated_minutes"],
-            difficulty=module["difficulty"],
-            quiz_prompt=module["quiz_prompt"],
-            project_prompt=module["project_prompt"],
-        )
-        db.add(copy_module)
-        db.flush()
-        module_map[module["id"]] = copy_module.id
-
-    source_materials = (
-        db.query(StudyMaterial)
-        .filter(StudyMaterial.track_id == source.id)
-        .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
-        .all()
-    )
-    created = 0
-    for material in source_materials:
-        copy = StudyMaterial(
-            track_id=track.id,
-            module_id=module_map.get(material.module_id),
-            title=material.title,
-            raw_content=material.raw_content,
-            external_url=material.external_url,
-            block_label=material.block_label,
-            resource_type=material.resource_type,
-            difficulty=material.difficulty,
-            sequence=material.sequence,
-            cognitive_cost_multiplier=material.cognitive_cost_multiplier,
-            estimated_minutes=material.estimated_minutes,
-            priority_percent=material.priority_percent,
-        )
-        db.add(copy)
-        db.flush()
-        db.add(Card(user_id=user.id, material_id=copy.id))
-        created += 1
-
-    track.published_at = None
-    source.adoption_count += 1
+    track = clone_track(db, source, user)
+    created = db.query(StudyMaterial).filter(StudyMaterial.track_id == track.id).count()
     db.commit()
     db.refresh(track)
     return AdoptTrackResponse(track_id=track.id, slug=track.slug, materials_created=created)
