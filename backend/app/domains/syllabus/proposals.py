@@ -145,9 +145,22 @@ def apply_proposal(
         raise HTTPException(status_code=400, detail="No operations selected")
 
     applied_ids: list[str] = []
+    ref_to_id: dict[str, str] = {}
     try:
         for operation in operations:
-            apply_operation(db, user=user, track=track, operation=operation, proposal_id=row.id)
+            op_payload = dict(operation.payload or {})
+            module_ref = op_payload.pop("_module_ref", None)
+            section_ref = op_payload.pop("_section_ref", None)
+            if module_ref and module_ref in ref_to_id:
+                operation.target.module_id = UUID(ref_to_id[module_ref])
+            if section_ref and section_ref in ref_to_id:
+                operation.target.section_id = UUID(ref_to_id[section_ref])
+            operation.payload = op_payload
+            result = apply_operation(db, user=user, track=track, operation=operation, proposal_id=row.id)
+            if "module_id" in result:
+                ref_to_id[operation.id] = result["module_id"]
+            elif "section_id" in result:
+                ref_to_id[operation.id] = result["section_id"]
             applied_ids.append(operation.id)
         row.status = "APPLIED"
         row.applied_operation_ids = applied_ids

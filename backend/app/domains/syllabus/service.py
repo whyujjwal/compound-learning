@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+import uuid as _uuid
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -11,10 +13,15 @@ from sqlalchemy.orm import Session
 from app.domains.syllabus.mapper import syllabus_detail, syllabus_list_items
 from app.domains.syllabus.operations import bump_version, log_change
 from app.domains.syllabus.queries import get_user_syllabus, get_user_syllabus_by_slug, list_user_syllabi
+from app.domains.course.sourcing_service import draft_to_operations, generate_structure
+from app.domains.syllabus.proposals import create_proposal
 from app.domains.syllabus.schemas import (
     ChangeLogEntry,
+    ProposalCreate,
     SyllabusCreate,
     SyllabusDetail,
+    SyllabusGenerateRequest,
+    SyllabusGenerateResponse,
     SyllabusListItem,
     SyllabusMaterialCreate,
     SyllabusMaterialListResponse,
@@ -25,6 +32,7 @@ from app.domains.syllabus.schemas import (
     SyllabusReorderRequest,
     SyllabusUpdate,
 )
+from app.services.roadmap.errors import RoadmapError
 from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.track import Track
@@ -84,6 +92,28 @@ def create_syllabus(db: Session, user: User, payload: SyllabusCreate) -> Syllabu
     db.refresh(track)
     ensure_scheduler_params(db, user, track)
     return syllabus_detail(db, track, user.id)
+
+
+def _slugify(name: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "course"
+    return f"{base}-{_uuid.uuid4().hex[:6]}"
+
+
+def generate_syllabus(db: Session, user: User, payload: SyllabusGenerateRequest) -> SyllabusGenerateResponse:
+    detail = create_syllabus(db, user, SyllabusCreate(
+        slug=_slugify(payload.name), name=payload.name, color=payload.color, visibility="PRIVATE",
+    ))
+    try:
+        draft = generate_structure(payload.goal, level=payload.level, hours=payload.weekly_hours)
+    except RoadmapError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    operations = draft_to_operations(draft)
+    proposal = create_proposal(db, user, detail.id, ProposalCreate(
+        source="AI", instruction=payload.goal,
+        summary=draft.get("summary") or "AI generated course structure.",
+        operations=operations,
+    ))
+    return SyllabusGenerateResponse(syllabus=detail, proposal=proposal)
 
 
 def update_syllabus(db: Session, user: User, syllabus_id: UUID, payload: SyllabusUpdate) -> SyllabusDetail:

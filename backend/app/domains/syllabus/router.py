@@ -17,6 +17,8 @@ from app.domains.syllabus.schemas import (
     ProposalResponse,
     SyllabusCreate,
     SyllabusDetail,
+    SyllabusGenerateRequest,
+    SyllabusGenerateResponse,
     SyllabusListItem,
     SyllabusMaterialCreate,
     SyllabusMaterialListResponse,
@@ -48,6 +50,15 @@ def create_syllabus(
     user: User = Depends(get_current_user),
 ) -> SyllabusDetail:
     return syllabus_service.create_syllabus(db, user, payload)
+
+
+@router.post("/generate", response_model=SyllabusGenerateResponse, status_code=201)
+def generate_syllabus(
+    payload: SyllabusGenerateRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> SyllabusGenerateResponse:
+    return syllabus_service.generate_syllabus(db, user, payload)
 
 
 @router.get("/slug/{slug}", response_model=SyllabusDetail)
