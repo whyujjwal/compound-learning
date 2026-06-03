@@ -151,6 +151,7 @@ class SyllabusReorderRequest(BaseModel):
 class ProposalOperationTarget(BaseModel):
     syllabus_id: UUID | None = None
     module_id: UUID | None = None
+    section_id: UUID | None = None
     material_id: UUID | None = None
 
 
@@ -212,3 +213,16 @@ class ChangeLogEntry(BaseModel):
     before: dict | None
     after: dict | None
     created_at: datetime
+
+
+class SyllabusGenerateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    goal: str = Field(min_length=3, max_length=4000)
+    level: str | None = None
+    weekly_hours: int | None = Field(default=None, ge=1, le=80)
+    color: str = Field(default="#6366f1", pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class SyllabusGenerateResponse(BaseModel):
+    syllabus: SyllabusDetail
+    proposal: ProposalResponse
