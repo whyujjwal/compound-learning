@@ -82,6 +82,16 @@ TEST_CURRICULUM = {
 
 
 @pytest.fixture()
+def db_session():
+    db = TestingSessionLocal()
+    try:
+        yield db
+        db.rollback()
+    finally:
+        db.close()
+
+
+@pytest.fixture()
 def client(monkeypatch):
     monkeypatch.setattr("app.services.auth_service.settings.app_password", None)
     monkeypatch.setattr("app.config.settings.app_password", None)
