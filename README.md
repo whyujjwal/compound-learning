@@ -18,10 +18,14 @@ A fourth layer — **Coach** — is an AI advisor with tool access to your stats
 
 ## Personalized roadmaps
 
-New users start with an empty **Library** and build their own syllabi. Use **New Syllabus**
-(`/library/new`) for manual creation or adopt from **Explore**. AI-generated changes go through
-**Syllabus Studio** as reviewable proposals before applying.
+New users receive cloned copies of four default syllabi on registration; they can add more via
+**New Syllabus** (`/library/new`) or **Explore**. Each syllabus is organized as
+**Syllabus → Module → Section → Material**. Open **Outline** (overview tab) for the nested tree
+or **Roadmap** (map tab) for the prerequisite graph. AI-generated structure and materials are
+link-verified and land in **Syllabus Studio** as reviewable proposals before applying.
 
+- **Goal → generate → review diff** — describe a learning goal on `/library/new`, generate a draft
+  course, then accept or reject operations in Studio.
 - **One track per goal** — ordered, beginner → advanced.
 - **Real resources** — official docs, MIT OCW, freeCodeCamp, 3Blue1Brown, arXiv, etc. (no invented URLs).
 - **A weekly schedule** — denser tracks earlier in the week, a light Sunday review block.

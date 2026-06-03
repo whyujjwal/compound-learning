@@ -17,6 +17,11 @@ Legacy routes (`/curriculum`, `/track/[slug]`, `/stats`, `/tracks`, `/materials`
 
 ## Backend
 
+- **Course domain:** `backend/app/domains/course/` — `tree_service` (nested Outline data),
+  `roadmap_service` (graph + `syllabus_edges`), `clone_service` (signup defaults),
+  `sourcing_service` + `link_check` / `link_health` (URL verification and re-check CLI).
+  Tables: `track_sections`, `syllabus_edges`; `study_materials` is additive-only (FSRS/queue/Coach unchanged).
+  Endpoints: `GET /api/syllabi/{slug}/tree`, `GET /api/syllabi/{slug}/roadmap`, `POST /api/syllabi/generate`.
 - **Canonical API:** `backend/app/domains/syllabus/` — `/api/syllabi` with modules, materials, proposals, change history.
 - **Proposal engine:** AI and manual edits share `ProposalOperation` types; apply/reject with version conflict detection.
 - **AI updates:** `/api/syllabi/{id}/proposals/ai` and `/api/tracks/{id}/ai-updates` (default: proposal, not direct apply).

@@ -15,6 +15,24 @@ A 6-month integrated roadmap to achieve durable competence in **Data Structures 
 
 All of the materials below are pre-loaded as `study_materials` in the platform via `docs/curriculum.json`. Run **`python -m app.seed_curriculum`** or **`POST /api/curriculum/import/default`** to ingest.
 
+### 3-level JSON shape
+
+Each track in `docs/curriculum.json` may list flat `materials` with explicit grouping:
+
+```json
+{
+  "title": "Two Sum — Hash Map Pattern",
+  "block_label": "DSA · Arrays — Hashing",
+  "module": "Arrays",
+  "section": "Hashing patterns",
+  "type": "practice",
+  "url": "https://leetcode.com/problems/two-sum/"
+}
+```
+
+The loader creates `TrackModule` and `TrackSection` rows and sets `section_id` on each material.
+Re-import is idempotent. Re-check broken links with **`python -m app.recheck_links`**.
+
 ---
 
 ## Weekly cadence
