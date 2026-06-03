@@ -19,6 +19,7 @@ from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.track import Track
 from app.models.track_module import TrackModule
+from app.models.track_section import TrackSection
 from app.models.user import User
 from app.services.bootstrap import ensure_scheduler_params
 from app.services.syllabus import full_block_label, infer_difficulty, module_title_from_label
@@ -86,6 +87,19 @@ def load_file(path: str | Path) -> dict[str, Any]:
     if not p.exists():
         raise FileNotFoundError(f"Curriculum file not found: {p}")
     return json.loads(p.read_text())
+
+
+def _ensure_section(db: Session, module: TrackModule, title: str, sequence: int) -> TrackSection:
+    section = (
+        db.query(TrackSection)
+        .filter(TrackSection.module_id == module.id, TrackSection.title == title)
+        .first()
+    )
+    if not section:
+        section = TrackSection(module_id=module.id, title=title, kind="core", sequence=sequence)
+        db.add(section)
+        db.flush()
+    return section
 
 
 def import_curriculum(
@@ -225,6 +239,8 @@ def import_curriculum(
                 db.add(module)
                 db.flush()
                 module_by_title[module_title] = module
+            section_title = material_data.get("section") or "General"
+            section = _ensure_section(db, module, section_title, sequence=material_data.get("sequence", 0))
             block_label = material_data.get("block_label") or full_block_label(track, module_title)
             existing = (
                 db.query(StudyMaterial)
@@ -235,6 +251,7 @@ def import_curriculum(
                 existing.raw_content = material_data.get("notes", existing.raw_content)
                 existing.external_url = material_data.get("url", existing.external_url)
                 existing.module_id = module.id
+                existing.section_id = section.id
                 existing.block_label = block_label
                 existing.resource_type = material_data.get("type", existing.resource_type)
                 existing.difficulty = material_data.get("difficulty") or infer_difficulty(title, existing.raw_content, existing.resource_type)
@@ -253,6 +270,7 @@ def import_curriculum(
                 material = StudyMaterial(
                     track_id=track.id,
                     module_id=module.id,
+                    section_id=section.id,
                     title=title,
                     raw_content=material_data.get("notes"),
                     external_url=material_data.get("url"),
