@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Background, Controls, MiniMap, ReactFlow, type Node, type NodeProps } from "@xyflow/react";
-import ELK from "elkjs/lib/elk.bundled.js";
+import type ELK from "elkjs/lib/elk.bundled.js";
 import type { RoadmapGraph, RoadmapNode } from "../types";
 import { statusColor, toElkGraph, toFlowElements } from "./roadmapLayout";
 import { NodeInspector } from "./NodeInspector";
 
-const elk = new ELK();
+let elkPromise: Promise<InstanceType<typeof ELK>> | null = null;
+
+function getElk() {
+  if (!elkPromise) {
+    elkPromise = import("elkjs/lib/elk.bundled.js").then((mod) => new mod.default());
+  }
+  return elkPromise;
+}
 
 function RoadmapFlowNode({ data }: NodeProps<Node<Record<string, unknown>>>) {
   const node = data as unknown as RoadmapNode;
@@ -31,13 +38,18 @@ export function RoadmapCanvas({ graph }: { graph: RoadmapGraph }) {
   useEffect(() => {
     let cancelled = false;
     if (!graph.nodes.length) return;
-    elk.layout(toElkGraph(graph)).then((res) => {
-      if (cancelled) return;
-      const next: Record<string, { x: number; y: number }> = {};
-      for (const child of res.children ?? []) next[child.id] = { x: child.x ?? 0, y: child.y ?? 0 };
-      setPositions(next);
-    }).catch(() => undefined);
-    return () => { cancelled = true; };
+    getElk()
+      .then((elk) => elk.layout(toElkGraph(graph)))
+      .then((res) => {
+        if (cancelled) return;
+        const next: Record<string, { x: number; y: number }> = {};
+        for (const child of res.children ?? []) next[child.id] = { x: child.x ?? 0, y: child.y ?? 0 };
+        setPositions(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [graph]);
 
   const { nodes, edges } = useMemo(() => toFlowElements(graph, positions), [graph, positions]);
