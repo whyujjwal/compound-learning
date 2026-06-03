@@ -104,3 +104,48 @@ def test_get_course_tree_endpoint(client):
 def test_get_course_tree_unknown_slug_404(client):
     res = client.get("/api/syllabi/does-not-exist/tree")
     assert res.status_code == 404
+
+
+import time
+import uuid as _uuid
+
+from app.models.material import StudyMaterial
+from app.models.track import Track
+from app.models.track_module import TrackModule
+from app.models.track_section import TrackSection
+
+
+def test_build_course_tree_handles_dense_syllabus(db_session):
+    user = db_session.query(User).first()
+    track = Track(user_id=user.id, slug=f"big-{_uuid.uuid4().hex[:8]}", name="Big", color="#6366f1")
+    db_session.add(track)
+    db_session.flush()
+    for mi in range(8):
+        module = TrackModule(track_id=track.id, title=f"M{mi}", sequence=mi)
+        db_session.add(module)
+        db_session.flush()
+        for si in range(4):
+            section = TrackSection(module_id=module.id, title=f"M{mi}S{si}", sequence=si)
+            db_session.add(section)
+            db_session.flush()
+            for ti in range(5):
+                db_session.add(
+                    StudyMaterial(
+                        track_id=track.id,
+                        module_id=module.id,
+                        section_id=section.id,
+                        title=f"M{mi}S{si}T{ti}",
+                        estimated_minutes=10,
+                        sequence=ti,
+                        priority_percent=50,
+                    )
+                )
+    db_session.flush()
+
+    start = time.perf_counter()
+    tree = build_course_tree(db_session, track, user.id)
+    elapsed = time.perf_counter() - start
+
+    assert tree.material_count == 8 * 4 * 5
+    assert sum(len(m.sections) for m in tree.modules) == 8 * 4
+    assert elapsed < 2.0
