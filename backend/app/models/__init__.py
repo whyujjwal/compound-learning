@@ -12,6 +12,7 @@ from app.models.block_session import BlockSession, BlockSessionStatus
 from app.models.study_session import CompletionStatus, StudySession
 from app.models.syllabus_change_log import SyllabusChangeLog
 from app.models.syllabus_proposal import SyllabusProposal
+from app.models.syllabus_edge import SyllabusEdge
 from app.models.track import Track
 from app.models.track_ai_update import TrackAIUpdate
 from app.models.track_module import TrackModule
@@ -25,6 +26,7 @@ __all__ = [
     "User",
     "Track",
     "SyllabusProposal",
+    "SyllabusEdge",
     "SyllabusChangeLog",
     "TrackAIUpdate",
     "TrackModule",
