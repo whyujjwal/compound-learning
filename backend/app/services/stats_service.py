@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.models.card import Card
 from app.models.material import StudyMaterial
-from app.models.material_completion import CompletionState, MaterialCompletion
 from app.models.review_log import ReviewLog, ReviewRating
 from app.models.study_session import StudySession
 from app.models.track import Track

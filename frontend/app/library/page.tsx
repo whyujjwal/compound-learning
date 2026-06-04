@@ -2,33 +2,30 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useShell } from "@/components/ui/Shell";
 import { EmptyLibrary } from "@/features/syllabus/components/EmptyLibrary";
 import { SyllabusCard } from "@/features/syllabus/components/SyllabusCard";
-import { useSyllabiFromOverview } from "@/features/syllabus/hooks/useSyllabi";
-import { api } from "@/lib/api";
+import { useSyllabiList } from "@/lib/hooks/useSyllabi";
+import { useCurriculumOverview, useImportExampleCurriculum } from "@/lib/hooks";
 
 export default function LibraryPage() {
-  const { overview, reloadAll } = useShell();
-  const { data: syllabi = [], isLoading } = useSyllabiFromOverview();
-  const [importing, setImporting] = useState(false);
+  const { data: overview, isLoading: overviewLoading } = useCurriculumOverview();
+  const { data: syllabi = [], isLoading: syllabiLoading } = useSyllabiList();
+  const importExamples = useImportExampleCurriculum();
   const [message, setMessage] = useState<string | null>(null);
 
-  async function importExamples() {
-    setImporting(true);
+  async function handleImportExamples() {
     setMessage(null);
     try {
-      const result = await api.importExampleCurriculum();
-      await reloadAll();
+      const result = await importExamples.mutateAsync();
       setMessage(
         `Imported ${result.tracks_created} syllabi and ${result.materials_created} materials.`
       );
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Could not import examples.");
-    } finally {
-      setImporting(false);
     }
   }
+
+  const isLoading = overviewLoading || syllabiLoading;
 
   if (!overview || isLoading) {
     return (
@@ -39,21 +36,26 @@ export default function LibraryPage() {
     );
   }
 
-  const items = syllabi.length > 0 ? syllabi : overview.tracks.map((t) => ({
-    id: t.id,
-    slug: t.slug,
-    name: t.name,
-    summary: t.description,
-    color: t.color,
-    visibility: "PRIVATE" as const,
-    module_count: 0,
-    material_count: t.material_count,
-    started_count: t.started_count,
-    mastered_count: t.mastered_count,
-    due_review_count: t.due_review_count,
-    health_score: t.material_count ? Math.round((t.mastered_count / t.material_count) * 100) : 100,
-    updated_at: new Date().toISOString(),
-  }));
+  const items =
+    syllabi.length > 0
+      ? syllabi
+      : overview.tracks.map((t) => ({
+          id: t.id,
+          slug: t.slug,
+          name: t.name,
+          summary: t.description,
+          color: t.color,
+          visibility: "PRIVATE" as const,
+          module_count: 0,
+          material_count: t.material_count,
+          started_count: t.started_count,
+          mastered_count: t.mastered_count,
+          due_review_count: t.due_review_count,
+          health_score: t.material_count
+            ? Math.round((t.mastered_count / t.material_count) * 100)
+            : 100,
+          updated_at: new Date().toISOString(),
+        }));
 
   return (
     <>
@@ -87,7 +89,10 @@ export default function LibraryPage() {
       {message && <p className="week-canvas-message">{message}</p>}
 
       {items.length === 0 ? (
-        <EmptyLibrary onImportExamples={importExamples} importing={importing} />
+        <EmptyLibrary
+          onImportExamples={handleImportExamples}
+          importing={importExamples.isPending}
+        />
       ) : (
         <div className="roadmap-grid">
           {items.map((syllabus) => (

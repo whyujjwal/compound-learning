@@ -1,23 +1,40 @@
 "use client";
 
+/**
+ * /session/[cardId] — free-form flashcard review loop.
+ *
+ * Reads the session queue from sessionStorage (set by the home page when
+ * the user starts a block), or falls back to fetching a single-card queue.
+ *
+ * Legacy block sessions that still carry a slot are redirected to /block/[slot].
+ *
+ * Keyboard: Space → reveal answer; 1/2/3/4 → Again/Hard/Good/Easy.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import {
-  SessionCard,
-  SessionFooter,
-  SessionHeaderProgress,
-  SessionLogMenu,
-  useSessionKeys,
-  type Rating,
-} from "@/components/ui/SessionCard";
-import { trackAccent } from "@/lib/trackColors";
 import { api, type BlockEntry, type CardDetail, type QueueItem, type Stats } from "@/lib/api";
+import { trackAccent } from "@/lib/trackColors";
 import {
   clearActiveBlockSlot,
   getActiveBlockSlot,
   markBlockComplete,
 } from "@/lib/dailyProgress";
+import {
+  ReviewCard,
+  GradeBar,
+  ReviewTimer,
+  ReviewProgressBar,
+  LogTimeMenu,
+  SessionComplete,
+  useReviewClock,
+} from "@/features/review";
+import type { GradeKey } from "@/features/review";
+import { Skeleton } from "@/components/primitives";
+import { EmptyState } from "@/components/primitives";
+
+// ─── Queue persistence ────────────────────────────────────────────────────────
 
 type Cached = {
   ts: number;
@@ -44,7 +61,6 @@ function saveQueue(c: Cached) {
   } catch {}
 }
 
-/** Map live card API data onto a queue row (keeps block/kind from the queue when present). */
 function cardToQueueItem(c: CardDetail, prior?: QueueItem): QueueItem {
   return {
     card_id: c.id,
@@ -84,7 +100,6 @@ async function refreshQueueItems(items: QueueItem[]): Promise<QueueItem[]> {
   );
 }
 
-/** Fallback: build a 1-item queue from a CardDetail when sessionStorage is empty. */
 async function fetchFallbackItem(cardId: string): Promise<QueueItem | null> {
   try {
     const c = await api.getCard(cardId);
@@ -94,12 +109,35 @@ async function fetchFallbackItem(cardId: string): Promise<QueueItem | null> {
   }
 }
 
+function startNextBlock(block: BlockEntry, router: { push: (path: string) => void }) {
+  const items = [...block.reviews, ...block.new_items];
+  if (items.length === 0) return;
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem("compound:session-block-slot", String(block.slot));
+      window.sessionStorage.removeItem("compound:session-clock");
+      window.sessionStorage.setItem(
+        "compound:session-queue",
+        JSON.stringify({
+          ts: Date.now(),
+          context: `${block.slot_label} · ${block.track_name}`,
+          slot: block.slot,
+          items,
+        })
+      );
+    } catch {}
+  }
+  router.push(`/session/${items[0].card_id}`);
+}
+
+// ─── Page component ───────────────────────────────────────────────────────────
+
 export default function SessionPage() {
   const router = useRouter();
   const params = useParams<{ cardId: string }>();
   const cardId = params?.cardId ?? "";
 
-  // Daily blocks now use /block/[slot] — redirect legacy session links.
+  // Redirect block sessions to /block/[slot].
   useEffect(() => {
     const cached = loadQueue();
     const slot = cached?.slot ?? getActiveBlockSlot();
@@ -116,10 +154,9 @@ export default function SessionPage() {
   const [done, setDone] = useState(false);
   const [endStats, setEndStats] = useState<Stats | null>(null);
   const [nextBlock, setNextBlock] = useState<BlockEntry | null>(null);
-  const { elapsed, paused, togglePause } = useBlockClock(queue?.ts ?? null, !done);
+  const { elapsed, paused, togglePause } = useReviewClock(queue?.ts ?? null, !done);
 
-  // Resolve queue from sessionStorage, then refresh every item from the API so
-  // curriculum updates (new titles/notes) are never masked by stale cache.
+  // Resolve queue from sessionStorage, refresh from API.
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -147,9 +184,7 @@ export default function SessionPage() {
       setLoading(false);
     }
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [cardId]);
 
   const index = useMemo(() => {
@@ -161,6 +196,7 @@ export default function SessionPage() {
   const total = queue?.items.length ?? 0;
   const nextTitle = index >= 0 && queue ? queue.items[index + 1]?.material_title : null;
 
+  // Reset reveal + per-card timer on every new card.
   useEffect(() => {
     setRevealed(false);
     setStartTs(Date.now());
@@ -179,9 +215,7 @@ export default function SessionPage() {
       api.getDailyQueue().then((daily) => {
         const completed = slot ?? -1;
         const open = daily.blocks.find(
-          (b) =>
-            b.slot !== completed &&
-            b.reviews.length + b.new_items.length > 0
+          (b) => b.slot !== completed && b.reviews.length + b.new_items.length > 0
         );
         setNextBlock(open ?? null);
       }).catch(() => {});
@@ -189,356 +223,339 @@ export default function SessionPage() {
     }
   }, [queue, index, router]);
 
-  const submit = useCallback(
-    async (rating: Rating) => {
-      if (!current || submitting) return;
-      setSubmitting(true);
-      const elapsed = Math.round((Date.now() - startTs) / 1000);
-      try {
-        await api.submitReview(current.card_id, rating, elapsed);
-        advance();
-      } finally {
-        setSubmitting(false);
-      }
-    },
-    [current, submitting, startTs, advance]
-  );
+  const submit = useCallback(async (grade: GradeKey) => {
+    if (!current || submitting) return;
+    setSubmitting(true);
+    const elapsed = Math.round((Date.now() - startTs) / 1000);
+    try {
+      await api.submitReview(current.card_id, grade, elapsed);
+      advance();
+    } finally {
+      setSubmitting(false);
+    }
+  }, [current, submitting, startTs, advance]);
 
-  useSessionKeys(revealed, Boolean(current && !submitting), () => setRevealed(true), submit);
+  // Keyboard: Space = reveal, 1–4 = grade.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === " " && !revealed && current && !done) {
+        e.preventDefault();
+        setRevealed(true);
+        return;
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [revealed, current, done]);
+
+  // ── Loading ────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <>
-        <header className="session-bar">
-          <SessionExit />
-        </header>
-        <div className="session-card-wrap">
-          <p className="session-prompt">Loading…</p>
-        </div>
-      </>
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
+        <TopBar
+          onExit="/"
+          right={null}
+        />
+        <main
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "40px 24px",
+            gap: 20,
+          }}
+        >
+          <Skeleton height={32} width={320} borderRadius={6} />
+          <Skeleton height={20} width={480} borderRadius={4} />
+          <Skeleton height={20} width={420} borderRadius={4} />
+          <Skeleton height={120} width="100%" style={{ maxWidth: 680 }} borderRadius={6} />
+        </main>
+      </div>
     );
   }
+
+  // ── Completion ─────────────────────────────────────────────────────────────
 
   if (done || !current) {
     const lastTrack = queue?.items[queue.items.length - 1];
     const accent = lastTrack ? trackAccent(lastTrack.track_slug, lastTrack.track_color) : undefined;
+
     return (
-      <>
-        <header className="session-bar">
-          <SessionExit />
-          <div className="session-bar-meta">
-            <SessionTimer
-              seconds={elapsed}
-              paused={paused}
-              onTogglePause={togglePause}
-              title="Time in this block (pause excluded)"
-            />
-            <span className="session-bar-counter">
-              {total} <span className="total">/ {total}</span>
-            </span>
-          </div>
-        </header>
-        <SessionComplete
-          total={total}
-          elapsed={elapsed}
-          accent={accent}
-          context={queue?.context}
-          stats={endStats}
-          nextBlock={nextBlock}
-          onStartNext={(block) => startNextBlock(block, router)}
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
+        <TopBar
+          onExit="/"
+          right={
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <ReviewTimer seconds={elapsed} paused={paused} onTogglePause={togglePause} />
+              <CounterBadge current={total} total={total} />
+            </div>
+          }
         />
-      </>
+        <ReviewProgressBar done={total} total={total} />
+        <main style={{ flex: 1 }}>
+          <SessionComplete
+            total={total}
+            elapsed={elapsed}
+            context={queue?.context}
+            accent={accent}
+            stats={endStats}
+            nextBlock={nextBlock}
+            onStartNext={(block) => startNextBlock(block, router)}
+          />
+        </main>
+      </div>
     );
   }
+
+  // ── Empty / not found ──────────────────────────────────────────────────────
+
+  if (!queue) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
+        <TopBar onExit="/" right={null} />
+        <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <EmptyState
+            title="Card not found"
+            description="This card couldn't be loaded. It may have been removed or completed."
+            action={<Link href="/" style={{ color: "var(--accent)", fontSize: 14 }}>← Back to Today</Link>}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // ── Active card ────────────────────────────────────────────────────────────
 
   const accent = trackAccent(current.track_slug, current.track_color);
 
   return (
-    <>
-      <div className="session-header-wrap">
-        <header className="session-bar">
-          <div className="session-bar-left">
-            <SessionExit />
-            <span className="session-bar-track" style={{ ["--track-color" as string]: accent }}>
-              <span className="track-dot" aria-hidden />
-              {queue?.context ?? current.track_name}
-            </span>
-          </div>
-          <div className="session-bar-meta">
-            <SessionLogMenu
-              materialId={current.material_id}
-              materialTitle={current.material_title}
-            />
-            <SessionTimer
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
+      {/* Top bar */}
+      <TopBar
+        onExit="/"
+        trackName={queue?.context ?? current.track_name}
+        trackAccent={accent}
+        right={
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <LogTimeMenu materialId={current.material_id} materialTitle={current.material_title} />
+            <ReviewTimer
               seconds={elapsed}
               paused={paused}
               onTogglePause={togglePause}
-              title="Time in this block (pause excluded)"
+              label="Time in this block (pause excluded)"
             />
-            <span className="session-bar-counter">
-              {index + 1} <span className="total">/ {total}</span>
-            </span>
+            <CounterBadge current={index + 1} total={total} />
           </div>
-        </header>
-        <SessionHeaderProgress index={index + 1} total={total} />
-      </div>
-      <div className="session-card-wrap">
-        <SessionCard item={current} revealed={revealed} nextTitle={nextTitle} />
-      </div>
-      <SessionFooter
-        revealed={revealed}
-        submitting={submitting}
-        onReveal={() => setRevealed(true)}
-        onRate={submit}
+        }
       />
-    </>
-  );
-}
+      <ReviewProgressBar done={index + 1} total={total} />
 
-function startNextBlock(block: BlockEntry, router: { push: (path: string) => void }) {
-  const items = [...block.reviews, ...block.new_items];
-  if (items.length === 0) return;
-  if (typeof window !== "undefined") {
-    try {
-      window.sessionStorage.setItem("compound:session-block-slot", String(block.slot));
-      window.sessionStorage.removeItem("compound:session-clock");
-      window.sessionStorage.setItem(
-        "compound:session-queue",
-        JSON.stringify({
-          ts: Date.now(),
-          context: `${block.slot_label} · ${block.track_name}`,
-          slot: block.slot,
-          items,
-        })
-      );
-    } catch {}
-  }
-  router.push(`/session/${items[0].card_id}`);
-}
+      {/* Card surface */}
+      <main
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          padding: "40px 24px 160px",
+          overflowY: "auto",
+        }}
+      >
+        <ReviewCard item={current} revealed={revealed} nextTitle={nextTitle} />
+      </main>
 
-function SessionComplete({
-  total,
-  elapsed,
-  accent,
-  context,
-  stats,
-  nextBlock,
-  onStartNext,
-}: {
-  total: number;
-  elapsed: number;
-  accent?: string;
-  context?: string;
-  stats: Stats | null;
-  nextBlock: BlockEntry | null;
-  onStartNext: (block: BlockEntry) => void;
-}) {
-  const streak = stats?.current_streak ?? 0;
-  const reviewsToday = stats?.reviews_today ?? 0;
-
-  return (
-    <div className="session-end">
-      <p className="session-end-badge">Block complete</p>
-      <h1 className="session-end-title" style={accent ? { color: accent } : undefined}>
-        {total} card{total === 1 ? "" : "s"} · {formatDuration(elapsed)}
-      </h1>
-      {context && <p className="session-end-context">{context}</p>}
-
-      {stats && (
-        <div className="session-end-stats">
-          <div className="session-end-stat">
-            <strong>{streak}</strong>
-            <span>day rhythm</span>
+      {/* Sticky footer */}
+      <footer
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: "var(--canvas)",
+          borderTop: "1px solid var(--hairline)",
+          padding: "16px 24px 20px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 12,
+          zIndex: 100,
+        }}
+      >
+        {!revealed ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+            <p style={{ fontSize: 13, color: "var(--muted)" }}>Done with the material?</p>
+            <button
+              type="button"
+              onClick={() => setRevealed(true)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "9px 20px",
+                borderRadius: 4,
+                border: "1px solid transparent",
+                background: "var(--accent)",
+                color: "#ffffff",
+                fontSize: 14,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "background 100ms",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.background = "var(--accent-hover)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.background = "var(--accent)";
+              }}
+            >
+              Show recall
+              <kbd
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "2px 5px",
+                  borderRadius: 3,
+                  border: "1px solid rgba(255,255,255,0.35)",
+                  fontSize: 11,
+                  lineHeight: 1,
+                  fontFamily: "inherit",
+                  opacity: 0.8,
+                }}
+              >
+                Space
+              </kbd>
+            </button>
           </div>
-          <div className="session-end-stat">
-            <strong>{reviewsToday}</strong>
-            <span>reviews today</span>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, width: "100%" }}>
+            <p style={{ fontSize: 13, color: "var(--muted)", fontWeight: 500 }}>
+              How well did you recall?
+            </p>
+            <GradeBar
+              enabled={!submitting}
+              submitting={submitting}
+              onRate={submit}
+              bindKeys
+            />
           </div>
-          <div className="session-end-stat">
-            <strong>{stats.minutes_today}m</strong>
-            <span>invested today</span>
-          </div>
-        </div>
-      )}
-
-      <p className="session-end-sub">
-        {nextBlock
-          ? "Nice session. Another block is queued — or stop here, no pressure."
-          : "Knowledge compounds. Same time tomorrow, or whenever you're back."}
-      </p>
-
-      <div className="session-end-actions">
-        {nextBlock && (
-          <button
-            type="button"
-            className="v2-btn primary"
-            onClick={() => onStartNext(nextBlock)}
-          >
-            Next block · {nextBlock.track_name} →
-          </button>
         )}
-        <Link href="/" className="v2-btn ghost" onClick={() => {
-          if (typeof window !== "undefined") {
-            window.sessionStorage.setItem("compound:skip-auto-start", "1");
-          }
-        }}>
-          {nextBlock ? "Back to Today" : "Done for today"}
-        </Link>
-      </div>
+      </footer>
     </div>
   );
 }
 
-function SessionExit() {
-  return (
-    <Link href="/" className="session-bar-exit">
-      ← Exit
-    </Link>
-  );
-}
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SessionTimer({
-  seconds,
-  paused,
-  onTogglePause,
-  title,
+function TopBar({
+  onExit,
+  trackName,
+  trackAccent: accent,
+  right,
 }: {
-  seconds: number;
-  paused: boolean;
-  onTogglePause: () => void;
-  title?: string;
+  onExit: string;
+  trackName?: string;
+  trackAccent?: string;
+  right: React.ReactNode;
 }) {
   return (
-    <div className="session-bar-timer-wrap">
-      <span
-        className={`session-bar-timer${paused ? " session-bar-timer-paused" : ""}`}
-        title={title}
-        aria-label={paused ? "Session timer paused" : "Elapsed session time"}
-      >
-        <span className="session-bar-timer-dot" aria-hidden />
-        <span className="session-bar-timer-value">{formatClock(seconds)}</span>
-      </span>
-      <button
-        type="button"
-        className="session-bar-timer-btn"
-        onClick={onTogglePause}
-        aria-pressed={paused}
-        title={paused ? "Resume timer" : "Pause timer"}
-      >
-        {paused ? "▶" : "⏸"}
-      </button>
-    </div>
+    <header
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        height: 44,
+        padding: "0 16px",
+        borderBottom: "1px solid var(--hairline)",
+        background: "var(--canvas)",
+        flexShrink: 0,
+        position: "sticky",
+        top: 0,
+        zIndex: 200,
+      }}
+    >
+      {/* Left: exit + context */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <Link
+          href={onExit}
+          style={{
+            fontSize: 13,
+            color: "var(--muted)",
+            textDecoration: "none",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "3px 6px",
+            borderRadius: 4,
+            transition: "color 100ms, background 100ms",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLAnchorElement).style.color = "var(--text)";
+            (e.currentTarget as HTMLAnchorElement).style.background = "var(--overlay-hover)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLAnchorElement).style.color = "var(--muted)";
+            (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
+          }}
+        >
+          ← Exit
+        </Link>
+
+        {trackName && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: 13,
+              color: "var(--text)",
+              fontWeight: 500,
+              maxWidth: 260,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {accent && (
+              <span
+                aria-hidden
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: accent,
+                  flexShrink: 0,
+                  display: "inline-block",
+                }}
+              />
+            )}
+            {trackName}
+          </span>
+        )}
+      </div>
+
+      {/* Right: meta controls */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {right}
+      </div>
+    </header>
   );
 }
 
-type ClockState = {
-  queueTs: number;
-  startedAt: number;
-  accumulatedPauseMs: number;
-  pauseStartedAt: number | null;
-};
-
-const CLOCK_KEY = "compound:session-clock";
-
-function loadClock(queueTs: number | null): ClockState | null {
-  if (typeof window === "undefined" || queueTs == null) return null;
-  try {
-    const raw = window.sessionStorage.getItem(CLOCK_KEY);
-    if (!raw) return null;
-    const c = JSON.parse(raw) as ClockState;
-    return c.queueTs === queueTs ? c : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveClock(state: ClockState) {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(CLOCK_KEY, JSON.stringify(state));
-  } catch {}
-}
-
-function useBlockClock(
-  queueTs: number | null,
-  running: boolean
-): { elapsed: number; paused: boolean; togglePause: () => void } {
-  const [clock, setClock] = useState<ClockState | null>(null);
-  const [paused, setPaused] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (queueTs == null) return;
-    const existing = loadClock(queueTs);
-    if (existing) {
-      setClock(existing);
-      setPaused(Boolean(existing.pauseStartedAt));
-      return;
-    }
-    const fresh: ClockState = {
-      queueTs,
-      startedAt: Date.now(),
-      accumulatedPauseMs: 0,
-      pauseStartedAt: null,
-    };
-    saveClock(fresh);
-    setClock(fresh);
-    setPaused(false);
-  }, [queueTs]);
-
-  const togglePause = useCallback(() => {
-    setClock((prev) => {
-      if (!prev) return prev;
-      if (prev.pauseStartedAt) {
-        const delta = Date.now() - prev.pauseStartedAt;
-        const resumed: ClockState = {
-          ...prev,
-          accumulatedPauseMs: prev.accumulatedPauseMs + delta,
-          pauseStartedAt: null,
-        };
-        saveClock(resumed);
-        setPaused(false);
-        return resumed;
-      }
-      const pausedState: ClockState = { ...prev, pauseStartedAt: Date.now() };
-      saveClock(pausedState);
-      setPaused(true);
-      return pausedState;
-    });
-  }, []);
-
-  useEffect(() => {
-    if (!running || paused) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [running, paused]);
-
-  const elapsed = useMemo(() => {
-    if (!clock) return 0;
-    let pauseMs = clock.accumulatedPauseMs;
-    if (clock.pauseStartedAt) pauseMs += now - clock.pauseStartedAt;
-    return Math.max(0, Math.floor((now - clock.startedAt - pauseMs) / 1000));
-  }, [clock, now]);
-
-  return { elapsed, paused, togglePause };
-}
-
-function formatClock(totalSeconds: number): string {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  const mm = String(m).padStart(2, "0");
-  const ss = String(sec).padStart(2, "0");
-  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
-}
-
-function formatDuration(totalSeconds: number): string {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${sec}s`;
-  return `${sec}s`;
+function CounterBadge({ current, total }: { current: number; total: number }) {
+  return (
+    <span
+      style={{
+        fontSize: 13,
+        color: "var(--muted)",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      {current}
+      <span style={{ opacity: 0.5 }}> / {total}</span>
+    </span>
+  );
 }

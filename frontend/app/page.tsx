@@ -1,97 +1,107 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useShell } from "@/components/ui/Shell";
-import { trackAccent } from "@/lib/trackColors";
-import { api, type BlockEntry, type QueueItem } from "@/lib/api";
-import {
-  countCompleted,
-  getCompletedSlots,
-  isBlockComplete,
-} from "@/lib/dailyProgress";
+import { useAppShell, PageContent } from "@/components/shell";
+import { useDailyQueue, useStats } from "@/lib/hooks";
+import { api } from "@/lib/api";
+import type { QueueItem } from "@/lib/api/types";
 import { getLocalDateKey } from "@/lib/time";
-import { HomeCoach } from "@/features/home/HomeCoach";
+import { Button, EmptyState, Skeleton } from "@/components/primitives";
 
-function dateLabel(): { day: string; meta: string } {
+import { TodayStats } from "@/features/home/TodayStats";
+import { QueueBlock } from "@/features/home/QueueBlock";
+import { ActivityStrip } from "@/features/home/ActivityStrip";
+import { CoachPanel } from "@/features/home/CoachPanel";
+
+function dateLabel(): { weekday: string; date: string } {
   const d = new Date();
   return {
-    day: d.toLocaleDateString("en-US", { weekday: "long" }),
-    meta: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    weekday: d.toLocaleDateString("en-US", { weekday: "long" }),
+    date: d.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+    }),
   };
 }
 
 export default function HomePage() {
-  const shell = useShell();
+  const { setRightPanel } = useAppShell();
   const router = useRouter();
-  const { queue, stats, tracks, setActions } = shell;
+
+  const { data: queue, isLoading: queueLoading } = useDailyQueue();
+  const { data: stats, isLoading: statsLoading } = useStats();
 
   const [extraByTrack, setExtraByTrack] = useState<Record<string, QueueItem[]>>({});
-  const [completedSlots, setCompletedSlots] = useState<number[]>([]);
-  const [showSchedule, setShowSchedule] = useState(false);
+  const autoStarted = useRef(false);
 
+  // Register coach in the right panel
   useEffect(() => {
-    setCompletedSlots(getCompletedSlots());
-  }, [queue, stats]);
+    setRightPanel(<CoachPanel />);
+    return () => setRightPanel(null);
+  }, [setRightPanel]);
 
-  // ── Block actions ────────────────────────────────────────
-  const startBlock = useCallback(
-    (block: BlockEntry) => {
-      router.push(`/block/${block.slot}`);
-    },
-    [router]
-  );
-
-  const pushMore = useCallback(
+  // Push more items for a track
+  const handlePushMore = useCallback(
     async (slug: string) => {
       const block = queue?.blocks.find((b) => b.track_slug === slug);
+      const already = new Set<string>();
+      if (block) {
+        for (const it of block.reviews) already.add(it.card_id);
+        for (const it of block.new_items) already.add(it.card_id);
+      }
+      for (const it of extraByTrack[slug] ?? []) already.add(it.card_id);
       try {
-        const already = new Set<string>();
-        if (block) {
-          for (const it of block.reviews) already.add(it.card_id);
-          for (const it of block.new_items) already.add(it.card_id);
-        }
-        for (const it of extraByTrack[slug] ?? []) already.add(it.card_id);
         const more = await api.getExtraQueue(slug, 5, Array.from(already));
         setExtraByTrack((prev) => ({
           ...prev,
           [slug]: [...(prev[slug] ?? []), ...more],
         }));
       } catch {
-        // tolerate failure
+        // tolerate
       }
     },
     [queue, extraByTrack]
   );
 
-  // ── Expose actions to command palette ────────────────────
-  useEffect(() => {
-    setActions({
-      onPushMore: pushMore,
-      onStartFirstBlock: () => {
-        const block = queue?.blocks.find(
-          (b) => b.reviews.length + b.new_items.length > 0
-        );
-        if (block) startBlock(block);
-      },
-    });
-    return () => setActions({});
-  }, [setActions, pushMore, queue, startBlock]);
-
-  const date = dateLabel();
   const blocks = queue?.blocks ?? [];
   const activeBlocks = blocks.filter(
-    (b) => b.reviews.length + b.new_items.length + (extraByTrack[b.track_slug]?.length ?? 0) > 0
+    (b) =>
+      b.reviews.length +
+        b.new_items.length +
+        (extraByTrack[b.track_slug]?.length ?? 0) >
+      0
   );
-  const blocksDone = countCompleted(blocks.map((b) => b.slot));
-  const firstOpenBlock = activeBlocks.find((b) => !isBlockComplete(b.slot)) ?? activeBlocks[0];
-  const allBlocksDone = activeBlocks.length > 0 && blocksDone >= activeBlocks.length;
-  const autoStarted = useRef(false);
 
-  // Once per day: open Home → land in practice immediately.
+  // Completed blocks: we track completed by checking block session state.
+  // For now we mirror the original logic: use localStorage slots.
+  const [completedSlots, setCompletedSlots] = useState<number[]>([]);
+
   useEffect(() => {
-    if (autoStarted.current || !queue || !firstOpenBlock || allBlocksDone) return;
+    // Read completed slots from localStorage (same key as the existing system)
+    try {
+      const day = getLocalDateKey();
+      const raw = window.localStorage.getItem(`compound:completed-${day}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setCompletedSlots(parsed);
+      }
+    } catch {
+      // ignore
+    }
+  }, [queue]);
+
+  const firstOpenBlock = activeBlocks.find(
+    (b) => !completedSlots.includes(b.slot)
+  ) ?? activeBlocks[0];
+  const allDone =
+    activeBlocks.length > 0 &&
+    activeBlocks.every((b) => completedSlots.includes(b.slot));
+
+  // Auto-start: once per day, land directly in practice
+  useEffect(() => {
+    if (autoStarted.current || !queue || !firstOpenBlock || allDone) return;
     if (typeof window === "undefined") return;
     const day = getLocalDateKey();
     if (window.localStorage.getItem(`compound:auto-started-${day}`)) return;
@@ -101,213 +111,334 @@ export default function HomePage() {
     }
     autoStarted.current = true;
     window.localStorage.setItem(`compound:auto-started-${day}`, "1");
-    startBlock(firstOpenBlock);
-  }, [queue, firstOpenBlock, allBlocksDone, startBlock]);
+    router.push(`/block/${firstOpenBlock.slot}`);
+  }, [queue, firstOpenBlock, allDone, router]);
 
-  const streak = stats?.current_streak ?? 0;
-  const blocksDoneDisplay = `${blocksDone}/${activeBlocks.length || "—"}`;
-  const retention = stats ? Math.round((stats.retention_rate || 0) * 100) : null;
+  const { weekday, date } = dateLabel();
 
   return (
-    <div className="home-page">
-      {/* ── Section 1: Header ───────────────────────────── */}
-      <header className="home-header">
-        <div className="home-header-main">
-          <p className="home-eyebrow">{date.meta}</p>
-          <h1 className="home-title">{date.day}</h1>
-        </div>
-        <div className="home-header-strip">
-          <div className="home-strip-stat" title="Current streak">
-            <strong>{streak}</strong>
-            <span>day streak</span>
-          </div>
-          <div className="home-strip-sep" aria-hidden />
-          <div className="home-strip-stat" title="Blocks completed today">
-            <strong>{blocksDoneDisplay}</strong>
-            <span>blocks today</span>
-          </div>
-          {retention !== null && (
-            <>
-              <div className="home-strip-sep" aria-hidden />
-              <div className="home-strip-stat" title="Overall retention rate">
-                <strong>{retention}%</strong>
-                <span>retention</span>
-              </div>
-            </>
-          )}
-          <div className="home-strip-sep" aria-hidden />
-          <Link href="/profile" className="home-strip-link">
-            View profile →
-          </Link>
-        </div>
+    <PageContent
+      style={{ paddingTop: 40, paddingBottom: 64 }}
+    >
+      {/* ── Page heading ──────────────────────────────────── */}
+      <header style={{ marginBottom: 24 }}>
+        <p
+          style={{
+            fontSize: 12,
+            color: "var(--muted)",
+            fontWeight: 500,
+            letterSpacing: "0.04em",
+            textTransform: "uppercase",
+            marginBottom: 4,
+          }}
+        >
+          {date}
+        </p>
+        <h1
+          style={{
+            fontSize: 28,
+            fontWeight: 700,
+            color: "var(--text)",
+            letterSpacing: "-0.025em",
+            lineHeight: 1.2,
+          }}
+        >
+          {weekday}
+        </h1>
       </header>
 
-      {/* ── Section 2: Today's target ───────────────────── */}
-      <section className="home-target">
-        <h2 className="home-section-title">Today&apos;s target</h2>
+      {/* ── Stat strip ────────────────────────────────────── */}
+      <TodayStats
+        stats={stats}
+        queue={queue}
+        statsLoading={statsLoading}
+        queueLoading={queueLoading}
+      />
 
-        {blocks.length === 0 ? (
-          <div className="empty-today">
-            <h3 className="empty-today-title">Your canvas is empty.</h3>
-            <p className="empty-today-sub">
-              Create tracks from scratch, generate a personalized roadmap, or import
-              example tracks to get started.
-            </p>
-            <Link href="/curriculum/build" className="v2-btn primary" style={{ marginTop: 12 }}>
-              Build my roadmap →
-            </Link>
-            <p className="empty-today-sub" style={{ marginTop: 10, fontSize: 12 }}>
-              Or open the <Link href="/curriculum">roadmap canvas</Link> and{" "}
-              <Link href="/schedule">weekly calendar</Link>.
-            </p>
-          </div>
-        ) : (
-          <>
-            {firstOpenBlock && !allBlocksDone && (
-              <BlockChecklistPreview
-                block={firstOpenBlock}
-                onOpen={() => startBlock(firstOpenBlock)}
-              />
-            )}
+      {/* ── Today's queue ─────────────────────────────────── */}
+      <section aria-label="Today's queue">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 12,
+            gap: 12,
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--muted)",
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+            }}
+          >
+            Today&apos;s queue
+          </h2>
 
-            {allBlocksDone && (
-              <div className="home-all-done">
-                All {activeBlocks.length} block{activeBlocks.length === 1 ? "" : "s"} done for today.
-                Great work.
-              </div>
-            )}
-
-            <button
-              type="button"
-              className="today-schedule-toggle"
-              onClick={() => setShowSchedule((v) => !v)}
-              aria-expanded={showSchedule}
+          {activeBlocks.length > 0 && firstOpenBlock && !allDone && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => router.push(`/block/${firstOpenBlock.slot}`)}
             >
-              {showSchedule
-                ? "Hide schedule"
-                : `Full schedule · ${activeBlocks.length} block${activeBlocks.length === 1 ? "" : "s"}`}
-              <span aria-hidden>{showSchedule ? " ▾" : " ▸"}</span>
-            </button>
+              Start session
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                aria-hidden
+              >
+                <path
+                  d="M2 6H10M7 3L10 6L7 9"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </Button>
+          )}
+        </div>
 
-            {showSchedule && (
-              <div className="today-blocks">
-                {blocks.map((block) => (
-                  <BlockRow
-                    key={block.slot}
-                    block={block}
-                    extra={extraByTrack[block.track_slug] ?? []}
-                    completed={completedSlots.includes(block.slot)}
-                    onStart={() => startBlock(block)}
-                  />
-                ))}
+        {/* Loading state */}
+        {queueLoading && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                style={{
+                  height: 64,
+                  borderRadius: 6,
+                  border: "1px solid var(--hairline)",
+                  overflow: "hidden",
+                }}
+              >
+                <Skeleton height="100%" borderRadius={0} />
               </div>
-            )}
-          </>
+            ))}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!queueLoading && blocks.length === 0 && (
+          <EmptyState
+            icon={
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 32 32"
+                fill="none"
+                aria-hidden
+              >
+                <rect
+                  x="4"
+                  y="6"
+                  width="24"
+                  height="20"
+                  rx="3"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <path
+                  d="M4 12h24"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <path
+                  d="M10 18h12M10 22h8"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            }
+            title="Your canvas is empty"
+            description="Create tracks from scratch, generate a personalized roadmap, or import example tracks to get started."
+            action={
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <Button variant="primary" size="md">
+                  <Link
+                    href="/curriculum/build"
+                    style={{ color: "inherit", textDecoration: "none" }}
+                  >
+                    Build my roadmap
+                  </Link>
+                </Button>
+                <p style={{ fontSize: 13, color: "var(--muted)" }}>
+                  Or open the{" "}
+                  <Link
+                    href="/curriculum"
+                    style={{ color: "var(--accent)", textDecoration: "none" }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = "underline";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = "none";
+                    }}
+                  >
+                    roadmap canvas
+                  </Link>{" "}
+                  or{" "}
+                  <Link
+                    href="/schedule"
+                    style={{ color: "var(--accent)", textDecoration: "none" }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.textDecoration = "underline";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.textDecoration = "none";
+                    }}
+                  >
+                    weekly calendar
+                  </Link>
+                </p>
+              </div>
+            }
+          />
+        )}
+
+        {/* All done banner */}
+        {!queueLoading && allDone && (
+          <div
+            style={{
+              padding: "16px 20px",
+              borderRadius: 6,
+              background: "rgba(15, 123, 108, 0.06)",
+              border: "1px solid rgba(15, 123, 108, 0.15)",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 12,
+            }}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 18 18"
+              fill="none"
+              aria-hidden
+            >
+              <circle cx="9" cy="9" r="8" stroke="var(--ok)" strokeWidth="1.5" />
+              <path
+                d="M5.5 9L7.5 11L12.5 6.5"
+                stroke="var(--ok)"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <div>
+              <p
+                style={{
+                  fontSize: 14,
+                  fontWeight: 500,
+                  color: "var(--ok)",
+                }}
+              >
+                All {activeBlocks.length} block
+                {activeBlocks.length !== 1 ? "s" : ""} complete
+              </p>
+              <p style={{ fontSize: 13, color: "var(--muted)", marginTop: 1 }}>
+                Great work today. Come back tomorrow for more.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Block list */}
+        {!queueLoading && blocks.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+            {blocks.map((block, i) => (
+              <QueueBlock
+                key={block.slot}
+                block={block}
+                extra={extraByTrack[block.track_slug] ?? []}
+                completed={completedSlots.includes(block.slot)}
+                onPushMore={handlePushMore}
+                isFirst={i === 0 && !completedSlots.includes(block.slot)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Stats breakdown when queue is loaded */}
+        {!queueLoading && blocks.length > 0 && (
+          <div
+            style={{
+              marginTop: 16,
+              display: "flex",
+              gap: 16,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <span style={{ fontSize: 13, color: "var(--muted)" }}>
+              {activeBlocks.length} track{activeBlocks.length !== 1 ? "s" : ""}
+              {" · "}
+              {queue?.review_count ?? 0} reviews
+              {" · "}
+              {queue?.new_count ?? 0} new
+              {" · "}
+              ~{queue?.total_minutes ?? 0}m total
+            </span>
+            <Link
+              href="/library"
+              style={{
+                fontSize: 13,
+                color: "var(--muted)",
+                marginLeft: "auto",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                transition: "color var(--dur-fast)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "var(--text)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "var(--muted)";
+              }}
+            >
+              Library
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+                aria-hidden
+              >
+                <path
+                  d="M2 6H10M7 3L10 6L7 9"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </Link>
+          </div>
         )}
       </section>
 
-      {/* ── Section 3: AI Coach ─────────────────────────── */}
-      <HomeCoach />
-    </div>
-  );
-}
-
-function BlockChecklistPreview({
-  block,
-  onOpen,
-}: {
-  block: BlockEntry;
-  onOpen: () => void;
-}) {
-  const accent = trackAccent(block.track_slug, block.track_color);
-  const items = [...block.reviews, ...block.new_items];
-
-  return (
-    <section className="block-preview" style={{ ["--track-color" as string]: accent }}>
-      <div className="block-preview-head">
-        <div>
-          <p className="block-preview-eyebrow">
-            {block.slot_label} · ~{block.planned_minutes}m
-          </p>
-          <h2 className="block-preview-title">{block.track_name}</h2>
-        </div>
-        <button type="button" className="v2-btn primary" onClick={onOpen}>
-          Open block →
-        </button>
-      </div>
-      <ol className="block-preview-list">
-        {items.map((item, i) => (
-          <li key={item.card_id} className="block-preview-item">
-            <span className="block-preview-num">{i + 1}</span>
-            <span className="block-preview-item-title">{item.material_title}</span>
-            <span className="block-preview-item-meta">{item.estimated_minutes}m</span>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-function BlockRow({
-  block,
-  extra,
-  completed,
-  onStart,
-}: {
-  block: BlockEntry;
-  extra: QueueItem[];
-  completed: boolean;
-  onStart: () => void;
-}) {
-  const accent = trackAccent(block.track_slug, block.track_color);
-  const allItems = [...block.reviews, ...block.new_items, ...extra];
-  const next = allItems[0];
-  const remaining = Math.max(allItems.length - 1, 0);
-  const isEmpty = allItems.length === 0;
-
-  return (
-    <article
-      className={`block-row${isEmpty ? " empty" : ""}${completed ? " done" : ""}`}
-      style={{ ["--track-color" as string]: accent }}
-    >
-      <div className="block-row-main">
-        <div className="block-row-eyebrow">
-          {completed && <span className="block-row-check" aria-label="Completed">✓</span>}
-          <span className="slot">{block.slot_label}</span>
-          <span className="sep">·</span>
-          <span>{block.track_name}</span>
-        </div>
-        {next ? (
-          <div className="block-row-next" title={next.material_title}>
-            <span className="muted">Next ·</span> {next.material_title}
-          </div>
-        ) : (
-          <div className="block-row-next muted">Nothing queued.</div>
-        )}
-        <div className="block-row-meta">
-          {block.reviews.length > 0 && (
-            <span>
-              <strong>{block.reviews.length}</strong> review
-              {block.reviews.length === 1 ? "" : "s"}
-            </span>
-          )}
-          <span>
-            <strong>{block.new_items.length + extra.length}</strong> new
-          </span>
-          {remaining > 0 && <span>+{remaining} more</span>}
-          <span>~{block.planned_minutes}m</span>
-        </div>
-      </div>
-      <div className="block-row-actions">
-        <button
-          type="button"
-          className="v2-btn block-row-start"
-          onClick={onStart}
-          disabled={isEmpty}
-        >
-          {completed ? "Again" : "Open"} <span aria-hidden>›</span>
-        </button>
-      </div>
-    </article>
+      {/* ── Activity heatmap ───────────────────────────────── */}
+      <ActivityStrip />
+    </PageContent>
   );
 }

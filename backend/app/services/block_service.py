@@ -12,13 +12,12 @@ from app.models.block_session import BlockSession, BlockSessionStatus
 from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.review_log import ReviewRating
-from app.models.track import Track
 from app.models.user import User
 from app.schemas.block import BlockSessionResponse
 from app.schemas.queue import QueueItem
 from app.services.queue_service import build_daily_queue
 from app.services.fsrs_service import review_card
-from app.services.timezone import local_today, utc_now
+from app.services.timezone import local_today, utc_now  # noqa: F401  (patched by tests)
 
 
 def _today(user: User, timezone_name: str | None = None) -> date:
@@ -36,7 +35,6 @@ def _hydrate_items(db: Session, user: User, card_ids: list[str]) -> list[QueueIt
         .all()
     )
     by_id = {str(c.id): c for c in cards}
-    now = utc_now()
     items: list[QueueItem] = []
     for cid in card_ids:
         card = by_id.get(cid)

@@ -1,53 +1,125 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { useShell } from "@/components/ui/Shell";
-import { api, type User } from "@/lib/api";
+import { useState, useEffect, useCallback } from "react";
+import { PageContent } from "@/components/shell";
+import { Button, useToast } from "@/components/primitives";
+import {
+  useUser,
+  useProfileStats,
+  useRetentionTimeline,
+  useUpdateUser,
+} from "@/lib/hooks";
+import { useActivity } from "@/lib/hooks/useToday";
+import { useSyllabiList } from "@/lib/hooks/useSyllabi";
 import { ProfileIdentity } from "@/features/profile/ProfileIdentity";
 import { ProfileStats } from "@/features/profile/ProfileStats";
 import { StudyPreferences } from "@/features/profile/StudyPreferences";
 
+/* ─── Section header ─────────────────────────────────────────── */
+function SectionHeader({ title, description }: { title: string; description?: string }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <h2
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: "var(--muted)",
+          textTransform: "uppercase",
+          letterSpacing: "0.07em",
+          marginBottom: description ? 3 : 0,
+        }}
+      >
+        {title}
+      </h2>
+      {description && (
+        <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>{description}</p>
+      )}
+    </div>
+  );
+}
+
+/* ─── Section divider ────────────────────────────────────────── */
+function SectionDivider() {
+  return (
+    <div
+      aria-hidden
+      style={{
+        height: 1,
+        background: "var(--hairline)",
+        margin: "36px 0",
+      }}
+    />
+  );
+}
+
+/* ─── Page ───────────────────────────────────────────────────── */
 export default function ProfilePage() {
-  const { stats, activity, tracks, setRightPanel } = useShell();
+  const toast = useToast();
 
-  useEffect(() => {
-    setRightPanel(null);
-    return () => setRightPanel(null);
-  }, [setRightPanel]);
+  /* ── Data queries ── */
+  const { data: user, isLoading: userLoading } = useUser();
+  const { data: stats, isLoading: statsLoading } = useProfileStats();
+  const { data: activity = [], isLoading: activityLoading } = useActivity(112);
+  const { data: retentionTimeline = [] } = useRetentionTimeline(30);
+  const { data: syllabi = [] } = useSyllabiList();
+  const updateUser = useUpdateUser();
 
-  const [user, setUser] = useState<User | null>(null);
+  /* ── Local editable state (initialised from server data) ── */
   const [displayName, setDisplayName] = useState("");
   const [retention, setRetention] = useState(0.9);
   const [blockMinutes, setBlockMinutes] = useState(120);
   const [dailyNewCards, setDailyNewCards] = useState(0);
   const [pausedTracks, setPausedTracks] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
 
+  // Seed local state when user data arrives
   useEffect(() => {
-    api
-      .getUser()
-      .then((u) => {
-        setUser(u);
-        setDisplayName(u.display_name ?? "");
-        setRetention(u.target_retention);
-        setBlockMinutes(u.daily_study_minutes);
-        setDailyNewCards(u.daily_new_cards ?? 0);
-        setPausedTracks(u.paused_tracks ?? []);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    if (!user) return;
+    setDisplayName(user.display_name ?? "");
+    setRetention(user.target_retention);
+    setBlockMinutes(user.daily_study_minutes);
+    setDailyNewCards(user.daily_new_cards ?? 0);
+    setPausedTracks(user.paused_tracks ?? []);
+    setDirty(false);
+  }, [user]);
 
-  async function handleSave(e: FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setMessage(null);
-    setError(null);
+  /* ── Track shapes for preferences section ── */
+  const tracks = syllabi.map((s) => ({
+    slug: s.slug,
+    name: s.name,
+    color: s.color ?? "#787774",
+  }));
+
+  /* ── Dirty flag helpers ── */
+  const markDirty = useCallback(() => setDirty(true), []);
+
+  function handleDisplayNameChange(v: string) {
+    setDisplayName(v);
+    markDirty();
+  }
+  function handleRetentionChange(v: number) {
+    setRetention(v);
+    markDirty();
+  }
+  function handleBlockMinutesChange(v: number) {
+    setBlockMinutes(v);
+    markDirty();
+  }
+  function handleDailyNewCardsChange(v: number) {
+    setDailyNewCards(v);
+    markDirty();
+  }
+  function handleToggleTrack(slug: string) {
+    setPausedTracks((prev) =>
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
+    );
+    markDirty();
+  }
+
+  /* ── Save ── */
+  async function handleSave() {
     try {
-      const updated = await api.updateUser({
+      await updateUser.mutateAsync({
         display_name: displayName.trim() || null,
         target_retention: retention,
         daily_study_minutes: blockMinutes,
@@ -55,88 +127,178 @@ export default function ProfilePage() {
         paused_tracks: pausedTracks,
         onboarded: true,
       });
-      setUser(updated);
-      setMessage("Saved.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-    } finally {
-      setSaving(false);
+      setDirty(false);
+      toast.push({ kind: "success", title: "Saved", body: "Your preferences have been updated." });
+    } catch (err) {
+      toast.push({
+        kind: "error",
+        title: "Failed to save",
+        body: err instanceof Error ? err.message : "Please try again.",
+      });
     }
   }
 
-  const toggleTrack = (slug: string) =>
-    setPausedTracks((prev) =>
-      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
-    );
-
-  if (loading) return <p style={{ color: "var(--fg-mute)" }}>Loading…</p>;
+  const saving = updateUser.isPending;
+  const statsLoaded = !statsLoading && !activityLoading;
+  const profileLoading = userLoading;
 
   return (
-    <div className="settings-page">
-      <header className="settings-hero">
+    <PageContent style={{ paddingTop: 40, paddingBottom: 80 }}>
+      {/* ── Page title ── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: 36,
+        }}
+      >
         <div>
-          <p className="page-kicker">Account</p>
-          <h1 className="page-title">Profile</h1>
-          <p className="page-sub">
+          <p
+            style={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: "var(--muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.07em",
+              marginBottom: 6,
+            }}
+          >
+            Account
+          </p>
+          <h1
+            style={{
+              fontSize: 28,
+              fontWeight: 700,
+              color: "var(--text)",
+              letterSpacing: "-0.03em",
+              lineHeight: 1.1,
+              marginBottom: 8,
+            }}
+          >
+            Profile
+          </h1>
+          <p style={{ fontSize: 14, color: "var(--muted)" }}>
             Identity, progress, and study preferences in one place.
           </p>
         </div>
-        <div className="settings-account">
-          <span>{displayName || user?.email}</span>
-          <button
-            type="submit"
-            form="profile-form"
-            className="v2-btn primary"
-            disabled={saving}
-          >
-            {saving ? "Saving…" : "Save changes"}
-          </button>
-        </div>
-      </header>
 
-      <div className="settings-snapshot" aria-label="Current settings">
-        <div>
-          <strong>{Math.round(retention * 100)}%</strong>
-          <span>target retention</span>
-        </div>
-        <div>
-          <strong>{blockMinutes}m</strong>
-          <span>study block</span>
-        </div>
-        <div>
-          <strong>{stats?.current_streak ?? 0}d</strong>
-          <span>streak</span>
-        </div>
+        {/* Save button — only visible when dirty */}
+        {dirty && (
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleSave}
+            loading={saving}
+            disabled={saving}
+            style={{ flexShrink: 0, marginTop: 6 }}
+          >
+            Save changes
+          </Button>
+        )}
       </div>
 
-      <form id="profile-form" onSubmit={handleSave} className="settings-grid">
-        {/* Section 1: Identity */}
-        <ProfileIdentity
-          user={user}
-          displayName={displayName}
-          onDisplayNameChange={setDisplayName}
-          saving={saving}
-        />
+      {/* ══════════════════════════════════════════
+          Section 1 — Identity
+         ══════════════════════════════════════════ */}
+      <SectionHeader
+        title="Identity"
+        description="Your name is shown in roadmaps and coach responses."
+      />
+      <ProfileIdentity
+        user={user ?? null}
+        loading={profileLoading}
+        displayName={displayName}
+        onDisplayNameChange={handleDisplayNameChange}
+        saving={saving}
+      />
 
-        {/* Section 3: Study preferences (rendered inside the form) */}
-        <StudyPreferences
-          tracks={tracks}
-          retention={retention}
-          blockMinutes={blockMinutes}
-          dailyNewCards={dailyNewCards}
-          pausedTracks={pausedTracks}
-          onRetentionChange={setRetention}
-          onBlockMinutesChange={setBlockMinutes}
-          onDailyNewCardsChange={setDailyNewCards}
-          onToggleTrack={toggleTrack}
-          saving={saving}
-          message={message}
-          error={error}
-        />
-      </form>
+      <SectionDivider />
 
-      {/* Section 2: Progress (outside form — display only) */}
-      <ProfileStats stats={stats} activity={activity} />
-    </div>
+      {/* ══════════════════════════════════════════
+          Section 2 — Progress & Stats
+         ══════════════════════════════════════════ */}
+      <SectionHeader
+        title="Progress"
+        description="Reviews, retention, and mastery over time."
+      />
+      <ProfileStats
+        stats={stats ?? null}
+        activity={activity}
+        retentionTimeline={retentionTimeline}
+        loading={!statsLoaded}
+      />
+
+      <SectionDivider />
+
+      {/* ══════════════════════════════════════════
+          Section 3 — Study preferences
+         ══════════════════════════════════════════ */}
+      <SectionHeader
+        title="Study preferences"
+        description="Daily budget, retention target, and track availability."
+      />
+      <StudyPreferences
+        loading={profileLoading}
+        retention={retention}
+        blockMinutes={blockMinutes}
+        dailyNewCards={dailyNewCards}
+        pausedTracks={pausedTracks}
+        tracks={tracks}
+        onRetentionChange={handleRetentionChange}
+        onBlockMinutesChange={handleBlockMinutesChange}
+        onDailyNewCardsChange={handleDailyNewCardsChange}
+        onToggleTrack={handleToggleTrack}
+        saving={saving}
+      />
+
+      {/* Bottom save affordance */}
+      {dirty && (
+        <div
+          style={{
+            marginTop: 32,
+            paddingTop: 20,
+            borderTop: "1px solid var(--hairline)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: 12,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              // Reset to server state
+              if (!user) return;
+              setDisplayName(user.display_name ?? "");
+              setRetention(user.target_retention);
+              setBlockMinutes(user.daily_study_minutes);
+              setDailyNewCards(user.daily_new_cards ?? 0);
+              setPausedTracks(user.paused_tracks ?? []);
+              setDirty(false);
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: 14,
+              color: "var(--muted)",
+              cursor: "pointer",
+              padding: "0 4px",
+            }}
+          >
+            Discard changes
+          </button>
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleSave}
+            loading={saving}
+            disabled={saving}
+          >
+            Save changes
+          </Button>
+        </div>
+      )}
+    </PageContent>
   );
 }

@@ -233,7 +233,6 @@ def _run_gemini_agent(
 
     # Build conversation history as Gemini Content list (role: 'user' | 'model')
     contents: list[types.Content] = []
-    pending_tool_results: dict[str, Any] = {}
     for msg in conversation.messages:
         if msg.role == MessageRole.USER:
             contents.append(
@@ -263,7 +262,6 @@ def _run_gemini_agent(
                     )
                 if response_parts:
                     contents.append(types.Content(role="user", parts=response_parts))
-            pending_tool_results = {}
 
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT,

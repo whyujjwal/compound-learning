@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,16 +10,13 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.catalog_collection import CatalogCollection, CatalogCollectionItem
-from app.models.card import Card
 from app.models.material import StudyMaterial
 from app.models.track import Track
-from app.models.track_module import TrackModule
 from app.models.track_rating import TrackRating
 from app.models.track_star import TrackStar
 from app.models.user import User
 from app.services.catalog_batch import catalog_list_item, load_catalog_batch
 from app.services.catalog_quality import quality_breakdown, rank_score, refresh_track_quality, refresh_track_rating
-from app.services.bootstrap import ensure_scheduler_params
 from app.services.syllabus import clean_list, default_outcomes, syllabus_modules
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])

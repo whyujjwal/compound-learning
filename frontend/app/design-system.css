@@ -1,0 +1,453 @@
+/*
+ * Compound Design System — Tailwind v4 CSS-first token layer
+ *
+ * Aesthetic: Notion restraint — light-first, flat, thin 1px gray borders,
+ * generous whitespace, near-monochrome with a single restrained blue accent.
+ *
+ * Token contract (what other agents must use):
+ *   --canvas        page background
+ *   --panel         secondary / sidebar / card surface
+ *   --text          primary text
+ *   --muted         secondary / placeholder text
+ *   --hairline      1px separator color
+ *   --accent        interactive blue (#2383e2)
+ *   --accent-hover  slightly darker accent for hover
+ *   --accent-soft   low-opacity accent tint (focus rings, hover states)
+ *   --overlay-hover row hover background
+ *   --shadow-float  shadow for floating elements (menus, dialogs)
+ *   --scrim         dialog backdrop
+ *
+ * Radii:  --radius-xs  --radius-sm  --radius-md
+ * Fonts:  --font-sans  --font-mono  (CSS vars from next/font)
+ * Motion: --dur-fast  --dur  --ease-out
+ * Metrics: --sidebar-w  --content-max  --topbar-h
+ */
+
+@import "tailwindcss";
+
+/* ─── Tailwind v4 @theme — maps CSS variables to utilities ─── */
+@theme {
+  /* Colors — reference the CSS vars so both themes flip automatically */
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-hairline: var(--hairline);
+  --color-overlay-hover: var(--overlay-hover);
+
+  /* Radii */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Spacing — 4px base grid (Tailwind's default is fine; extra names for clarity) */
+
+  /* Font families */
+  --font-sans: var(--font-sans-var), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-mono-var), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Motion */
+  --transition-fast: 100ms;
+  --transition-base: 150ms;
+}
+
+/* ─── Light theme (default) ──────────────────────────────── */
+:root {
+  color-scheme: light;
+
+  /* Core surfaces */
+  --canvas: #ffffff;
+  --panel: #f7f7f5;
+  --text: #37352f;
+  --muted: #787774;
+  --hairline: rgba(0, 0, 0, 0.09);
+  --accent: #2383e2;
+  --accent-hover: #1d6dc0;
+  --accent-soft: rgba(35, 131, 226, 0.1);
+
+  /* Interactive */
+  --overlay-hover: rgba(0, 0, 0, 0.04);
+  --overlay-active: rgba(0, 0, 0, 0.07);
+
+  /* Shadows — only for floating elements */
+  --shadow-float: 0 4px 6px -2px rgba(0, 0, 0, 0.06), 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.1);
+  --scrim: rgba(0, 0, 0, 0.35);
+
+  /* Semantic colors */
+  --ok: #0f7b6c;
+  --warn: #c97a00;
+  --bad: #eb5757;
+  --info: #2383e2;
+
+  /* Code blocks */
+  --code-bg: rgba(0, 0, 0, 0.05);
+  --code-border: rgba(0, 0, 0, 0.08);
+
+  /* Skeleton loading */
+  --skeleton-from: rgba(0, 0, 0, 0.04);
+  --skeleton-to: rgba(0, 0, 0, 0.08);
+
+  /* Shell metrics */
+  --sidebar-w: 240px;
+  --content-max: 1000px;
+  --topbar-h: 0px; /* no top bar in new shell */
+
+  /* Typography stacks (picks up next/font CSS vars) */
+  --font-sans-var: '';
+  --font-mono-var: '';
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --dur-fast: 100ms;
+  --dur: 150ms;
+
+  /* Scrollbar */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.22);
+
+  /* Sidebar accent dot */
+  --sidebar-accent: #2383e2;
+}
+
+/* ─── Dark theme ─────────────────────────────────────────── */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #191919;
+  --panel: #2f2f2f;
+  --text: #d4d4d4;
+  --muted: #9b9b9b;
+  --hairline: rgba(255, 255, 255, 0.094);
+  --accent: #2383e2;
+  --accent-hover: #4d9ef0;
+  --accent-soft: rgba(35, 131, 226, 0.15);
+
+  --overlay-hover: rgba(255, 255, 255, 0.05);
+  --overlay-active: rgba(255, 255, 255, 0.08);
+
+  --shadow-float: 0 4px 6px -2px rgba(0, 0, 0, 0.4), 0 10px 15px -3px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --scrim: rgba(0, 0, 0, 0.6);
+
+  --ok: #3dd68c;
+  --warn: #f4b740;
+  --bad: #f87171;
+  --info: #5ca5e8;
+
+  --code-bg: rgba(255, 255, 255, 0.06);
+  --code-border: rgba(255, 255, 255, 0.08);
+
+  --skeleton-from: rgba(255, 255, 255, 0.04);
+  --skeleton-to: rgba(255, 255, 255, 0.08);
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.2);
+}
+
+/* ─── Base styles ────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border-color: var(--hairline);
+}
+
+html {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background-color: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-height: 100dvh;
+  background-color: var(--canvas);
+  color: var(--text);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Code */
+code, kbd, samp, pre {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+code:not(pre code) {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+/* Links */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--text);
+}
+
+/* ─── Shell layout primitives ────────────────────────────── */
+.shell-root {
+  display: flex;
+  min-height: 100dvh;
+}
+
+.shell-sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  border-right: 1px solid var(--hairline);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: width var(--dur) var(--ease-out), opacity var(--dur) var(--ease-out);
+}
+
+.shell-sidebar.collapsed {
+  width: 0;
+  opacity: 0;
+  border-right: none;
+  overflow: hidden;
+}
+
+.shell-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-content-inner {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+.shell-right-panel {
+  width: 320px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--hairline);
+  background: var(--panel);
+  overflow-y: auto;
+}
+
+/* ─── Primitive resets shared by the old system ─────────── */
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+input, textarea, select {
+  background: transparent;
+}
+
+/* ─── Cmdk palette host styles ───────────────────────────── */
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 900;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+}
+
+.cmdk-root {
+  width: 560px;
+  max-width: calc(100vw - 32px);
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+}
+
+.cmdk-root [cmdk-input-wrapper] {
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 8px;
+}
+
+.cmdk-root [cmdk-input] {
+  width: 100%;
+  padding: 14px 0;
+  font-size: 15px;
+  color: var(--text);
+  background: none;
+  border: none;
+  outline: none;
+}
+
+.cmdk-root [cmdk-input]::placeholder {
+  color: var(--muted);
+}
+
+.cmdk-root [cmdk-list] {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.cmdk-root [cmdk-group-heading] {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cmdk-root [cmdk-item] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--text);
+  border-radius: 4px;
+  margin: 0 6px;
+  cursor: pointer;
+  transition: background var(--dur-fast);
+}
+
+.cmdk-root [cmdk-item][aria-selected="true"],
+.cmdk-root [cmdk-item]:hover {
+  background: var(--overlay-hover);
+}
+
+.cmdk-root [cmdk-empty] {
+  padding: 24px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.cmdk-item-icon {
+  width: 18px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.cmdk-item-shortcut {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+/* ─── Toast styles ───────────────────────────────────────── */
+.toast-stack {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+
+.toast {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: var(--shadow-float);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  position: relative;
+  animation: toast-in 150ms var(--ease-out);
+}
+
+.toast-success { border-left: 3px solid var(--ok); }
+.toast-warn    { border-left: 3px solid var(--warn); }
+.toast-error   { border-left: 3px solid var(--bad); }
+.toast-info    { border-left: 3px solid var(--info); }
+
+.toast-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.toast-body {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.toast-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 16px;
+  color: var(--muted);
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: background var(--dur-fast);
+}
+
+.toast-close:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

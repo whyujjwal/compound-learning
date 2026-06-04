@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Background, Controls, MiniMap, ReactFlow, type Node, type NodeProps } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import type ELK from "elkjs/lib/elk.bundled.js";
 import type { RoadmapGraph, RoadmapNode } from "../types";
 import { statusColor, toElkGraph, toFlowElements } from "./roadmapLayout";
@@ -18,13 +19,41 @@ function getElk() {
 
 function RoadmapFlowNode({ data }: NodeProps<Node<Record<string, unknown>>>) {
   const node = data as unknown as RoadmapNode;
+  const isModule = node.type === "module";
+  const isSection = node.type === "section";
+
   return (
     <div
-      className={`course-roadmap-node type-${node.type} kind-${node.kind}`}
-      style={{ borderColor: node.type === "material" ? statusColor(node.status) : undefined }}
+      style={{
+        background: "var(--canvas)",
+        border: `1px solid ${node.type === "material" ? statusColor(node.status) : "var(--hairline)"}`,
+        borderRadius: isModule ? 6 : 4,
+        padding: isModule ? "10px 14px" : "7px 10px",
+        boxShadow: isModule ? "var(--shadow-sm)" : "none",
+        minWidth: isModule ? 200 : isSection ? 160 : 180,
+        maxWidth: isModule ? 260 : 220,
+      }}
     >
-      {node.resource_type ? <span className="course-roadmap-node-type">{node.resource_type}</span> : null}
-      <strong>{node.title}</strong>
+      {node.resource_type && (
+        <p style={{
+          fontSize: 10,
+          color: "var(--muted)",
+          fontWeight: 600,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          marginBottom: 3,
+        }}>
+          {node.resource_type}
+        </p>
+      )}
+      <strong style={{
+        fontSize: isModule ? 13 : 12,
+        color: "var(--text)",
+        display: "block",
+        lineHeight: 1.3,
+      }}>
+        {node.title}
+      </strong>
     </div>
   );
 }
@@ -47,28 +76,61 @@ export function RoadmapCanvas({ graph }: { graph: RoadmapGraph }) {
         setPositions(next);
       })
       .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [graph]);
 
   const { nodes, edges } = useMemo(() => toFlowElements(graph, positions), [graph, positions]);
 
   if (!graph.nodes.length) {
-    return <p className="course-roadmap-empty">Nothing to map yet — add modules and materials.</p>;
+    return (
+      <p style={{ padding: "32px 0", fontSize: 14, color: "var(--muted)" }}>
+        Nothing to map yet — add modules and materials.
+      </p>
+    );
   }
 
   return (
-    <section className="course-roadmap-shell" style={{ ["--track-color" as string]: graph.color }}>
-      <div className="course-roadmap-toolbar">
-        <strong>{graph.name} roadmap</strong>
-        <div className="course-roadmap-legend">
-          <span><i style={{ background: statusColor("mastered") }} /> Mastered</span>
-          <span><i style={{ background: statusColor("started") }} /> In progress</span>
-          <span><i style={{ background: statusColor("not_started") }} /> Not started</span>
+    <div style={{
+      border: "1px solid var(--hairline)",
+      borderRadius: 6,
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column",
+      background: "var(--canvas)",
+    }}>
+      {/* Toolbar */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "10px 14px",
+        borderBottom: "1px solid var(--hairline)",
+        background: "var(--panel)",
+      }}>
+        <strong style={{ fontSize: 13, color: "var(--text)" }}>{graph.name} roadmap</strong>
+        <div style={{ display: "flex", gap: 14, fontSize: 12, color: "var(--muted)" }}>
+          {[
+            { label: "Mastered", color: statusColor("mastered") },
+            { label: "In progress", color: statusColor("started") },
+            { label: "Not started", color: statusColor("not_started") },
+          ].map(({ label, color }) => (
+            <span key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <i style={{
+                display: "inline-block",
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: color,
+                flexShrink: 0,
+              }} />
+              {label}
+            </span>
+          ))}
         </div>
       </div>
-      <div className="course-roadmap-canvas">
+
+      {/* Canvas */}
+      <div style={{ height: 520 }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -83,10 +145,17 @@ export function RoadmapCanvas({ graph }: { graph: RoadmapGraph }) {
         >
           <Background gap={28} size={1} color="var(--hairline)" />
           <Controls showInteractive={false} />
-          <MiniMap pannable zoomable nodeStrokeWidth={2} />
+          <MiniMap
+            pannable
+            zoomable
+            nodeStrokeWidth={2}
+            style={{ background: "var(--panel)", border: "1px solid var(--hairline)" }}
+          />
         </ReactFlow>
       </div>
+
+      {/* Inspector */}
       <NodeInspector node={selected} />
-    </section>
+    </div>
   );
 }

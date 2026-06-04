@@ -3,8 +3,8 @@
 import { useTheme } from "@/components/ThemeProvider";
 
 export function ThemeToggle({ className = "appbar-icon-btn" }: { className?: string }) {
-  const { theme, toggleTheme } = useTheme();
-  const isLight = theme === "light";
+  const { resolvedTheme, toggleTheme } = useTheme();
+  const isLight = resolvedTheme === "light";
 
   return (
     <button

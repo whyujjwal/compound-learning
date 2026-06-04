@@ -3,9 +3,11 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
 import { syllabusApi } from "@/features/syllabus/api/endpoints";
 import { generateCourse } from "@/features/course/api/mutations";
-import { useShell } from "@/components/ui/Shell";
+import { curriculumKeys } from "@/lib/hooks/useCurriculum";
+import { syllabusKeys } from "@/lib/hooks/useSyllabi";
 
 function autoSlug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -13,7 +15,14 @@ function autoSlug(value: string) {
 
 export default function NewSyllabusPage() {
   const router = useRouter();
-  const { reloadAll } = useShell();
+  const qc = useQueryClient();
+
+  async function refreshLibrary() {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: syllabusKeys.list }),
+      qc.invalidateQueries({ queryKey: curriculumKeys.overview }),
+    ]);
+  }
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [level, setLevel] = useState("");
@@ -31,7 +40,7 @@ export default function NewSyllabusPage() {
         goal: goal.trim(),
         level: level.trim() || undefined,
       });
-      await reloadAll();
+      await refreshLibrary();
       router.push(`/library/${res.syllabus.slug}?tab=studio`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed. Try a more specific goal.");
@@ -51,7 +60,7 @@ export default function NewSyllabusPage() {
         summary: goal.trim() || undefined,
         visibility: "PRIVATE",
       });
-      await reloadAll();
+      await refreshLibrary();
       router.push(`/library/${created.slug}?tab=studio`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create syllabus.");

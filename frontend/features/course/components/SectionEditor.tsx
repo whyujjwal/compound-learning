@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button, Input, Field } from "@/components/primitives";
 import { applyManualOperation } from "../api/mutations";
 import type { CourseModule } from "../types";
 
@@ -28,14 +29,23 @@ export function SectionEditor({
   }
 
   return (
-    <div className="course-section-editor">
+    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Existing sections */}
       {module.sections.map((section) => (
-        <div key={section.id} className="course-section-editor-row">
-          <div className="course-section-editor-head">
-            <strong>{section.title}</strong>
-            <button
-              type="button"
-              className="v2-btn ghost sm"
+        <div
+          key={section.id}
+          style={{
+            background: "var(--panel)",
+            border: "1px solid var(--hairline)",
+            borderRadius: 6,
+            padding: "12px 14px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <strong style={{ fontSize: 13, color: "var(--text)" }}>{section.title}</strong>
+            <Button
+              variant="danger"
+              size="sm"
               disabled={busy}
               onClick={() => {
                 if (!confirm(`Remove section "${section.title}"?`)) return;
@@ -45,14 +55,16 @@ export function SectionEditor({
                 }));
               }}
             >
-              Remove section
-            </button>
+              Remove
+            </Button>
           </div>
-          <div className="studio-inline-form">
-            <input
-              className="v2-input"
+
+          {/* Add material to section */}
+          <div style={{ display: "flex", gap: 6 }}>
+            <Input
               placeholder="Material title"
               value={matDraft[section.id]?.title ?? ""}
+              style={{ flex: 1 }}
               onChange={(e) =>
                 setMatDraft((p) => ({
                   ...p,
@@ -60,10 +72,10 @@ export function SectionEditor({
                 }))
               }
             />
-            <input
-              className="v2-input"
-              placeholder="Resource URL (optional)"
+            <Input
+              placeholder="URL (optional)"
               value={matDraft[section.id]?.url ?? ""}
+              style={{ flex: 1 }}
               onChange={(e) =>
                 setMatDraft((p) => ({
                   ...p,
@@ -71,10 +83,10 @@ export function SectionEditor({
                 }))
               }
             />
-            <button
-              type="button"
-              className="v2-btn sm"
-              disabled={busy}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={busy || !matDraft[section.id]?.title.trim()}
               onClick={() => {
                 const d = matDraft[section.id];
                 if (!d?.title.trim()) return;
@@ -88,20 +100,22 @@ export function SectionEditor({
               }}
             >
               Add material
-            </button>
+            </Button>
           </div>
         </div>
       ))}
-      <div className="studio-inline-form">
-        <input
-          className="v2-input"
+
+      {/* Add new section */}
+      <div style={{ display: "flex", gap: 6 }}>
+        <Input
           placeholder="New section title"
           value={newSection}
+          style={{ flex: 1 }}
           onChange={(e) => setNewSection(e.target.value)}
         />
-        <button
-          type="button"
-          className="v2-btn primary sm"
+        <Button
+          variant="primary"
+          size="sm"
           disabled={busy || !newSection.trim()}
           onClick={() => {
             void run(() =>
@@ -114,7 +128,7 @@ export function SectionEditor({
           }}
         >
           Add section
-        </button>
+        </Button>
       </div>
     </div>
   );

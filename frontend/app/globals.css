@@ -1,3 +1,10 @@
+/* Compound — global CSS entry point for Next.js App Router */
+
+/* ── 1. New design system (Tailwind v4 + design tokens + base reset) */
+@import "./design-system.css";
+
+/* ── 2. Legacy styles — kept intact so old pages don't break during rebuild.
+        A later integration agent removes these once all pages are migrated. */
 @import "@xyflow/react/dist/style.css";
 @import "../styles/tokens.css";
 @import "../styles/reset.css";

@@ -2,12 +2,29 @@
 
 import { FormEvent, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Button, Input, Textarea, Field } from "@/components/primitives";
 import type { SyllabusDetail, SyllabusModule, SyllabusProposal } from "../types";
 import { syllabusApi } from "../api/endpoints";
 import { queryKeys } from "@/lib/query/keys";
 import { ProposalDiff } from "../proposals/ProposalDiff";
 import { SectionEditor } from "@/features/course/components/SectionEditor";
 import { useCourseTree } from "@/features/course/hooks/useCourseTree";
+
+/* ─── Section divider ─────────────────────────────────────── */
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 style={{
+      fontSize: 11,
+      fontWeight: 600,
+      letterSpacing: "0.06em",
+      textTransform: "uppercase",
+      color: "var(--muted)",
+      marginBottom: 12,
+    }}>
+      {children}
+    </h3>
+  );
+}
 
 export function StudioEditor({
   syllabus,
@@ -126,115 +143,208 @@ export function StudioEditor({
   }
 
   return (
-    <div className="studio-editor">
-      <section className="studio-panel">
-        <h3>Modules & materials</h3>
-        <form className="studio-inline-form" onSubmit={addModule}>
-          <input
-            className="v2-input"
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 24,
+      alignItems: "start",
+    }}>
+      {/* ── Left: Modules & materials ─────────────────────── */}
+      <div>
+        <SectionTitle>Modules &amp; materials</SectionTitle>
+
+        {/* Add module form */}
+        <form
+          onSubmit={addModule}
+          style={{ display: "flex", gap: 6, marginBottom: 16 }}
+        >
+          <Input
             placeholder="New module title"
             value={newModuleTitle}
+            style={{ flex: 1 }}
             onChange={(e) => setNewModuleTitle(e.target.value)}
           />
-          <button type="submit" className="v2-btn primary sm" disabled={busy}>
+          <Button type="submit" variant="primary" size="sm" disabled={busy || !newModuleTitle.trim()}>
             Add module
-          </button>
+          </Button>
         </form>
 
-        <div className="module-list">
-          {syllabus.modules.map((module) => (
-            <div key={module.id} className="module-card studio-module">
-              <div className="module-card-head studio-module-head">
-                <button type="button" className="studio-module-toggle" onClick={() => toggleModule(module.id)}>
-                  <strong>{module.title}</strong>
-                  <span className="pill muted">{module.materials.length} materials</span>
-                </button>
-                <button
-                  type="button"
-                  className="v2-btn ghost sm"
-                  disabled={busy}
-                  onClick={() => deleteModule(module)}
-                >
-                  Remove
-                </button>
-              </div>
+        {/* Module list */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          {syllabus.modules.length === 0 && (
+            <p style={{ fontSize: 14, color: "var(--muted)", padding: "12px 0" }}>
+              No modules yet. Add one above.
+            </p>
+          )}
+          {syllabus.modules.map((module) => {
+            const isOpen = expanded.has(module.id);
+            const courseModule = courseTree?.modules.find((cm) => cm.id === module.id);
 
-              {expanded.has(module.id) && (
-                <div className="studio-module-body">
-                  <ul className="module-material-list">
-                    {module.materials.map((material) => (
-                      <li key={material.id}>
-                        <span>{material.title}</span>
-                        <button
-                          type="button"
-                          className="v2-btn ghost sm"
-                          disabled={busy}
-                          onClick={() => deleteMaterial(material.id)}
-                        >
-                          Delete
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="studio-inline-form">
-                    <input
-                      className="v2-input"
-                      placeholder="Material title"
-                      value={materialDraft[module.id]?.title ?? ""}
-                      onChange={(e) =>
-                        setMaterialDraft((prev) => ({
-                          ...prev,
-                          [module.id]: { ...prev[module.id], title: e.target.value, url: prev[module.id]?.url ?? "" },
-                        }))
-                      }
-                    />
-                    <input
-                      className="v2-input"
-                      placeholder="Resource URL (optional)"
-                      value={materialDraft[module.id]?.url ?? ""}
-                      onChange={(e) =>
-                        setMaterialDraft((prev) => ({
-                          ...prev,
-                          [module.id]: { title: prev[module.id]?.title ?? "", url: e.target.value },
-                        }))
-                      }
-                    />
-                    <button
-                      type="button"
-                      className="v2-btn sm"
-                      disabled={busy}
-                      onClick={() => addMaterial(module.id)}
+            return (
+              <div
+                key={module.id}
+                style={{
+                  border: "1px solid var(--hairline)",
+                  borderRadius: 6,
+                  overflow: "hidden",
+                }}
+              >
+                {/* Module header */}
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "10px 12px",
+                  background: "var(--panel)",
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => toggleModule(module.id)}
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    <svg
+                      width="10" height="10" viewBox="0 0 10 10" fill="none"
+                      aria-hidden
+                      style={{
+                        flexShrink: 0,
+                        color: "var(--muted)",
+                        transition: "transform var(--dur-fast)",
+                        transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
+                      }}
                     >
-                      Add material
-                    </button>
-                  </div>
-                  {courseTree?.modules.find((cm) => cm.id === module.id) && (
-                    <SectionEditor
-                      syllabusId={syllabus.id}
-                      module={courseTree.modules.find((cm) => cm.id === module.id)!}
-                      onChange={refresh}
-                    />
-                  )}
+                      <path d="M3 1.5l3.5 3.5L3 8.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                      {module.title}
+                    </span>
+                    <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                      {module.materials.length} materials
+                    </span>
+                  </button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => deleteModule(module)}
+                  >
+                    Remove
+                  </Button>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
 
-      <section className="studio-panel">
-        <h3>AI proposals</h3>
-        <form className="studio-ai-form" onSubmit={requestAiProposal}>
-          <textarea
-            className="v2-input"
+                {/* Module body */}
+                {isOpen && (
+                  <div style={{ padding: "12px" }}>
+                    {/* Materials */}
+                    {module.materials.length > 0 && (
+                      <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 1, marginBottom: 10 }}>
+                        {module.materials.map((material) => (
+                          <li
+                            key={material.id}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              padding: "6px 8px",
+                              borderRadius: 4,
+                              fontSize: 13,
+                              color: "var(--text)",
+                            }}
+                            onMouseEnter={(e) => ((e.currentTarget as HTMLLIElement).style.background = "var(--overlay-hover)")}
+                            onMouseLeave={(e) => ((e.currentTarget as HTMLLIElement).style.background = "transparent")}
+                          >
+                            <span style={{ flex: 1 }}>{material.title}</span>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => deleteMaterial(material.id)}
+                            >
+                              Delete
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {/* Add material */}
+                    <div style={{ display: "flex", gap: 6, marginBottom: courseModule ? 12 : 0 }}>
+                      <Input
+                        placeholder="Material title"
+                        value={materialDraft[module.id]?.title ?? ""}
+                        style={{ flex: 1 }}
+                        onChange={(e) =>
+                          setMaterialDraft((prev) => ({
+                            ...prev,
+                            [module.id]: { ...prev[module.id], title: e.target.value, url: prev[module.id]?.url ?? "" },
+                          }))
+                        }
+                      />
+                      <Input
+                        placeholder="URL (optional)"
+                        value={materialDraft[module.id]?.url ?? ""}
+                        style={{ flex: 1 }}
+                        onChange={(e) =>
+                          setMaterialDraft((prev) => ({
+                            ...prev,
+                            [module.id]: { title: prev[module.id]?.title ?? "", url: e.target.value },
+                          }))
+                        }
+                      />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => addMaterial(module.id)}
+                      >
+                        Add
+                      </Button>
+                    </div>
+
+                    {/* Section editor (course tree) */}
+                    {courseModule && (
+                      <SectionEditor
+                        syllabusId={syllabus.id}
+                        module={courseModule}
+                        onChange={refresh}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Right: AI proposals ───────────────────────────── */}
+      <div>
+        <SectionTitle>AI proposals</SectionTitle>
+
+        <form onSubmit={requestAiProposal} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <Textarea
             rows={3}
             placeholder="Describe how to improve this syllabus — add projects, replace weak links, deepen a module…"
             value={aiInstruction}
             onChange={(e) => setAiInstruction(e.target.value)}
           />
-          <button type="submit" className="v2-btn primary" disabled={aiBusy || !aiInstruction.trim()}>
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            disabled={aiBusy || !aiInstruction.trim()}
+            loading={aiBusy}
+          >
             {aiBusy ? "Generating…" : "Generate proposal"}
-          </button>
+          </Button>
         </form>
 
         {activeProposal && (
@@ -245,7 +355,13 @@ export function StudioEditor({
             applying={applying}
           />
         )}
-      </section>
+
+        {!activeProposal && (
+          <p style={{ marginTop: 20, fontSize: 13, color: "var(--muted)" }}>
+            No pending proposals. Use the form above to generate one.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

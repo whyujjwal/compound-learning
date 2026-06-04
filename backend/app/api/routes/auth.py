@@ -36,10 +36,6 @@ def _login_error_redirect(message: str) -> RedirectResponse:
     return RedirectResponse(url=f"{settings.frontend_url.rstrip('/')}/login?{params}", status_code=302)
 
 
-class LegacyLoginRequest(BaseModel):
-    password: str
-
-
 class GoogleAuthStatus(BaseModel):
     enabled: bool
 
