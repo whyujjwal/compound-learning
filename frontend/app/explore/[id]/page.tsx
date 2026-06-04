@@ -481,7 +481,7 @@ function AllMaterialsList({ materials }: { materials: CatalogTrackDetail["materi
 
 function DetailSkeleton() {
   return (
-    <PageContent style={{ paddingTop: 40, paddingBottom: 60 }}>
+    <PageContent style={{ paddingTop: 40, paddingBottom: 64 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 28 }}>
         <Skeleton width={60} height={12} />
         <Skeleton width={12} height={12} borderRadius="50%" />
@@ -711,7 +711,7 @@ export default function PublicTrackDetailPage() {
   // ── Error / not found ────────────────────────────────────
   if (error || !track) {
     return (
-      <PageContent style={{ paddingTop: 60 }}>
+      <PageContent style={{ paddingTop: 40, paddingBottom: 64 }}>
         <EmptyState
           icon={
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -743,7 +743,7 @@ export default function PublicTrackDetailPage() {
       : [];
 
   return (
-    <PageContent style={{ paddingTop: 40, paddingBottom: 60 }}>
+    <PageContent style={{ paddingTop: 40, paddingBottom: 64 }}>
 
       {/* ── Breadcrumb ───────────────────────────────────── */}
       <div

@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Badge } from "@/components/primitives";
+import { Badge, EmptyState } from "@/components/primitives";
 import type { SyllabusMaterial } from "../types";
 
 function stateColor(state: string | null): React.CSSProperties["color"] {
@@ -79,9 +79,16 @@ export function VirtualMaterialList({ materials }: { materials: SyllabusMaterial
 
   if (materials.length === 0) {
     return (
-      <p style={{ padding: "24px 0", fontSize: 14, color: "var(--muted)" }}>
-        No materials in this syllabus yet.
-      </p>
+      <EmptyState
+        icon={
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M14 2v6h6M16 13H8M16 17H8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        }
+        title="No materials yet"
+        description="Add materials to your modules in Studio — they'll be listed here."
+      />
     );
   }
 

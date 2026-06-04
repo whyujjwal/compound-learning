@@ -174,6 +174,17 @@ export function CommandPalette({
                 Explore
                 <KbdHint keys={["G", "E"]} />
               </Command.Item>
+              <Command.Item value="plan weekly schedule calendar study week" onSelect={() => go("/plan")}>
+                <span className="cmdk-item-icon">
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+                    <rect x="1" y="2" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.1"/>
+                    <path d="M1 5.5h12" stroke="currentColor" strokeWidth="1.1"/>
+                    <path d="M4.5 1v2M9.5 1v2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+                    <path d="M3.5 8h3M3.5 10h5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+                  </svg>
+                </span>
+                Plan
+              </Command.Item>
               <Command.Item value="profile account identity progress" onSelect={() => go("/profile")}>
                 <span className="cmdk-item-icon">
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>

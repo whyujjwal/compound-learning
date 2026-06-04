@@ -30,7 +30,7 @@ import {
   SessionComplete,
   useReviewClock,
 } from "@/features/review";
-import type { GradeKey } from "@/features/review";
+import type { GradeKey, GradeTally } from "@/features/review";
 import { Skeleton } from "@/components/primitives";
 import { EmptyState } from "@/components/primitives";
 
@@ -154,6 +154,7 @@ export default function SessionPage() {
   const [done, setDone] = useState(false);
   const [endStats, setEndStats] = useState<Stats | null>(null);
   const [nextBlock, setNextBlock] = useState<BlockEntry | null>(null);
+  const [tally, setTally] = useState<GradeTally>({ AGAIN: 0, HARD: 0, GOOD: 0, EASY: 0 });
   const { elapsed, paused, togglePause } = useReviewClock(queue?.ts ?? null, !done);
 
   // Resolve queue from sessionStorage, refresh from API.
@@ -229,6 +230,7 @@ export default function SessionPage() {
     const elapsed = Math.round((Date.now() - startTs) / 1000);
     try {
       await api.submitReview(current.card_id, grade, elapsed);
+      setTally((prev) => ({ ...prev, [grade]: prev[grade] + 1 }));
       advance();
     } finally {
       setSubmitting(false);
@@ -305,6 +307,7 @@ export default function SessionPage() {
             stats={endStats}
             nextBlock={nextBlock}
             onStartNext={(block) => startNextBlock(block, router)}
+            tally={tally}
           />
         </main>
       </div>
@@ -386,62 +389,70 @@ export default function SessionPage() {
         }}
       >
         {!revealed ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-            <p style={{ fontSize: 13, color: "var(--muted)" }}>Done with the material?</p>
-            <button
-              type="button"
-              onClick={() => setRevealed(true)}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "9px 20px",
-                borderRadius: 4,
-                border: "1px solid transparent",
-                background: "var(--accent)",
-                color: "#ffffff",
-                fontSize: 14,
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "background 100ms",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = "var(--accent-hover)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.background = "var(--accent)";
-              }}
-            >
-              Show recall
-              <kbd
+          <>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+              <p style={{ fontSize: 13, color: "var(--muted)" }}>Done with the material?</p>
+              <button
+                type="button"
+                onClick={() => setRevealed(true)}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
-                  padding: "2px 5px",
-                  borderRadius: 3,
-                  border: "1px solid rgba(255,255,255,0.35)",
-                  fontSize: 11,
-                  lineHeight: 1,
-                  fontFamily: "inherit",
-                  opacity: 0.8,
+                  gap: 8,
+                  padding: "9px 20px",
+                  borderRadius: 4,
+                  border: "1px solid transparent",
+                  background: "var(--accent)",
+                  color: "#ffffff",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  transition: "background 100ms",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "var(--accent-hover)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = "var(--accent)";
                 }}
               >
-                Space
-              </kbd>
-            </button>
-          </div>
+                Show recall
+                <kbd
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "2px 5px",
+                    borderRadius: 3,
+                    border: "1px solid rgba(255,255,255,0.35)",
+                    fontSize: 11,
+                    lineHeight: 1,
+                    fontFamily: "inherit",
+                    opacity: 0.8,
+                  }}
+                >
+                  Space
+                </kbd>
+              </button>
+            </div>
+            {/* Keyboard hint bar — before reveal */}
+            <KeyboardHintBar phase="pre-reveal" />
+          </>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, width: "100%" }}>
-            <p style={{ fontSize: 13, color: "var(--muted)", fontWeight: 500 }}>
-              How well did you recall?
-            </p>
-            <GradeBar
-              enabled={!submitting}
-              submitting={submitting}
-              onRate={submit}
-              bindKeys
-            />
-          </div>
+          <>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, width: "100%" }}>
+              <p style={{ fontSize: 13, color: "var(--muted)", fontWeight: 500 }}>
+                How well did you recall?
+              </p>
+              <GradeBar
+                enabled={!submitting}
+                submitting={submitting}
+                onRate={submit}
+                bindKeys
+              />
+            </div>
+            {/* Keyboard hint bar — after reveal */}
+            <KeyboardHintBar phase="post-reveal" />
+          </>
         )}
       </footer>
     </div>
@@ -557,5 +568,70 @@ function CounterBadge({ current, total }: { current: number; total: number }) {
       {current}
       <span style={{ opacity: 0.5 }}> / {total}</span>
     </span>
+  );
+}
+
+/**
+ * KeyboardHintBar — subtle, persistent footer hint strip.
+ * Pre-reveal: highlights Space. Post-reveal: highlights 1-4.
+ */
+function KeyboardHintBar({ phase }: { phase: "pre-reveal" | "post-reveal" }) {
+  const hints: { key: string; label: string; active: boolean }[] = [
+    { key: "Space", label: "reveal", active: phase === "pre-reveal" },
+    { key: "1", label: "Again", active: phase === "post-reveal" },
+    { key: "2", label: "Hard",  active: phase === "post-reveal" },
+    { key: "3", label: "Good",  active: phase === "post-reveal" },
+    { key: "4", label: "Easy",  active: phase === "post-reveal" },
+  ];
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        fontSize: 11,
+        color: "var(--muted)",
+        opacity: 0.65,
+        userSelect: "none",
+      }}
+    >
+      {hints.map(({ key, label, active }) => {
+        const dimmed = !active;
+        return (
+          <span
+            key={key}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              opacity: dimmed ? 0.4 : 1,
+              transition: "opacity 150ms",
+            }}
+          >
+            <kbd
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: key === "Space" ? "2px 6px" : "2px 5px",
+                borderRadius: 3,
+                border: "1px solid var(--hairline)",
+                background: "var(--panel)",
+                fontSize: 10,
+                fontFamily: "inherit",
+                lineHeight: 1,
+                color: active ? "var(--text)" : "var(--muted)",
+                fontWeight: active ? 600 : 400,
+              }}
+            >
+              {key}
+            </kbd>
+            <span style={{ color: "var(--muted)" }}>{label}</span>
+          </span>
+        );
+      })}
+    </div>
   );
 }

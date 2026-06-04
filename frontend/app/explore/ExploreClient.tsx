@@ -223,7 +223,7 @@ export function ExploreClient({
   const hasQuery = Boolean(query) || featuredOnly;
 
   return (
-    <PageContent style={{ paddingTop: 40, paddingBottom: 60 }}>
+    <PageContent style={{ paddingTop: 40, paddingBottom: 64 }}>
       {/* ── Page header ───────────────────────────────────── */}
       <div
         style={{
@@ -249,10 +249,11 @@ export function ExploreClient({
           </p>
           <h1
             style={{
-              fontSize: 22,
-              fontWeight: 600,
+              fontSize: 26,
+              fontWeight: 700,
               color: "var(--text)",
               lineHeight: 1.25,
+              letterSpacing: "-0.02em",
             }}
           >
             Community tracks

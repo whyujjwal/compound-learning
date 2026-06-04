@@ -29,9 +29,8 @@ import {
   ReviewProgressBar,
   GRADE_RATINGS,
 } from "@/features/review";
-import type { GradeKey } from "@/features/review";
-import { Skeleton } from "@/components/primitives";
-import { EmptyState } from "@/components/primitives";
+import type { GradeKey, GradeTally } from "@/features/review";
+import { Skeleton, EmptyState } from "@/components/primitives";
 
 export default function BlockPage() {
   const router = useRouter();
@@ -45,6 +44,8 @@ export default function BlockPage() {
   const [doneWorkingIds, setDoneWorkingIds] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [itemStartTs, setItemStartTs] = useState(Date.now());
+  const [blockStartTs] = useState(() => Date.now());
+  const [tally, setTally] = useState<GradeTally>({ AGAIN: 0, HARD: 0, GOOD: 0, EASY: 0 });
 
   // Load or start the block session.
   const load = useCallback(async () => {
@@ -99,6 +100,7 @@ export default function BlockPage() {
       const elapsed = Math.round((Date.now() - itemStartTs) / 1000);
       try {
         const next = await api.submitBlockReview(slot, cardId, rating, elapsed);
+        setTally((prev) => ({ ...prev, [rating]: prev[rating] + 1 }));
         setSession(next);
         setDoneWorkingIds(new Set());
         if (next.status === "COMPLETED") {
@@ -180,12 +182,19 @@ export default function BlockPage() {
   // ── Completed ──────────────────────────────────────────────────────────────
 
   if (session.status === "COMPLETED") {
+    const blockElapsed = Math.round((Date.now() - blockStartTs) / 1000);
     return (
       <div style={{ display: "flex", flexDirection: "column", minHeight: "100dvh" }}>
         <BlockTopBar slot={slot} session={session} accent={accent} remaining={0} />
         <ReviewProgressBar done={session.total_items} total={session.total_items} />
         <main style={{ flex: 1 }}>
-          <BlockComplete session={session} accent={accent} onHome={() => router.push("/")} />
+          <BlockComplete
+            session={session}
+            accent={accent}
+            onHome={() => router.push("/")}
+            tally={tally}
+            elapsed={blockElapsed}
+          />
         </main>
       </div>
     );
@@ -204,7 +213,7 @@ export default function BlockPage() {
           maxWidth: 720,
           margin: "0 auto",
           width: "100%",
-          padding: "32px 24px 48px",
+          padding: "32px 24px 72px",
           display: "flex",
           flexDirection: "column",
           gap: 12,
@@ -249,6 +258,11 @@ export default function BlockPage() {
           ))}
         </div>
       </main>
+
+      {/* Keyboard hint bar — fixed at bottom */}
+      {activeId && (
+        <BlockKeyboardHintBar doneWorking={doneWorkingIds.has(activeId)} />
+      )}
     </div>
   );
 }
@@ -361,15 +375,144 @@ function BlockTopBar({
   );
 }
 
+// ─── Block keyboard hint bar ──────────────────────────────────────────────────
+
+function BlockKeyboardHintBar({ doneWorking }: { doneWorking: boolean }) {
+  const hints: { key: string; label: string; active: boolean }[] = [
+    { key: "Space", label: "done working", active: !doneWorking },
+    { key: "1", label: "Again", active: doneWorking },
+    { key: "2", label: "Hard",  active: doneWorking },
+    { key: "3", label: "Good",  active: doneWorking },
+    { key: "4", label: "Easy",  active: doneWorking },
+  ];
+
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 12,
+        padding: "8px 16px 12px",
+        background: "var(--canvas)",
+        borderTop: "1px solid var(--hairline)",
+        fontSize: 11,
+        color: "var(--muted)",
+        opacity: 0.7,
+        userSelect: "none",
+        zIndex: 50,
+      }}
+    >
+      {hints.map(({ key, label, active }) => (
+        <span
+          key={key}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            opacity: active ? 1 : 0.35,
+            transition: "opacity 150ms",
+          }}
+        >
+          <kbd
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: key === "Space" ? "2px 6px" : "2px 5px",
+              borderRadius: 3,
+              border: "1px solid var(--hairline)",
+              background: "var(--panel)",
+              fontSize: 10,
+              fontFamily: "inherit",
+              lineHeight: 1,
+              color: active ? "var(--text)" : "var(--muted)",
+              fontWeight: active ? 600 : 400,
+            }}
+          >
+            {key}
+          </kbd>
+          <span>{label}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ─── Grade distribution helpers (local to block page) ────────────────────────
+
+const BLOCK_GRADE_CONFIG: { key: GradeKey; label: string; tokenVar: string }[] = [
+  { key: "AGAIN", label: "Again", tokenVar: "--bad" },
+  { key: "HARD",  label: "Hard",  tokenVar: "--warn" },
+  { key: "GOOD",  label: "Good",  tokenVar: "--ok" },
+  { key: "EASY",  label: "Easy",  tokenVar: "--accent" },
+];
+
+function BlockGradeBar({ tally, total }: { tally: GradeTally; total: number }) {
+  return (
+    <div
+      aria-label="Grade distribution"
+      style={{
+        display: "flex",
+        width: "100%",
+        height: 6,
+        borderRadius: 3,
+        overflow: "hidden",
+        gap: 1,
+      }}
+    >
+      {BLOCK_GRADE_CONFIG.map(({ key, tokenVar }) => {
+        const count = tally[key];
+        if (count === 0) return null;
+        const pct = (count / total) * 100;
+        return (
+          <div
+            key={key}
+            title={`${key}: ${count}`}
+            style={{
+              width: `${pct}%`,
+              background: `var(${tokenVar})`,
+              minWidth: count > 0 ? 3 : 0,
+              transition: "width 400ms ease",
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function BlockComplete({
   session,
   accent,
   onHome,
+  tally,
+  elapsed,
 }: {
   session: BlockSession;
   accent: string | undefined;
   onHome: () => void;
+  tally: GradeTally;
+  elapsed: number;
 }) {
+  const tallyTotal = tally.AGAIN + tally.HARD + tally.GOOD + tally.EASY;
+  const avgSeconds = tallyTotal > 0 ? Math.round(elapsed / tallyTotal) : null;
+
+  // Format elapsed in a human-readable form
+  function formatBlockDuration(s: number): string {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${sec}s`;
+    return `${sec}s`;
+  }
+
   return (
     <div
       style={{
@@ -388,6 +531,7 @@ function BlockComplete({
         style={{
           display: "inline-flex",
           alignItems: "center",
+          gap: 6,
           padding: "4px 12px",
           borderRadius: 3,
           fontSize: 12,
@@ -399,6 +543,7 @@ function BlockComplete({
           border: "1px solid color-mix(in srgb, var(--ok) 20%, transparent)",
         }}
       >
+        <span aria-hidden>✓</span>
         Block complete
       </span>
 
@@ -416,8 +561,51 @@ function BlockComplete({
       </h1>
 
       <p style={{ fontSize: 14, color: "var(--muted)" }}>
-        {session.slot_label} · ~{session.planned_minutes}m planned
+        {session.slot_label} · ~{session.planned_minutes}m planned · {formatBlockDuration(elapsed)} actual
       </p>
+
+      {/* Grade distribution + timing */}
+      {tallyTotal > 0 && (
+        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
+          <BlockGradeBar tally={tally} total={tallyTotal} />
+          <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+            {BLOCK_GRADE_CONFIG.map(({ key, label, tokenVar }) => {
+              const count = tally[key];
+              if (count === 0) return null;
+              return (
+                <span
+                  key={key}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 12,
+                    color: `var(${tokenVar})`,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: `var(${tokenVar})`,
+                      display: "inline-block",
+                      flexShrink: 0,
+                    }}
+                  />
+                  {count} {label}
+                </span>
+              );
+            })}
+          </div>
+          {avgSeconds !== null && (
+            <p style={{ fontSize: 13, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
+              ~{avgSeconds}s avg per card
+            </p>
+          )}
+        </div>
+      )}
 
       <p style={{ fontSize: 14, color: "var(--muted)", lineHeight: 1.6 }}>
         Nice work. Knowledge compounds.

@@ -24,6 +24,7 @@ export { ReviewTimer } from "./ReviewTimer";
 export { ReviewProgressBar } from "./ReviewProgressBar";
 export { LogTimeMenu } from "./LogTimeMenu";
 export { SessionComplete } from "./SessionComplete";
+export type { GradeTally } from "./SessionComplete";
 export { BlockItemCard } from "./BlockItemCard";
 export { useReviewClock, formatClock, formatDuration } from "./useReviewClock";
 export { GRADE_RATINGS } from "./types";

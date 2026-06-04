@@ -4,12 +4,26 @@
  * SessionComplete — completion/end-of-queue screen shown after all cards are rated.
  * Shared by the free-form session page (after advancing past the last card).
  *
- * Shows: badge · stat summary · next block CTA or "done for today".
+ * Shows:
+ *   - check badge
+ *   - cards reviewed + time headline
+ *   - grade-distribution bar (Again / Hard / Good / Easy)
+ *   - total time + avg seconds/card
+ *   - global stats grid (streak, reviews today, minutes today)
+ *   - next-block CTA or "done for today"
  */
 
 import Link from "next/link";
 import type { BlockEntry, Stats } from "@/lib/api/types";
 import { formatDuration } from "./useReviewClock";
+import type { GradeKey } from "./types";
+
+export interface GradeTally {
+  AGAIN: number;
+  HARD: number;
+  GOOD: number;
+  EASY: number;
+}
 
 interface SessionCompleteProps {
   total: number;
@@ -19,7 +33,17 @@ interface SessionCompleteProps {
   stats: Stats | null;
   nextBlock: BlockEntry | null;
   onStartNext: (block: BlockEntry) => void;
+  /** Per-session grade counts — optional, shown when provided */
+  tally?: GradeTally;
 }
+
+// Grade distribution config — mirrors GRADE_RATINGS order
+const GRADE_CONFIG: { key: GradeKey; label: string; tokenVar: string }[] = [
+  { key: "AGAIN", label: "Again", tokenVar: "--bad" },
+  { key: "HARD",  label: "Hard",  tokenVar: "--warn" },
+  { key: "GOOD",  label: "Good",  tokenVar: "--ok" },
+  { key: "EASY",  label: "Easy",  tokenVar: "--accent" },
+];
 
 export function SessionComplete({
   total,
@@ -29,10 +53,16 @@ export function SessionComplete({
   stats,
   nextBlock,
   onStartNext,
+  tally,
 }: SessionCompleteProps) {
   const streak = stats?.current_streak ?? 0;
   const reviewsToday = stats?.reviews_today ?? 0;
   const minutesToday = stats?.minutes_today ?? 0;
+
+  const tallyTotal = tally
+    ? tally.AGAIN + tally.HARD + tally.GOOD + tally.EASY
+    : 0;
+  const avgSeconds = tallyTotal > 0 ? Math.round(elapsed / tallyTotal) : null;
 
   return (
     <div
@@ -52,6 +82,7 @@ export function SessionComplete({
         style={{
           display: "inline-flex",
           alignItems: "center",
+          gap: 6,
           padding: "4px 12px",
           borderRadius: 3,
           fontSize: 12,
@@ -63,6 +94,7 @@ export function SessionComplete({
           border: "1px solid color-mix(in srgb, var(--ok) 20%, transparent)",
         }}
       >
+        <span aria-hidden>✓</span>
         Session complete
       </span>
 
@@ -81,6 +113,74 @@ export function SessionComplete({
 
       {context && (
         <p style={{ fontSize: 14, color: "var(--muted)" }}>{context}</p>
+      )}
+
+      {/* Grade distribution + timing */}
+      {tally && tallyTotal > 0 && (
+        <div
+          style={{
+            width: "100%",
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
+          {/* Grade distribution bar */}
+          <GradeDistributionBar tally={tally} total={tallyTotal} />
+
+          {/* Grade label row */}
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              justifyContent: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            {GRADE_CONFIG.map(({ key, label, tokenVar }) => {
+              const count = tally[key];
+              if (count === 0) return null;
+              return (
+                <span
+                  key={key}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 12,
+                    color: `var(${tokenVar})`,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: `var(${tokenVar})`,
+                      display: "inline-block",
+                      flexShrink: 0,
+                    }}
+                  />
+                  {count} {label}
+                </span>
+              );
+            })}
+          </div>
+
+          {/* Avg per card */}
+          {avgSeconds !== null && (
+            <p
+              style={{
+                fontSize: 13,
+                color: "var(--muted)",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              ~{avgSeconds}s avg per card
+            </p>
+          )}
+        </div>
       )}
 
       {/* Stats grid */}
@@ -187,6 +287,42 @@ export function SessionComplete({
           {nextBlock ? "Back to Today" : "Done for today"}
         </Link>
       </div>
+    </div>
+  );
+}
+
+// ─── Grade distribution bar ───────────────────────────────────────────────────
+
+function GradeDistributionBar({ tally, total }: { tally: GradeTally; total: number }) {
+  return (
+    <div
+      aria-label="Grade distribution"
+      style={{
+        display: "flex",
+        width: "100%",
+        height: 6,
+        borderRadius: 3,
+        overflow: "hidden",
+        gap: 1,
+      }}
+    >
+      {GRADE_CONFIG.map(({ key, tokenVar }) => {
+        const count = tally[key];
+        if (count === 0) return null;
+        const pct = (count / total) * 100;
+        return (
+          <div
+            key={key}
+            title={`${key}: ${count}`}
+            style={{
+              width: `${pct}%`,
+              background: `var(${tokenVar})`,
+              minWidth: count > 0 ? 3 : 0,
+              transition: "width 400ms ease",
+            }}
+          />
+        );
+      })}
     </div>
   );
 }

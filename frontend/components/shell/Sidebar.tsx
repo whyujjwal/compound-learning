@@ -26,6 +26,12 @@ const NAV_ITEMS = [
     icon: ExploreIcon,
   },
   {
+    href: "/plan",
+    label: "Plan",
+    match: (p: string) => p.startsWith("/plan"),
+    icon: PlanIcon,
+  },
+  {
     href: "/profile",
     label: "Profile",
     match: (p: string) =>
@@ -466,6 +472,17 @@ function ProfileIcon() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
       <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.25"/>
       <path d="M2.5 14C2.5 11.5147 4.98 9.5 8 9.5C11.02 9.5 13.5 11.5147 13.5 14" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function PlanIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.25"/>
+      <path d="M1.5 6.5h13" stroke="currentColor" strokeWidth="1.25"/>
+      <path d="M5 1.5v2M11 1.5v2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
+      <path d="M4.5 9.5h3M4.5 11.5h5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
     </svg>
   );
 }

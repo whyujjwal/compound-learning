@@ -1,6 +1,7 @@
 "use client";
 
 import type { SyllabusModule } from "../types";
+import { EmptyState } from "@/components/primitives";
 
 export function ModuleList({
   modules,
@@ -13,9 +14,16 @@ export function ModuleList({
 }) {
   if (modules.length === 0) {
     return (
-      <p style={{ fontSize: 14, color: "var(--muted)", padding: "24px 0" }}>
-        No modules yet. Add one in Syllabus Studio.
-      </p>
+      <EmptyState
+        icon={
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M7 9h10M7 13h7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        }
+        title="No modules yet"
+        description="Add your first module in Syllabus Studio to start organizing materials."
+      />
     );
   }
 
@@ -95,8 +103,8 @@ export function ModuleList({
             {isOpen && (
               <div style={{ paddingLeft: 26, paddingBottom: 8 }}>
                 {module.materials.length === 0 ? (
-                  <p style={{ fontSize: 13, color: "var(--muted)", padding: "8px 0" }}>
-                    No materials in this module.
+                  <p style={{ fontSize: 13, color: "var(--muted)", padding: "10px 0" }}>
+                    No materials yet.
                   </p>
                 ) : (
                   <ul style={{ listStyle: "none", display: "flex", flexDirection: "column" }}>

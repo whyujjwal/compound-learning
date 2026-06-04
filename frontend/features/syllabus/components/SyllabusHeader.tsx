@@ -20,13 +20,31 @@ export function SyllabusHeader({
   const moduleCount = syllabus.modules.length;
 
   return (
-    <div style={{ paddingTop: 32, paddingBottom: 20, borderBottom: "1px solid var(--hairline)" }}>
+    <div style={{ paddingTop: 40, paddingBottom: 20, borderBottom: "1px solid var(--hairline)" }}>
       {/* Breadcrumb */}
-      <p style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
-        <Link href="/library" style={{ color: "var(--muted)" }}>Library</Link>
-        <span style={{ margin: "0 6px" }}>·</span>
-        <span>Syllabus</span>
-      </p>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginBottom: 12,
+          fontSize: 13,
+          color: "var(--muted)",
+        }}
+      >
+        <Link
+          href="/library"
+          style={{ color: "var(--muted)", textDecoration: "none", transition: "color var(--dur-fast)" }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--text)"; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--muted)"; }}
+        >
+          Library
+        </Link>
+        <span style={{ opacity: 0.4 }}>/</span>
+        <span style={{ color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 300 }}>
+          {syllabus.name}
+        </span>
+      </div>
 
       {/* Title row */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
@@ -34,7 +52,7 @@ export function SyllabusHeader({
           aria-hidden
           style={{
             flexShrink: 0,
-            marginTop: 6,
+            marginTop: 7,
             width: 10,
             height: 10,
             borderRadius: "50%",
@@ -43,15 +61,16 @@ export function SyllabusHeader({
         />
         <h1 style={{
           flex: 1,
-          fontSize: 22,
+          fontSize: 26,
           fontWeight: 700,
           color: "var(--text)",
           lineHeight: 1.2,
+          letterSpacing: "-0.02em",
         }}>
           {syllabus.name}
         </h1>
         {syllabus.visibility === "PUBLIC" && (
-          <Badge color="accent" style={{ flexShrink: 0, marginTop: 4 }}>Public</Badge>
+          <Badge color="accent" style={{ flexShrink: 0, marginTop: 6 }}>Public</Badge>
         )}
       </div>
 
