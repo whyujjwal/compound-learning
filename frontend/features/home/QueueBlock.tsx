@@ -119,8 +119,17 @@ export function QueueBlock({ block, extra, completed, onPushMore, isFirst }: Que
         border: "1px solid var(--hairline)",
         background: completed ? "transparent" : "var(--canvas)",
         opacity: isEmpty ? 0.6 : 1,
-        transition: "background var(--dur-fast)",
+        transition: "background var(--dur-fast), border-color var(--dur-fast)",
         overflow: "hidden",
+      }}
+      onMouseEnter={(e) => {
+        if (!isEmpty) {
+          (e.currentTarget as HTMLDivElement).style.borderColor =
+            "rgba(35,131,226,0.3)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.borderColor = "var(--hairline)";
       }}
     >
       {/* Block header row */}
@@ -129,7 +138,7 @@ export function QueueBlock({ block, extra, completed, onPushMore, isFirst }: Que
           display: "flex",
           alignItems: "center",
           gap: 12,
-          padding: "12px 14px",
+          padding: "13px 16px",
           borderBottom: expanded ? "1px solid var(--hairline)" : "none",
           cursor: isEmpty ? "default" : "pointer",
         }}
@@ -282,7 +291,7 @@ export function QueueBlock({ block, extra, completed, onPushMore, isFirst }: Que
 
       {/* Expanded item list */}
       {expanded && !isEmpty && (
-        <div style={{ padding: "0 14px 12px 14px" }}>
+        <div style={{ padding: "0 16px 14px 16px" }}>
           <ul
             style={{ listStyle: "none", padding: 0, margin: 0 }}
             aria-label={`Items in ${block.track_name}`}

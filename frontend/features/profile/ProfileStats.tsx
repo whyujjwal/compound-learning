@@ -1,7 +1,68 @@
 "use client";
 
 import { Skeleton, Badge } from "@/components/primitives";
+import { ContributionGraph } from "@/components/charts/ContributionGraph";
+import { LineChart } from "@/components/charts/LineChart";
 import type { Stats } from "@/lib/api/types";
+
+/* ─── Props (preserved from original — page.tsx passes these) ── */
+interface ProfileStatsProps {
+  stats: Stats | null;
+  activity: { date: string; count: number }[];
+  retentionTimeline: { date: string; retention: number; reviews: number }[];
+  loading: boolean;
+}
+
+/* ─── Helpers ────────────────────────────────────────────────── */
+function fmtMinutes(total: number): string {
+  if (total < 60) return `${total}m`;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+/* ─── Flame SVG icon (accent-colored, no emoji) ──────────────── */
+function FlameIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 14 14"
+      fill="none"
+      aria-hidden
+      style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0 }}
+    >
+      <path
+        d="M7 13c-2.76 0-5-2.01-5-4.5 0-1.5.8-2.8 2-3.6.1 1 .6 1.8 1.3 2.3C5.1 5.6 5.5 3.8 7 2c0 0-.1 2.5 1.5 3.2C9.5 5.7 10 4.6 10 4.6 11.3 5.6 12 7.1 12 8.5c0 2.49-2.24 4.5-5 4.5Z"
+        fill="var(--accent)"
+        opacity="0.85"
+      />
+      <path
+        d="M7 11c-1.1 0-2-.8-2-1.8 0-.6.3-1.1.8-1.5 0 .4.2.8.6.9C6.2 8 6.4 7 7 6.3c0 0 0 1 .6 1.3.4.2.6-.2.6-.2.5.4.8 1 .8 1.6C9 10.2 8.1 11 7 11Z"
+        fill="var(--canvas)"
+        opacity="0.6"
+      />
+    </svg>
+  );
+}
+
+/* ─── Section heading ────────────────────────────────────────── */
+function SubHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        color: "var(--muted)",
+        textTransform: "uppercase",
+        letterSpacing: "0.07em",
+        marginBottom: 14,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 /* ─── Stat card ─────────────────────────────────────────────── */
 function StatCard({
@@ -9,47 +70,64 @@ function StatCard({
   label,
   sub,
   loading,
+  icon,
+  accent,
 }: {
   value: string;
   label: string;
   sub?: string;
   loading?: boolean;
+  icon?: React.ReactNode;
+  accent?: boolean;
 }) {
   return (
     <div
       style={{
-        padding: "16px 20px",
-        background: "var(--panel)",
+        padding: "14px 16px",
         border: "1px solid var(--hairline)",
         borderRadius: 6,
         display: "flex",
         flexDirection: "column",
-        gap: 4,
+        gap: 3,
+        background: "var(--canvas)",
+        minWidth: 0,
       }}
     >
       {loading ? (
         <>
-          <Skeleton width={56} height={28} borderRadius={4} />
-          <Skeleton width={72} height={12} borderRadius={3} style={{ marginTop: 4 }} />
+          <Skeleton width={56} height={26} borderRadius={4} />
+          <Skeleton width={64} height={11} borderRadius={3} style={{ marginTop: 4 }} />
         </>
       ) : (
         <>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            {icon}
+            <span
+              style={{
+                fontSize: 24,
+                fontWeight: 700,
+                color: accent ? "var(--accent)" : "var(--text)",
+                letterSpacing: "-0.03em",
+                lineHeight: 1.1,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {value}
+            </span>
+          </div>
           <span
             style={{
-              fontSize: 26,
-              fontWeight: 700,
-              color: "var(--text)",
-              letterSpacing: "-0.03em",
-              lineHeight: 1.1,
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
             }}
           >
-            {value}
-          </span>
-          <span style={{ fontSize: 12, fontWeight: 500, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
             {label}
           </span>
           {sub && (
-            <span style={{ fontSize: 12, color: "var(--muted)" }}>{sub}</span>
+            <span style={{ fontSize: 11, color: "var(--muted)" }}>{sub}</span>
           )}
         </>
       )}
@@ -57,180 +135,92 @@ function StatCard({
   );
 }
 
-/* ─── Inline SVG Activity Heatmap ───────────────────────────── */
-function ActivityHeatmap({ data }: { data: { date: string; count: number }[] }) {
-  const WEEKS = 26;
-  const CELL = 11;
-  const GAP = 3;
-  const STEP = CELL + GAP;
-
-  // Build a map of date → count
-  const countMap = new Map<string, number>();
-  for (const d of data) countMap.set(d.date, d.count);
-
-  // Determine max for opacity scaling
-  const max = Math.max(...data.map((d) => d.count), 1);
-
-  // Build grid: array of columns (weeks), each column = array of 7 days
-  const today = new Date();
-  // Start from N weeks back, aligned to Sunday
-  const startDate = new Date(today);
-  startDate.setDate(startDate.getDate() - WEEKS * 7 - startDate.getDay());
-
-  const columns: { date: string; count: number }[][] = [];
-  for (let w = 0; w < WEEKS; w++) {
-    const week: { date: string; count: number }[] = [];
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(startDate);
-      date.setDate(startDate.getDate() + w * 7 + d);
-      const key = date.toISOString().slice(0, 10);
-      week.push({ date: key, count: countMap.get(key) ?? 0 });
-    }
-    columns.push(week);
+/* ─── Track mastery rows ─────────────────────────────────────── */
+function TrackMasteryRows({ breakdown, loading }: { breakdown: Stats["track_breakdown"]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} height={14} style={{ width: `${70 + i * 8}%` }} />
+        ))}
+      </div>
+    );
   }
 
-  const width = WEEKS * STEP - GAP;
-  const height = 7 * STEP - GAP;
+  if (!breakdown.length) {
+    return (
+      <div style={{ fontSize: 13, color: "var(--muted)" }}>
+        No tracks yet — add a track to see your breakdown.
+      </div>
+    );
+  }
 
-  return (
-    <svg
-      width={width}
-      height={height}
-      aria-label="Activity heatmap"
-      style={{ display: "block", overflow: "visible" }}
-    >
-      {columns.map((week, wi) =>
-        week.map((day, di) => {
-          const opacity = day.count === 0 ? 0 : Math.max(0.15, day.count / max);
-          return (
-            <rect
-              key={`${wi}-${di}`}
-              x={wi * STEP}
-              y={di * STEP}
-              width={CELL}
-              height={CELL}
-              rx={2}
-              fill={day.count === 0 ? "var(--overlay-hover)" : "var(--accent)"}
-              fillOpacity={day.count === 0 ? 1 : opacity}
-              style={{ transition: "fill-opacity 100ms" }}
-            >
-              <title>{`${day.date}: ${day.count} review${day.count !== 1 ? "s" : ""}`}</title>
-            </rect>
-          );
-        })
-      )}
-    </svg>
-  );
-}
+  const maxReviews = Math.max(...breakdown.map((t) => t.reviews_total), 1);
 
-/* ─── Inline Retention Sparkline ────────────────────────────── */
-function RetentionSparkline({
-  data,
-}: {
-  data: { date: string; retention: number; reviews: number }[];
-}) {
-  if (data.length < 2) return null;
-
-  const W = 240;
-  const H = 52;
-  const PAD = 4;
-
-  const retentions = data.map((d) => d.retention);
-  const minR = Math.min(...retentions);
-  const maxR = Math.max(...retentions);
-  const range = maxR - minR || 0.01;
-
-  const pts = data.map((d, i) => {
-    const x = PAD + (i / (data.length - 1)) * (W - 2 * PAD);
-    const y = PAD + (1 - (d.retention - minR) / range) * (H - 2 * PAD);
-    return `${x},${y}`;
-  });
-
-  const polyline = pts.join(" ");
-
-  // Area fill path
-  const areaPath =
-    `M${pts[0]}` +
-    ` L${pts.join(" L")}` +
-    ` L${PAD + (W - 2 * PAD)},${H - PAD}` +
-    ` L${PAD},${H - PAD} Z`;
-
-  return (
-    <svg
-      width={W}
-      height={H}
-      viewBox={`0 0 ${W} ${H}`}
-      aria-label="Retention over time"
-      style={{ display: "block", overflow: "visible" }}
-    >
-      <defs>
-        <linearGradient id="ret-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.15" />
-          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {/* area */}
-      <path d={areaPath} fill="url(#ret-fill)" />
-      {/* line */}
-      <polyline
-        points={polyline}
-        fill="none"
-        stroke="var(--accent)"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      {/* endpoint dot */}
-      {pts.length > 0 && (() => {
-        const last = pts[pts.length - 1].split(",");
-        return (
-          <circle
-            cx={parseFloat(last[0])}
-            cy={parseFloat(last[1])}
-            r={3}
-            fill="var(--accent)"
-          />
-        );
-      })()}
-    </svg>
-  );
-}
-
-/* ─── Track mastery bars ────────────────────────────────────── */
-function TrackBars({
-  breakdown,
-}: {
-  breakdown: Stats["track_breakdown"];
-}) {
-  const max = Math.max(...breakdown.map((t) => t.reviews_total), 1);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {breakdown.map((t) => {
-        const pct = (t.reviews_total / max) * 100;
-        // Simple hue derived from track_color (hex) or fallback accent
+        const pct = (t.reviews_total / maxReviews) * 100;
+        const masteryPct =
+          t.material_count > 0
+            ? Math.round(((t.card_count - t.due_count) / Math.max(t.card_count, 1)) * 100)
+            : 0;
         const color = t.track_color?.startsWith("#") ? t.track_color : "var(--accent)";
+
         return (
-          <div key={t.track_id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div key={t.track_id}>
+            {/* Row header */}
             <div
-              style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }}
-              aria-hidden
-            />
-            <span
               style={{
-                fontSize: 13,
-                color: "var(--text)",
-                width: 160,
-                flexShrink: 0,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 5,
               }}
             >
-              {t.track_name}
-            </span>
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 8,
+                  height: 8,
+                  borderRadius: 2,
+                  background: color,
+                  flexShrink: 0,
+                }}
+                aria-hidden
+              />
+              <span
+                style={{
+                  fontSize: 13,
+                  color: "var(--text)",
+                  flex: 1,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {t.track_name}
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--muted)",
+                  flexShrink: 0,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {t.reviews_total.toLocaleString()} reviews
+              </span>
+              {t.due_count > 0 && (
+                <Badge color="warn" style={{ flexShrink: 0 }}>
+                  {t.due_count} due
+                </Badge>
+              )}
+            </div>
+
+            {/* Progress bar */}
             <div
               style={{
-                flex: 1,
                 height: 4,
                 background: "var(--overlay-hover)",
                 borderRadius: 99,
@@ -243,18 +233,17 @@ function TrackBars({
                   height: "100%",
                   background: color,
                   borderRadius: 99,
-                  transition: "width 300ms var(--ease-out)",
+                  transition: "width 400ms var(--ease-out)",
                 }}
               />
             </div>
-            <span style={{ fontSize: 12, color: "var(--muted)", flexShrink: 0, minWidth: 64, textAlign: "right" }}>
-              {t.reviews_total.toLocaleString()} reviews
-            </span>
-            {t.due_count > 0 && (
-              <Badge color="warn" style={{ flexShrink: 0 }}>
-                {t.due_count} due
-              </Badge>
-            )}
+
+            {/* Mastery label */}
+            <div style={{ marginTop: 3 }}>
+              <span style={{ fontSize: 10, color: "var(--muted)" }}>
+                {t.card_count - t.due_count}/{t.card_count} cards active · {masteryPct}% up to date
+              </span>
+            </div>
           </div>
         );
       })}
@@ -262,138 +251,128 @@ function TrackBars({
   );
 }
 
-/* ─── Props ─────────────────────────────────────────────────── */
-interface ProfileStatsProps {
-  stats: Stats | null;
-  activity: { date: string; count: number }[];
-  retentionTimeline: { date: string; retention: number; reviews: number }[];
-  loading: boolean;
-}
-
 /* ─── Component ─────────────────────────────────────────────── */
 export function ProfileStats({ stats, activity, retentionTimeline, loading }: ProfileStatsProps) {
+  /* ── Stat card values ── */
+  const currentStreak = stats?.current_streak ?? 0;
+  const longestStreak = stats?.longest_streak ?? 0;
+  const retentionPct = stats ? Math.round(stats.retention_rate * 100) : 0;
+  const reviewsTotal = stats?.reviews_total ?? 0;
+  const minutesTotal = stats?.total_minutes_invested ?? 0;
+  const mastered = stats?.materials_mastered ?? 0;
+  const totalMaterials = stats?.total_materials ?? 0;
+
+  /* ── Retention line chart data ── */
+  const retentionPoints = retentionTimeline.map((d) => ({
+    label: d.date,
+    value: Math.round(d.retention * 100),
+  }));
+
   return (
-    <div>
-      {/* Key numbers */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 12,
-          marginBottom: 28,
-        }}
-      >
-        <StatCard
-          loading={loading}
-          value={stats ? `${Math.round(stats.retention_rate * 100)}%` : "—"}
-          label="Retention"
-          sub="good+easy / total"
-        />
-        <StatCard
-          loading={loading}
-          value={stats ? `${stats.current_streak}d` : "—"}
-          label="Streak"
-          sub={stats ? `best ${stats.longest_streak}d` : undefined}
-        />
-        <StatCard
-          loading={loading}
-          value={stats ? String(stats.materials_mastered) : "—"}
-          label="Mastered"
-          sub={stats ? `of ${stats.total_materials}` : undefined}
-        />
-        <StatCard
-          loading={loading}
-          value={stats ? stats.reviews_total.toLocaleString() : "—"}
-          label="Reviews"
-          sub="all time"
-        />
-      </div>
-
-      {/* Retention sparkline + activity heatmap */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr auto",
-          gap: 32,
-          alignItems: "start",
-          marginBottom: 28,
-        }}
-      >
-        {/* Retention sparkline */}
-        <div>
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 500,
-              color: "var(--muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              marginBottom: 10,
-            }}
-          >
-            Retention (30 days)
-          </div>
-          {loading ? (
-            <Skeleton width={240} height={52} />
-          ) : retentionTimeline.length >= 2 ? (
-            <RetentionSparkline data={retentionTimeline} />
-          ) : (
-            <div style={{ fontSize: 13, color: "var(--muted)" }}>Not enough data yet</div>
-          )}
-        </div>
-
-        {/* Activity heatmap */}
-        <div>
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 500,
-              color: "var(--muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              marginBottom: 10,
-            }}
-          >
-            Activity (26 weeks)
-          </div>
-          {loading ? (
-            <Skeleton width={310} height={90} />
-          ) : activity.length > 0 ? (
-            <div style={{ overflowX: "auto" }}>
-              <ActivityHeatmap data={activity} />
-            </div>
-          ) : (
-            <div style={{ fontSize: 13, color: "var(--muted)" }}>No activity yet</div>
-          )}
+    <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
+      {/* ── Section: Key numbers ── */}
+      <div>
+        <SubHeading>Overview</SubHeading>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+            gap: 10,
+          }}
+        >
+          <StatCard
+            loading={loading}
+            value={`${currentStreak}d`}
+            label="Current streak"
+            sub={`best ${longestStreak}d`}
+            icon={<FlameIcon size={16} />}
+            accent
+          />
+          <StatCard
+            loading={loading}
+            value={`${longestStreak}d`}
+            label="Longest streak"
+          />
+          <StatCard
+            loading={loading}
+            value={`${retentionPct}%`}
+            label="Retention"
+            sub="good+easy / total"
+          />
+          <StatCard
+            loading={loading}
+            value={reviewsTotal.toLocaleString()}
+            label="Reviews"
+            sub="all time"
+          />
+          <StatCard
+            loading={loading}
+            value={fmtMinutes(minutesTotal)}
+            label="Minutes invested"
+          />
+          <StatCard
+            loading={loading}
+            value={`${mastered}/${totalMaterials}`}
+            label="Mastered"
+            sub="materials"
+          />
         </div>
       </div>
 
-      {/* Per-track breakdown */}
-      {!loading && stats && stats.track_breakdown.length > 0 && (
-        <div>
+      {/* ── Section: Activity heatmap ── */}
+      <div>
+        <SubHeading>Activity</SubHeading>
+        {loading ? (
+          <Skeleton height={120} borderRadius={4} />
+        ) : activity.length > 0 ? (
+          <ContributionGraph
+            data={activity}
+            weeks={53}
+            colorScheme="accent"
+            cellSize={11}
+            gap={3}
+            showFooter
+          />
+        ) : (
           <div
             style={{
-              fontSize: 12,
-              fontWeight: 500,
+              padding: "24px 0",
+              fontSize: 13,
               color: "var(--muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              marginBottom: 12,
             }}
           >
-            By track
+            No activity recorded yet. Complete your first review to start tracking.
           </div>
-          <TrackBars breakdown={stats.track_breakdown} />
-        </div>
-      )}
+        )}
+      </div>
 
-      {loading && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <Skeleton height={14} />
-          <Skeleton height={14} width="80%" />
-          <Skeleton height={14} width="60%" />
-        </div>
-      )}
+      {/* ── Section: Retention over time ── */}
+      <div>
+        <SubHeading>Retention over time</SubHeading>
+        {loading ? (
+          <Skeleton height={80} borderRadius={4} />
+        ) : retentionPoints.length >= 2 ? (
+          <LineChart
+            points={retentionPoints}
+            height={80}
+            valueSuffix="%"
+            showArea
+          />
+        ) : (
+          <div style={{ fontSize: 13, color: "var(--muted)", padding: "12px 0" }}>
+            Not enough data yet — review a few cards to see your retention trend.
+          </div>
+        )}
+      </div>
+
+      {/* ── Section: By track ── */}
+      <div>
+        <SubHeading>By track</SubHeading>
+        <TrackMasteryRows
+          breakdown={stats?.track_breakdown ?? []}
+          loading={loading}
+        />
+      </div>
     </div>
   );
 }

@@ -58,7 +58,7 @@ function RetentionSlider({
   onChange: (v: number) => void;
   disabled: boolean;
 }) {
-  const pct = Math.round(value * 100);
+  const pct = Math.round((Number.isFinite(value) ? value : 0.9) * 100);
   const color =
     pct >= 90 ? "var(--ok)" : pct >= 80 ? "var(--warn)" : "var(--bad)";
 

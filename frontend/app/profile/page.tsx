@@ -76,8 +76,8 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!user) return;
     setDisplayName(user.display_name ?? "");
-    setRetention(user.target_retention);
-    setBlockMinutes(user.daily_study_minutes);
+    setRetention(user.target_retention ?? 0.9);
+    setBlockMinutes(user.daily_study_minutes ?? 120);
     setDailyNewCards(user.daily_new_cards ?? 0);
     setPausedTracks(user.paused_tracks ?? []);
     setDirty(false);
@@ -271,8 +271,8 @@ export default function ProfilePage() {
               // Reset to server state
               if (!user) return;
               setDisplayName(user.display_name ?? "");
-              setRetention(user.target_retention);
-              setBlockMinutes(user.daily_study_minutes);
+              setRetention(user.target_retention ?? 0.9);
+              setBlockMinutes(user.daily_study_minutes ?? 120);
               setDailyNewCards(user.daily_new_cards ?? 0);
               setPausedTracks(user.paused_tracks ?? []);
               setDirty(false);

@@ -11,11 +11,14 @@ import {
 import { usePathname } from "next/navigation";
 import { Sidebar, type SyllabusEntry } from "./Sidebar";
 import { CommandPalette } from "./CommandPalette";
+import { KeyboardShortcuts } from "./KeyboardShortcuts";
 
 /* ─── Shell context ──────────────────────────────────────── */
 export type ShellContextValue = {
   /** Open the ⌘K command palette */
   openPalette: () => void;
+  /** Open the keyboard shortcuts help dialog */
+  openShortcuts: () => void;
   /** Register a right-panel node (pass null to clear) */
   setRightPanel: (node: ReactNode | null) => void;
   /** Whether the sidebar is collapsed */
@@ -43,18 +46,20 @@ interface AppShellProps {
 
 export function AppShell({ children, workspaceName = "Compound" }: AppShellProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [rightPanel, setRightPanelState] = useState<ReactNode | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [syllabi, setSyllabiState] = useState<SyllabusEntry[]>([]);
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
+  const openShortcuts = useCallback(() => setShortcutsOpen(true), []);
   const toggleSidebar = useCallback(() => setSidebarCollapsed((v) => !v), []);
   const setRightPanel = useCallback((node: ReactNode | null) => setRightPanelState(node), []);
   const setSyllabi = useCallback((entries: SyllabusEntry[]) => setSyllabiState(entries), []);
 
   const ctx: ShellContextValue = useMemo(
-    () => ({ openPalette, setRightPanel, sidebarCollapsed, toggleSidebar, syllabi, setSyllabi }),
-    [openPalette, setRightPanel, sidebarCollapsed, toggleSidebar, syllabi, setSyllabi]
+    () => ({ openPalette, openShortcuts, setRightPanel, sidebarCollapsed, toggleSidebar, syllabi, setSyllabi }),
+    [openPalette, openShortcuts, setRightPanel, sidebarCollapsed, toggleSidebar, syllabi, setSyllabi]
   );
 
   return (
@@ -133,6 +138,15 @@ export function AppShell({ children, workspaceName = "Compound" }: AppShellProps
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         syllabi={syllabi}
+      />
+
+      {/* ── Global keyboard shortcuts ─────────────────── */}
+      <KeyboardShortcuts
+        paletteOpen={paletteOpen}
+        onOpenPalette={openPalette}
+        shortcutsOpen={shortcutsOpen}
+        onOpenShortcuts={openShortcuts}
+        onCloseShortcuts={() => setShortcutsOpen(false)}
       />
     </ShellContext.Provider>
   );
