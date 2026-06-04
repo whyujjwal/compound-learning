@@ -9,7 +9,10 @@ import { useCourseTree } from "@/features/course/hooks/useCourseTree";
 import { useRoadmap } from "@/features/course/hooks/useRoadmap";
 import { SyllabusHeader } from "@/features/syllabus/components/SyllabusHeader";
 import { SyllabusTabs } from "@/features/syllabus/components/SyllabusTabs";
-import { useSyllabusBySlug } from "@/features/syllabus/hooks/useSyllabi";
+import { MasterySummaryBar } from "@/features/syllabus/components/MasterySummaryBar";
+import { ModuleProgressList } from "@/features/syllabus/components/ModuleProgressList";
+import { HealthAlert } from "@/features/syllabus/components/HealthAlert";
+import { useSyllabusBySlug, useSyllabiFromOverview } from "@/features/syllabus/hooks/useSyllabi";
 import { syllabusApi } from "@/features/syllabus/api/endpoints";
 import type { ChangeLogEntry, SyllabusProposal, SyllabusTab } from "@/features/syllabus/types";
 import { queryKeys } from "@/lib/query/keys";
@@ -87,7 +90,14 @@ export default function SyllabusDetailClient() {
   const { data: syllabus, isLoading, refetch } = useSyllabusBySlug(slug);
   const { data: courseTree } = useCourseTree(slug);
   const { data: roadmap } = useRoadmap(slug);
+  const { data: syllabiList } = useSyllabiFromOverview();
   const qc = useQueryClient();
+
+  // Due review count from list endpoint (not in SyllabusDetail)
+  const dueCount = useMemo(() => {
+    if (!syllabiList) return 0;
+    return syllabiList.find((s) => s.slug === slug)?.due_review_count ?? 0;
+  }, [syllabiList, slug]);
 
   useEffect(() => {
     const next = searchParams.get("tab") as SyllabusTab | null;
@@ -185,13 +195,27 @@ export default function SyllabusDetailClient() {
 
   return (
     <PageContent style={{ paddingTop: 0, paddingBottom: 64 }}>
-      <SyllabusHeader syllabus={syllabus} nextActionHref={nextActionHref} />
+      <SyllabusHeader syllabus={syllabus} nextActionHref={nextActionHref} dueCount={dueCount} />
       <SyllabusTabs active={tab} onChange={changeTab} />
 
       {tab === "overview" && (
         <section style={{ marginTop: 20 }}>
           {courseTree ? (
-            <OutlineTree tree={courseTree} />
+            <>
+              {/* Mastery summary strip */}
+              <MasterySummaryBar tree={courseTree} dueCount={dueCount} />
+
+              {/* Broken link health alert */}
+              <HealthAlert tree={courseTree} />
+
+              {/* Per-module progress overview */}
+              {courseTree.modules.length > 0 && (
+                <ModuleProgressList modules={courseTree.modules} />
+              )}
+
+              {/* Detailed outline tree */}
+              <OutlineTree tree={courseTree} />
+            </>
           ) : (
             <EmptyState
               icon={
@@ -299,7 +323,12 @@ export default function SyllabusDetailClient() {
               }
             />
           ) : (
-            <VirtualMaterialList materials={allMaterials} />
+            <>
+              {/* Health alert for broken links in the materials tab */}
+              {courseTree && <HealthAlert tree={courseTree} />}
+
+              <VirtualMaterialList materials={allMaterials} />
+            </>
           )}
         </div>
       )}

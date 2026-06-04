@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 /* ─── Nav items ──────────────────────────────────────────── */
@@ -61,6 +61,13 @@ interface SidebarProps {
   onOpenPalette?: () => void;
   /** Workspace / app title shown at the top */
   workspaceName?: string;
+  /**
+   * Mobile drawer mode — when true the sidebar renders as a slide-over
+   * overlay (off-canvas from the left). Pass false/undefined on desktop.
+   */
+  mobileDrawerOpen?: boolean;
+  /** Called when the mobile drawer should close (scrim click, nav, Escape) */
+  onMobileDrawerClose?: () => void;
 }
 
 /* ─── Main component ─────────────────────────────────────── */
@@ -70,11 +77,50 @@ export function Sidebar({
   onToggleCollapse,
   onOpenPalette,
   workspaceName = "Compound",
+  mobileDrawerOpen = false,
+  onMobileDrawerClose,
 }: SidebarProps) {
   const pathname = usePathname() ?? "/";
 
+  /* Close the mobile drawer on Escape */
+  useEffect(() => {
+    if (!mobileDrawerOpen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        onMobileDrawerClose?.();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [mobileDrawerOpen, onMobileDrawerClose]);
+
+  /* Wrap a nav-link click so the mobile drawer closes on navigation */
+  function handleNavClick() {
+    onMobileDrawerClose?.();
+  }
+
   return (
+    <>
+      {/* ── Mobile scrim backdrop ─────────────────────────── */}
+      {/* Rendered via CSS: only visible on narrow viewports when drawer is open */}
+      <div
+        aria-hidden
+        onClick={onMobileDrawerClose}
+        style={{
+          display: "none", /* overridden by media query below via className */
+          position: "fixed",
+          inset: 0,
+          zIndex: 99,
+          background: "var(--scrim)",
+          opacity: mobileDrawerOpen ? 1 : 0,
+          pointerEvents: mobileDrawerOpen ? "auto" : "none",
+          transition: "opacity 200ms ease",
+        }}
+        className={`mobile-scrim${mobileDrawerOpen ? " mobile-scrim--open" : ""}`}
+      />
+
     <aside
+      id="mobile-sidebar-drawer"
       aria-label="Sidebar navigation"
       style={{
         width: collapsed ? 0 : "var(--sidebar-w)",
@@ -91,6 +137,7 @@ export function Sidebar({
         transition: "width 150ms ease, opacity 150ms ease, border-color 150ms ease",
         opacity: collapsed ? 0 : 1,
       }}
+      className={`sidebar-desktop${mobileDrawerOpen ? " sidebar-mobile--open" : " sidebar-mobile--closed"}`}
     >
       {/* ── Workspace header ─────────────────────────── */}
       <div
@@ -194,6 +241,7 @@ export function Sidebar({
                 href={item.href}
                 active={active}
                 icon={<Icon />}
+                onClick={handleNavClick}
               >
                 {item.label}
               </SidebarNavLink>
@@ -226,6 +274,7 @@ export function Sidebar({
                   name={s.name}
                   color={s.color}
                   progress={s.progress}
+                  onClick={handleNavClick}
                 />
               );
             })
@@ -241,11 +290,17 @@ export function Sidebar({
         padding: "8px",
         borderTop: "1px solid var(--hairline)",
       }}>
-        <SidebarNavLink href="/profile" active={pathname.startsWith("/profile")} icon={<ProfileIcon />}>
+        <SidebarNavLink
+          href="/profile"
+          active={pathname.startsWith("/profile")}
+          icon={<ProfileIcon />}
+          onClick={handleNavClick}
+        >
           Profile
         </SidebarNavLink>
       </div>
     </aside>
+    </>
   );
 }
 
@@ -276,15 +331,18 @@ function SidebarNavLink({
   active,
   icon,
   children,
+  onClick,
 }: {
   href: string;
   active: boolean;
   icon: ReactNode;
   children: ReactNode;
+  onClick?: () => void;
 }) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       style={{
         display: "flex",
         alignItems: "center",
@@ -332,18 +390,21 @@ function SidebarSyllabusLink({
   name,
   color,
   progress,
+  onClick,
 }: {
   href: string;
   active: boolean;
   name: string;
   color?: string;
   progress?: number;
+  onClick?: () => void;
 }) {
   const dotColor = color ?? "var(--accent)";
   return (
     <Link
       href={href}
       title={name}
+      onClick={onClick}
       style={{
         display: "flex",
         alignItems: "center",
