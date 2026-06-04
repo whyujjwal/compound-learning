@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAppShell, PageContent } from "@/components/shell";
-import { useDailyQueue, useStats } from "@/lib/hooks";
+import { useDailyQueue, useStats, useSyllabiList } from "@/lib/hooks";
 import { api } from "@/lib/api";
 import type { QueueItem } from "@/lib/api/types";
 import { getLocalDateKey } from "@/lib/time";
@@ -15,6 +15,8 @@ import { TodayStats } from "@/features/home/TodayStats";
 import { QueueBlock } from "@/features/home/QueueBlock";
 import { ActivityStrip } from "@/features/home/ActivityStrip";
 import { CoachPanel } from "@/features/home/CoachPanel";
+import { StreakNudge, useStreakMilestoneCelebration } from "@/features/home/StreakNudge";
+import { OnboardingWelcome } from "@/features/onboarding/OnboardingWelcome";
 
 function dateLabel(): { weekday: string; date: string } {
   const d = new Date();
@@ -33,6 +35,10 @@ export default function HomePage() {
 
   const { data: queue, isLoading: queueLoading } = useDailyQueue();
   const { data: stats, isLoading: statsLoading } = useStats();
+  const { data: syllabi } = useSyllabiList();
+
+  // Fire streak milestone celebration toasts (one-time per milestone)
+  useStreakMilestoneCelebration(stats);
 
   const [extraByTrack, setExtraByTrack] = useState<Record<string, QueueItem[]>>({});
   const autoStarted = useRef(false);
@@ -69,8 +75,8 @@ export default function HomePage() {
   const blocks = queue?.blocks ?? [];
   const activeBlocks = blocks.filter(
     (b) =>
-      b.reviews.length +
-        b.new_items.length +
+      (b.reviews?.length ?? 0) +
+        (b.new_items?.length ?? 0) +
         (extraByTrack[b.track_slug]?.length ?? 0) >
       0
   );
@@ -152,6 +158,14 @@ export default function HomePage() {
         queueLoading={queueLoading}
       />
 
+      {/* ── Streak & goal nudges ──────────────────────────── */}
+      {!statsLoading && (
+        <StreakNudge
+          stats={stats}
+          firstOpenBlockSlot={firstOpenBlock?.slot}
+        />
+      )}
+
       {/* ── Today's queue ─────────────────────────────────── */}
       <section aria-label="Today's queue">
         <div
@@ -220,89 +234,97 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Empty state */}
+        {/* Empty state — show onboarding for new users, fallback empty state otherwise */}
         {!queueLoading && blocks.length === 0 && (
-          <EmptyState
-            icon={
-              <svg
-                width="32"
-                height="32"
-                viewBox="0 0 32 32"
-                fill="none"
-                aria-hidden
-              >
-                <rect
-                  x="4"
-                  y="6"
-                  width="24"
-                  height="20"
-                  rx="3"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                />
-                <path
-                  d="M4 12h24"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                />
-                <path
-                  d="M10 18h12M10 22h8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            }
-            title="Your canvas is empty"
-            description="Create tracks from scratch, generate a personalized roadmap, or import example tracks to get started."
-            action={
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <Button variant="primary" size="md">
-                  <Link
-                    href="/curriculum/build"
-                    style={{ color: "inherit", textDecoration: "none" }}
+          <>
+            {/* OnboardingWelcome renders itself only when syllabi is empty AND not dismissed */}
+            <OnboardingWelcome />
+
+            {/* Fallback empty state: only shown when syllabi exist (onboarding hidden) */}
+            {syllabi && syllabi.length > 0 && (
+              <EmptyState
+                icon={
+                  <svg
+                    width="32"
+                    height="32"
+                    viewBox="0 0 32 32"
+                    fill="none"
+                    aria-hidden
                   >
-                    Build my roadmap
-                  </Link>
-                </Button>
-                <p style={{ fontSize: 13, color: "var(--muted)" }}>
-                  Or open the{" "}
-                  <Link
-                    href="/curriculum"
-                    style={{ color: "var(--accent)", textDecoration: "none" }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.textDecoration = "underline";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.textDecoration = "none";
+                    <rect
+                      x="4"
+                      y="6"
+                      width="24"
+                      height="20"
+                      rx="3"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    />
+                    <path
+                      d="M4 12h24"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    />
+                    <path
+                      d="M10 18h12M10 22h8"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                }
+                title="Your canvas is empty"
+                description="Create tracks from scratch, generate a personalized roadmap, or import example tracks to get started."
+                action={
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 10,
                     }}
                   >
-                    roadmap canvas
-                  </Link>{" "}
-                  or{" "}
-                  <Link
-                    href="/schedule"
-                    style={{ color: "var(--accent)", textDecoration: "none" }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.textDecoration = "underline";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.textDecoration = "none";
-                    }}
-                  >
-                    weekly calendar
-                  </Link>
-                </p>
-              </div>
-            }
-          />
+                    <Button variant="primary" size="md">
+                      <Link
+                        href="/curriculum/build"
+                        style={{ color: "inherit", textDecoration: "none" }}
+                      >
+                        Build my roadmap
+                      </Link>
+                    </Button>
+                    <p style={{ fontSize: 13, color: "var(--muted)" }}>
+                      Or open the{" "}
+                      <Link
+                        href="/curriculum"
+                        style={{ color: "var(--accent)", textDecoration: "none" }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.textDecoration = "underline";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.textDecoration = "none";
+                        }}
+                      >
+                        roadmap canvas
+                      </Link>{" "}
+                      or{" "}
+                      <Link
+                        href="/schedule"
+                        style={{ color: "var(--accent)", textDecoration: "none" }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.textDecoration = "underline";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.textDecoration = "none";
+                        }}
+                      >
+                        weekly calendar
+                      </Link>
+                    </p>
+                  </div>
+                }
+              />
+            )}
+          </>
         )}
 
         {/* All done banner */}
