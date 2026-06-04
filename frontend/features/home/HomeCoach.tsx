@@ -111,15 +111,46 @@ export function HomeCoach() {
     setInput("");
   }, []);
 
+  const sectionStyle: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
+    paddingTop: 16,
+    borderTop: "1px solid var(--hairline)",
+  };
+
+  const headStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 16,
+  };
+
+  const titleStyle: React.CSSProperties = {
+    margin: "0 0 2px",
+    fontFamily: "var(--font-mono, monospace)",
+    fontSize: 10,
+    letterSpacing: "0.18em",
+    textTransform: "uppercase",
+    color: "var(--muted)",
+    fontWeight: 500,
+  };
+
+  const subStyle: React.CSSProperties = {
+    margin: 0,
+    fontSize: 13,
+    color: "var(--muted)",
+  };
+
   if (loading) {
     return (
-      <section className="home-coach">
-        <div className="home-coach-head">
+      <section style={sectionStyle}>
+        <div style={headStyle}>
           <div>
-            <h2 className="home-coach-title">Coach</h2>
+            <h2 style={titleStyle}>Coach</h2>
           </div>
         </div>
-        <p className="home-coach-loading">Loading…</p>
+        <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>Loading…</p>
       </section>
     );
   }
@@ -127,18 +158,30 @@ export function HomeCoach() {
   const coachDisabled = !aiStatus?.enabled;
 
   return (
-    <section className="home-coach">
-      <div className="home-coach-head">
+    <section style={sectionStyle}>
+      <div style={headStyle}>
         <div>
-          <h2 className="home-coach-title">Coach</h2>
-          <p className="home-coach-sub">
+          <h2 style={titleStyle}>Coach</h2>
+          <p style={subStyle}>
             Ask anything — Coach reads your real stats, tracks, and retention data.
           </p>
         </div>
         {active && (
           <button
             type="button"
-            className="v2-btn ghost sm"
+            style={{
+              height: 26,
+              padding: "0 10px",
+              borderRadius: 4,
+              border: "1px solid var(--hairline)",
+              background: "transparent",
+              color: "var(--muted)",
+              fontSize: 12,
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "background 100ms, color 100ms",
+              flexShrink: 0,
+            }}
             onClick={resetConversation}
           >
             New conversation
@@ -147,26 +190,66 @@ export function HomeCoach() {
       </div>
 
       {nudge?.content && !active && (
-        <div className="home-coach-nudge">
-          <span className="home-coach-nudge-label">Today&apos;s insight</span>
-          <p>{nudge.content}</p>
+        <div
+          style={{
+            padding: "12px 16px",
+            border: "1px solid var(--hairline)",
+            borderRadius: 6,
+            background: "var(--panel)",
+          }}
+        >
+          <span
+            style={{
+              display: "block",
+              fontFamily: "var(--font-mono, monospace)",
+              fontSize: 10,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: "var(--accent)",
+              marginBottom: 8,
+            }}
+          >
+            Today&apos;s insight
+          </span>
+          <p style={{ margin: 0, fontStyle: "italic", fontSize: 14, lineHeight: 1.55, color: "var(--text)" }}>
+            {nudge.content}
+          </p>
         </div>
       )}
 
       {coachDisabled && (
-        <div className="home-coach-offline">
+        <div
+          style={{
+            fontSize: 13,
+            color: "var(--muted)",
+            padding: "12px 16px",
+            border: "1px dashed var(--hairline)",
+            borderRadius: 6,
+          }}
+        >
           Coach is offline. Add an AI API key to your backend{" "}
-          <code>.env</code> to enable it.
+          <code style={{ fontFamily: "var(--font-mono, monospace)", fontSize: 12 }}>.env</code> to enable it.
         </div>
       )}
 
       {!active ? (
-        <div className="home-coach-prompts">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {QUICK_PROMPTS.map((q) => (
             <button
               key={q}
               type="button"
-              className="suggestion-btn"
+              style={{
+                textAlign: "left",
+                background: "var(--panel)",
+                border: "1px solid var(--hairline)",
+                borderRadius: 6,
+                padding: "8px 12px",
+                color: "var(--muted)",
+                fontSize: 12.5,
+                cursor: coachDisabled ? "not-allowed" : "pointer",
+                opacity: coachDisabled ? 0.5 : 1,
+                transition: "background var(--dur) var(--ease-out), color var(--dur) var(--ease-out)",
+              }}
               onClick={() => startNew(q)}
               disabled={coachDisabled}
             >
@@ -175,17 +258,78 @@ export function HomeCoach() {
           ))}
         </div>
       ) : (
-        <div className="home-coach-messages" ref={messagesRef}>
+        <div
+          ref={messagesRef}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+            maxHeight: 480,
+            overflowY: "auto",
+            paddingRight: 8,
+          }}
+        >
           {active.messages.map((msg) => (
-            <div key={msg.id} className={`coach-msg${msg.role === "USER" ? " user" : ""}`}>
-              <div className="coach-avatar">{msg.role === "USER" ? "You" : "C"}</div>
-              <div className="coach-bubble">
+            <div
+              key={msg.id}
+              style={{
+                display: "flex",
+                gap: 12,
+                alignItems: "flex-start",
+                flexDirection: msg.role === "USER" ? "row-reverse" : "row",
+              }}
+            >
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  display: "grid",
+                  placeItems: "center",
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontSize: 10,
+                  letterSpacing: "0.12em",
+                  flexShrink: 0,
+                  background: msg.role === "USER" ? "var(--accent)" : "var(--panel)",
+                  color: msg.role === "USER" ? "#ffffff" : "var(--muted)",
+                }}
+              >
+                {msg.role === "USER" ? "You" : "C"}
+              </div>
+              <div
+                style={{
+                  background: msg.role === "USER" ? "var(--accent-soft)" : "var(--panel)",
+                  border: "1px solid var(--hairline)",
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                  maxWidth: "80%",
+                  fontSize: 14,
+                  lineHeight: 1.55,
+                  color: "var(--text)",
+                }}
+              >
                 {msg.role === "ASSISTANT" &&
                   msg.tool_calls &&
                   msg.tool_calls.length > 0 && (
-                    <div className="tool-pills">
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
                       {msg.tool_calls.map((tc) => (
-                        <span key={tc.id} className="tool-pill">{tc.name}</span>
+                        <span
+                          key={tc.id}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            padding: "2px 8px",
+                            borderRadius: 12,
+                            fontFamily: "var(--font-mono, monospace)",
+                            fontSize: 10,
+                            color: "var(--accent)",
+                            background: "var(--accent-soft)",
+                            border: "1px solid color-mix(in srgb, var(--accent) 25%, transparent)",
+                          }}
+                        >
+                          {tc.name}
+                        </span>
                       ))}
                     </div>
                   )}
@@ -194,29 +338,103 @@ export function HomeCoach() {
             </div>
           ))}
           {sending && (
-            <div className="coach-msg">
-              <div className="coach-avatar">C</div>
-              <div className="coach-bubble">
-                <span className="typing"><span /><span /><span /></span>
+            <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  display: "grid",
+                  placeItems: "center",
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontSize: 10,
+                  background: "var(--panel)",
+                  color: "var(--muted)",
+                  flexShrink: 0,
+                }}
+              >
+                C
+              </div>
+              <div
+                style={{
+                  background: "var(--panel)",
+                  border: "1px solid var(--hairline)",
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                }}
+              >
+                <span style={{ display: "inline-flex", gap: 4 }}>
+                  <TypingDot delay={0} />
+                  <TypingDot delay={0.15} />
+                  <TypingDot delay={0.3} />
+                </span>
               </div>
             </div>
           )}
           {error && (
-            <div className="coach-msg">
-              <div className="coach-avatar">!</div>
-              <div className="coach-bubble" style={{ color: "var(--bad)" }}>{error}</div>
+            <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: 10,
+                  background: "color-mix(in srgb, var(--bad) 12%, transparent)",
+                  color: "var(--bad)",
+                  flexShrink: 0,
+                }}
+              >
+                !
+              </div>
+              <div
+                style={{
+                  background: "var(--panel)",
+                  border: "1px solid var(--hairline)",
+                  padding: "10px 14px",
+                  borderRadius: 6,
+                  color: "var(--bad)",
+                  fontSize: 14,
+                }}
+              >
+                {error}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      <form className="coach-input" onSubmit={handleSubmit}>
+      <form
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr auto",
+          gap: 8,
+          marginTop: 12,
+          paddingTop: 12,
+          borderTop: "1px solid var(--hairline)",
+        }}
+        onSubmit={handleSubmit}
+      >
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={coachDisabled ? "Set API key to enable Coach" : "Ask about your learning…"}
           disabled={sending || coachDisabled}
           rows={2}
+          style={{
+            background: "var(--panel)",
+            border: "1px solid var(--hairline)",
+            borderRadius: 6,
+            padding: "10px 12px",
+            font: "inherit",
+            fontSize: 14,
+            color: "var(--text)",
+            resize: "none",
+            outline: "none",
+            transition: "border-color var(--dur) var(--ease-out)",
+            opacity: sending || coachDisabled ? 0.6 : 1,
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -226,12 +444,40 @@ export function HomeCoach() {
         />
         <button
           type="submit"
-          className="v2-btn primary"
+          style={{
+            alignSelf: "end",
+            height: 36,
+            padding: "0 16px",
+            borderRadius: 4,
+            border: "1px solid transparent",
+            background: "var(--accent)",
+            color: "#ffffff",
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: sending || !input.trim() || coachDisabled ? "not-allowed" : "pointer",
+            opacity: sending || !input.trim() || coachDisabled ? 0.5 : 1,
+            transition: "background 100ms",
+          }}
           disabled={sending || !input.trim() || coachDisabled}
         >
           Send
         </button>
       </form>
     </section>
+  );
+}
+
+function TypingDot({ delay }: { delay: number }) {
+  return (
+    <span
+      style={{
+        width: 4,
+        height: 4,
+        borderRadius: "50%",
+        background: "var(--muted)",
+        display: "inline-block",
+        animation: `typing-bounce 1.2s ${delay}s infinite ease-in-out`,
+      }}
+    />
   );
 }

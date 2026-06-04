@@ -73,13 +73,16 @@ const tree: CourseTree = {
 };
 
 describe("OutlineTree", () => {
-  it("renders modules and reveals sections/materials on expand", () => {
+  it("renders modules with the first open, and toggles sections/materials", () => {
     render(<OutlineTree tree={tree} />);
     expect(screen.getByText("Basics")).toBeTruthy();
     expect(screen.getByText("Foundations")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Basics/ }));
+    // First module is expanded by default, so its section + material are visible.
     expect(screen.getByText("Representations")).toBeTruthy();
     expect(screen.getAllByText("Intro video").length).toBeGreaterThan(0);
+    // Clicking the module header collapses it, hiding the section.
+    fireEvent.click(screen.getByRole("button", { name: /Basics/ }));
+    expect(screen.queryByText("Representations")).toBeNull();
   });
 });
 

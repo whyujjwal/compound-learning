@@ -24,12 +24,13 @@ function RoadmapFlowNode({ data }: NodeProps<Node<Record<string, unknown>>>) {
 
   return (
     <div
+      data-testid="roadmap-node"
       style={{
         background: "var(--canvas)",
         border: `1px solid ${node.type === "material" ? statusColor(node.status) : "var(--hairline)"}`,
         borderRadius: isModule ? 6 : 4,
         padding: isModule ? "10px 14px" : "7px 10px",
-        boxShadow: isModule ? "var(--shadow-sm)" : "none",
+        boxShadow: isModule ? "var(--shadow-float)" : "none",
         minWidth: isModule ? 200 : isSection ? 160 : 180,
         maxWidth: isModule ? 260 : 220,
       }}
@@ -108,7 +109,7 @@ export function RoadmapCanvas({ graph }: { graph: RoadmapGraph }) {
         background: "var(--panel)",
       }}>
         <strong style={{ fontSize: 13, color: "var(--text)" }}>{graph.name} roadmap</strong>
-        <div style={{ display: "flex", gap: 14, fontSize: 12, color: "var(--muted)" }}>
+        <div data-testid="roadmap-legend" style={{ display: "flex", gap: 14, fontSize: 12, color: "var(--muted)" }}>
           {[
             { label: "Mastered", color: statusColor("mastered") },
             { label: "In progress", color: statusColor("started") },

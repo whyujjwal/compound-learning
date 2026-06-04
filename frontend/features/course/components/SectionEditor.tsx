@@ -46,6 +46,7 @@ export function SectionEditor({
             <Button
               variant="danger"
               size="sm"
+              aria-label="Remove section"
               disabled={busy}
               onClick={() => {
                 if (!confirm(`Remove section "${section.title}"?`)) return;

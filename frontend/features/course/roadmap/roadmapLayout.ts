@@ -33,7 +33,7 @@ export function toElkGraph(graph: RoadmapGraph): ElkGraphSpec {
 export function statusColor(status: MaterialStatus): string {
   if (status === "mastered") return "var(--ok, #22c55e)";
   if (status === "started") return "var(--accent, #6366f1)";
-  return "var(--hairline-strong, #888)";
+  return "var(--hairline, #888)";
 }
 
 export function toFlowElements(
@@ -54,7 +54,7 @@ export function toFlowElements(
     animated: e.kind !== "primary",
     style: e.kind === "primary"
       ? { stroke: graph.color, strokeWidth: 2 }
-      : { stroke: "var(--hairline-strong)", strokeDasharray: "4 3" },
+      : { stroke: "var(--hairline)", strokeDasharray: "4 3" },
   }));
   return { nodes, edges };
 }

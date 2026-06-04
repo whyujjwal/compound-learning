@@ -23,7 +23,8 @@ function cellColor(intensity: number, isToday: boolean): string {
 }
 
 export function ActivityStrip() {
-  const { data: activity, isLoading } = useActivity(DAYS_TO_SHOW);
+  const { data, isLoading } = useActivity(DAYS_TO_SHOW);
+  const activity = Array.isArray(data) ? data : [];
 
   if (isLoading) {
     return (

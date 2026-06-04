@@ -59,6 +59,7 @@ export function ExploreCard({
 }) {
   return (
     <article
+      data-testid="explore-card"
       style={{
         display: "flex",
         flexDirection: "column",

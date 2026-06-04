@@ -16,12 +16,12 @@ import { queryKeys } from "@/lib/query/keys";
 
 const OutlineTree = dynamic(
   () => import("@/features/course/components/OutlineTree").then((m) => ({ default: m.OutlineTree })),
-  { ssr: false, loading: () => <p style={{ color: "var(--fg-mute)" }}>Loading outline…</p> }
+  { ssr: false, loading: () => <p style={{ color: "var(--muted)" }}>Loading outline…</p> }
 );
 
 const RoadmapCanvas = dynamic(
   () => import("@/features/course/roadmap/RoadmapCanvas").then((m) => ({ default: m.RoadmapCanvas })),
-  { ssr: false, loading: () => <p style={{ color: "var(--fg-mute)" }}>Loading roadmap…</p> }
+  { ssr: false, loading: () => <p style={{ color: "var(--muted)" }}>Loading roadmap…</p> }
 );
 
 const VirtualMaterialList = dynamic(
@@ -29,7 +29,7 @@ const VirtualMaterialList = dynamic(
     import("@/features/syllabus/components/VirtualMaterialList").then((m) => ({
       default: m.VirtualMaterialList,
     })),
-  { ssr: false, loading: () => <p style={{ color: "var(--fg-mute)" }}>Loading materials…</p> }
+  { ssr: false, loading: () => <p style={{ color: "var(--muted)" }}>Loading materials…</p> }
 );
 
 const SyllabusStudioLayout = dynamic(
@@ -119,8 +119,8 @@ export default function SyllabusDetailClient() {
   if (isLoading || !syllabus) {
     return (
       <>
-        <h1 className="roadmap-title">Syllabus</h1>
-        <p style={{ color: "var(--fg-mute)" }}>Loading…</p>
+        <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>Syllabus</h1>
+        <p style={{ color: "var(--muted)" }}>Loading…</p>
       </>
     );
   }
@@ -146,12 +146,23 @@ export default function SyllabusDetailClient() {
             onProposalChange={loadProposalsForStudio}
           />
           {proposals.length > 1 && (
-            <div className="proposal-switcher">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
               {proposals.map((p) => (
                 <button
                   key={p.id}
                   type="button"
-                  className={`v2-btn ghost${activeProposal?.id === p.id ? " active" : ""}`}
+                  style={{
+                    height: 30,
+                    padding: "0 12px",
+                    borderRadius: 4,
+                    border: "1px solid var(--hairline)",
+                    background: activeProposal?.id === p.id ? "var(--overlay-active)" : "transparent",
+                    color: activeProposal?.id === p.id ? "var(--text)" : "var(--muted)",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "background 100ms, color 100ms",
+                  }}
                   onClick={() => setActiveProposal(p)}
                 >
                   {p.summary || p.id.slice(0, 8)}
@@ -175,21 +186,52 @@ export default function SyllabusDetailClient() {
       )}
 
       {tab === "practice" && (
-        <p style={{ marginTop: 20, color: "var(--fg-mute)", fontSize: 13 }}>
+        <p style={{ marginTop: 20, color: "var(--muted)", fontSize: 13 }}>
           Reviews and practice items for this syllabus. Open{" "}
           <Link href="/">Today</Link> to continue scheduled reviews.
         </p>
       )}
 
       {tab === "history" && (
-        <ul className="module-material-list" style={{ marginTop: 20 }}>
+        <ul
+          style={{
+            listStyle: "none",
+            margin: "20px 0 0",
+            padding: "0 0 12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+        >
           {history.length === 0 ? (
-            <li>No changes recorded yet.</li>
+            <li style={{ fontSize: 13, color: "var(--muted)" }}>No changes recorded yet.</li>
           ) : (
             history.map((entry) => (
-              <li key={entry.id}>
-                <span>{entry.operation_type}</span>
-                <span className="pill muted">{new Date(entry.created_at).toLocaleString()}</span>
+              <li
+                key={entry.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  fontSize: 13,
+                  color: "var(--muted)",
+                }}
+              >
+                <span style={{ color: "var(--text)" }}>{entry.operation_type}</span>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                    border: "1px solid var(--hairline)",
+                    fontSize: 11,
+                    color: "var(--muted)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {new Date(entry.created_at).toLocaleString()}
+                </span>
               </li>
             ))
           )}

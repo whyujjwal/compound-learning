@@ -33,7 +33,7 @@ describe("ExploreCard", () => {
 
   it("shows owned state instead of Add when already in library", () => {
     render(<ExploreCard track={{ ...base, already_in_library: true }} busy={false} onAdopt={vi.fn()} />);
-    expect(screen.getByText(/In your library/)).toBeTruthy();
+    expect(screen.getByText(/In library/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Add to library/ })).toBeNull();
   });
 });

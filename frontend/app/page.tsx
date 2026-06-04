@@ -8,6 +8,7 @@ import { useDailyQueue, useStats } from "@/lib/hooks";
 import { api } from "@/lib/api";
 import type { QueueItem } from "@/lib/api/types";
 import { getLocalDateKey } from "@/lib/time";
+import { getCompletedSlots } from "@/lib/dailyProgress";
 import { Button, EmptyState, Skeleton } from "@/components/primitives";
 
 import { TodayStats } from "@/features/home/TodayStats";
@@ -79,14 +80,10 @@ export default function HomePage() {
   const [completedSlots, setCompletedSlots] = useState<number[]>([]);
 
   useEffect(() => {
-    // Read completed slots from localStorage (same key as the existing system)
+    // Read completed slots from the same key that markBlockComplete writes:
+    // lib/dailyProgress → KEY = "compound:daily-progress" → { date, completedSlots }
     try {
-      const day = getLocalDateKey();
-      const raw = window.localStorage.getItem(`compound:completed-${day}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) setCompletedSlots(parsed);
-      }
+      setCompletedSlots(getCompletedSlots());
     } catch {
       // ignore
     }

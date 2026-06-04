@@ -29,6 +29,7 @@ export function ResourceChip({ material }: { material: CourseMaterial }) {
 
   const inner = (
     <span
+      data-testid="resource-chip"
       style={{
         display: "flex",
         alignItems: "center",
@@ -68,7 +69,12 @@ export function ResourceChip({ material }: { material: CourseMaterial }) {
 
       {/* Meta */}
       <span style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-        <Badge color="muted">{typeLabel}</Badge>
+        <span aria-label={type}>
+          <Badge color="muted">{typeLabel}</Badge>
+        </span>
+        {material.provider && (
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>{material.provider}</span>
+        )}
         {material.estimated_minutes > 0 && (
           <span style={{ fontSize: 12, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
             {material.estimated_minutes}m

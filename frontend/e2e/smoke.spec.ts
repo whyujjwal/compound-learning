@@ -1,26 +1,36 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Core navigation smoke", () => {
-  test("library page loads", async ({ page }) => {
+  test("library page loads with a heading", async ({ page }) => {
     await page.goto("/library");
-    await expect(page.locator("h1.roadmap-title, h1")).toContainText(/Library|Syllabus/i, {
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible({
       timeout: 20_000,
     });
   });
 
-  test("progress page loads", async ({ page }) => {
-    await page.goto("/progress");
-    await expect(page.locator("h1")).toBeVisible();
-  });
-
-  test("today page loads", async ({ page }) => {
+  test("today page loads with the app shell", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("body")).toBeVisible();
+    // The rebuilt shell renders sidebar navigation on every in-app page.
+    await expect(page.getByRole("navigation").first()).toBeVisible({ timeout: 20_000 });
   });
 
-  test("stats redirects to progress", async ({ page }) => {
+  test("profile page loads with a heading", async ({ page }) => {
+    await page.goto("/profile");
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible({
+      timeout: 20_000,
+    });
+  });
+
+  // Retired routes now redirect into the consolidated 4-destination nav.
+  test("stats redirects to profile", async ({ page }) => {
     await page.goto("/stats");
-    await page.waitForURL(/\/progress/, { timeout: 10_000 });
+    await page.waitForURL(/\/profile/, { timeout: 10_000 });
+  });
+
+  test("progress redirects to profile", async ({ page }) => {
+    await page.goto("/progress");
+    await page.waitForURL(/\/profile/, { timeout: 10_000 });
   });
 
   test("tracks redirects to library", async ({ page }) => {

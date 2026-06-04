@@ -3,27 +3,5 @@
 /* ── 1. New design system (Tailwind v4 + design tokens + base reset) */
 @import "./design-system.css";
 
-/* ── 2. Legacy styles — kept intact so old pages don't break during rebuild.
-        A later integration agent removes these once all pages are migrated. */
+/* ── 2. Reactflow styles for the roadmap graph */
 @import "@xyflow/react/dist/style.css";
-@import "../styles/tokens.css";
-@import "../styles/reset.css";
-@import "../styles/base.css";
-@import "../styles/layout.css";
-@import "../styles/typography.css";
-@import "../styles/primitives/button.css";
-@import "../styles/primitives/card.css";
-@import "../styles/primitives/field.css";
-@import "../styles/primitives/tabs.css";
-@import "../styles/primitives/drawer.css";
-@import "../styles/primitives/dialog.css";
-@import "../styles/primitives/empty-state.css";
-@import "../styles/primitives/toast.css";
-@import "../styles/features/today.css";
-@import "../styles/features/library.css";
-@import "../styles/features/syllabus-studio.css";
-@import "../styles/features/course.css";
-@import "../styles/features/explore.css";
-@import "../styles/features/coach.css";
-@import "../styles/features/progress.css";
-@import "../styles/features/settings.css";

@@ -93,6 +93,7 @@ function ModuleBlock({ module, index }: { module: CourseModule; index: number })
       {/* Module toggle row */}
       <button
         type="button"
+        data-testid="outline-module"
         onClick={() => setOpen((v) => !v)}
         style={{
           width: "100%",
