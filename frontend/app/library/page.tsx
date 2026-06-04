@@ -6,6 +6,7 @@ import { EmptyLibrary } from "@/features/syllabus/components/EmptyLibrary";
 import { SyllabusCard } from "@/features/syllabus/components/SyllabusCard";
 import { useSyllabiList } from "@/lib/hooks/useSyllabi";
 import { useCurriculumOverview, useImportExampleCurriculum } from "@/lib/hooks";
+import { PageContent } from "@/components/shell";
 
 export default function LibraryPage() {
   const { data: overview, isLoading: overviewLoading } = useCurriculumOverview();
@@ -29,10 +30,10 @@ export default function LibraryPage() {
 
   if (!overview || isLoading) {
     return (
-      <>
+      <PageContent style={{ paddingTop: 40, paddingBottom: 64 }}>
         <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>Library</h1>
-        <p style={{ color: "var(--muted)" }}>Loading…</p>
-      </>
+        <p style={{ color: "var(--muted)", marginTop: 8 }}>Loading…</p>
+      </PageContent>
     );
   }
 
@@ -58,34 +59,27 @@ export default function LibraryPage() {
         }));
 
   return (
-    <>
+    <PageContent style={{ paddingTop: 40, paddingBottom: 64 }}>
       <header
         style={{
           display: "flex",
-          alignItems: "flex-start",
+          alignItems: "center",
           justifyContent: "space-between",
-          gap: 16,
+          gap: 24,
           flexWrap: "wrap",
           marginBottom: 28,
         }}
       >
         <div>
-          <p style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>Personal learning library</p>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>Library</h1>
           <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 4 }}>
-            Your syllabi — {overview.total_materials} materials across {overview.tracks.length}{" "}
-            syllabi.
+            {overview.tracks.length} {overview.tracks.length === 1 ? "syllabus" : "syllabi"}
+            {" · "}{overview.total_materials} materials
+            {" · "}{overview.total_mastered} mastered
+            {" · "}{overview.due_reviews} queued
           </p>
         </div>
-        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{overview.total_mastered}</div>
-            <div style={{ fontSize: 11, color: "var(--muted)", letterSpacing: "0.05em", textTransform: "uppercase" }}>mastered</div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{overview.due_reviews}</div>
-            <div style={{ fontSize: 11, color: "var(--muted)", letterSpacing: "0.05em", textTransform: "uppercase" }}>queued</div>
-          </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
           <Link
             href="/library/new"
             style={{
@@ -159,6 +153,6 @@ export default function LibraryPage() {
           ))}
         </div>
       )}
-    </>
+    </PageContent>
   );
 }
