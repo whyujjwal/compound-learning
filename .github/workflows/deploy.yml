@@ -69,7 +69,7 @@ jobs:
             --region=asia-south1 \
             --port=8000 \
             --add-cloudsql-instances=${GCP_PROJECT_ID}:asia-south1:compound-db \
-            --set-env-vars="DATABASE_URL=postgresql+psycopg2://compound:CompoundDBPass2026!@/compound?host=/cloudsql/${GCP_PROJECT_ID}:asia-south1:compound-db,CORS_ORIGINS=http://localhost:3000,AI_PROVIDER=gemini,AI_MODEL=gemini-2.5-flash,GEMINI_API_KEY=${GEMINI_API_KEY},APP_PASSWORD=${APP_PASSWORD},JWT_SECRET=${JWT_SECRET},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET},GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT},FRONTEND_URL=${WEB_ORIGIN}" \
+            --set-env-vars="DATABASE_URL=postgresql+psycopg2://compound:CompoundDBPass2026!@/compound?host=/cloudsql/${GCP_PROJECT_ID}:asia-south1:compound-db,CORS_ORIGINS=http://localhost:3000,AI_PROVIDER=gemini,AI_MODEL=gemini-3.1-flash-lite,GEMINI_API_KEY=${GEMINI_API_KEY},APP_PASSWORD=${APP_PASSWORD},JWT_SECRET=${JWT_SECRET},GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET},GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT},FRONTEND_URL=${WEB_ORIGIN}" \
             --update-annotations=run.googleapis.com/invoker-iam-disabled=true \
             --no-allow-unauthenticated \
             --project=${GCP_PROJECT_ID}

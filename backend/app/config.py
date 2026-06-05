@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     ai_provider: str = "gemini"
-    ai_model: str = "gemini-2.5-flash"
+    ai_model: str = "gemini-3.1-flash-lite"
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
     gemini_api_key: str | None = None

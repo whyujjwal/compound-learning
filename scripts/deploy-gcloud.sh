@@ -143,7 +143,7 @@ gcloud --project "$PROJECT_ID" builds submit frontend --tag "$IMAGE_WEB"
 
 # ──── 6. Deploy API to Cloud Run (1st pass, no CORS_ORIGINS yet) ────
 echo "→ Deploying API to Cloud Run…"
-API_ENV="LOG_LEVEL=INFO,AI_PROVIDER=gemini,AI_MODEL=gemini-2.5-flash"
+API_ENV="LOG_LEVEL=INFO,AI_PROVIDER=gemini,AI_MODEL=gemini-3.1-flash-lite"
 API_SECRETS="DATABASE_URL=compound-database-url:latest"
 [[ -n "${GEMINI_API_KEY:-}" ]] && API_SECRETS+=",GEMINI_API_KEY=compound-gemini-api-key:latest"
 
