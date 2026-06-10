@@ -74,7 +74,7 @@ function StatCell({ value, label, accent, ok, warn }: StatCellProps) {
         display: "flex",
         flexDirection: "column",
         gap: 3,
-        minWidth: 0,
+        flexShrink: 0,
         padding: "0 4px",
       }}
     >
@@ -121,6 +121,7 @@ function MinutesCell({
         display: "flex",
         alignItems: "center",
         gap: 8,
+        flexShrink: 0,
         padding: "0 4px",
       }}
     >
@@ -182,7 +183,7 @@ function LevelCell({
   return (
     <Link
       href="/profile#achievements"
-      style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px", textDecoration: "none" }}
+      style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, padding: "0 4px", textDecoration: "none" }}
     >
       <LevelRing level={level} xpInto={xpInto} xpSpan={xpSpan} size={56} />
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -259,8 +260,6 @@ export function TodayStats({ stats, statsLoading }: TodayStatsProps) {
   const minutesToday = stats?.minutes_today ?? 0;
   const goalMinutes = stats?.daily_goal_minutes ?? 0;
   const retention = stats ? Math.round((stats.retention_rate ?? 0) * 100) : 0;
-  const dueCards = stats?.due_cards ?? 0;
-  const mastered = stats?.materials_mastered ?? 0;
   const level = stats?.level ?? 1;
   const xpInto = stats?.level_xp_into ?? 0;
   const xpSpan = stats?.level_xp_span ?? 100;
@@ -281,7 +280,7 @@ export function TodayStats({ stats, statsLoading }: TodayStatsProps) {
       {/* Level + XP */}
       <LevelCell level={level} xpInto={xpInto} xpSpan={xpSpan} xpTotal={xpTotal} />
 
-      <div style={{ margin: "0 16px" }}>
+      <div style={{ margin: "0 12px" }}>
         <Divider />
       </div>
 
@@ -297,21 +296,21 @@ export function TodayStats({ stats, statsLoading }: TodayStatsProps) {
         warn={streak > 0}
       />
 
-      <div style={{ margin: "0 16px" }}>
+      <div style={{ margin: "0 12px" }}>
         <Divider />
       </div>
 
       {/* Reviews today */}
       <StatCell value={reviewsToday} label="Reviews" />
 
-      <div style={{ margin: "0 16px" }}>
+      <div style={{ margin: "0 12px" }}>
         <Divider />
       </div>
 
       {/* Minutes today + GoalRing */}
       <MinutesCell minutesToday={minutesToday} goalMinutes={goalMinutes} />
 
-      <div style={{ margin: "0 16px" }}>
+      <div style={{ margin: "0 12px" }}>
         <Divider />
       </div>
 
@@ -321,24 +320,6 @@ export function TodayStats({ stats, statsLoading }: TodayStatsProps) {
         label="Retention"
         ok={retention >= 80}
       />
-
-      <div style={{ margin: "0 16px" }}>
-        <Divider />
-      </div>
-
-      {/* Due cards */}
-      <StatCell
-        value={dueCards}
-        label="Due cards"
-        accent={dueCards > 0}
-      />
-
-      <div style={{ margin: "0 16px" }}>
-        <Divider />
-      </div>
-
-      {/* Mastered */}
-      <StatCell value={mastered} label="Mastered" ok={mastered > 0} />
 
       {/* View profile link */}
       <div style={{ marginLeft: "auto", paddingLeft: 16, flexShrink: 0 }}>
