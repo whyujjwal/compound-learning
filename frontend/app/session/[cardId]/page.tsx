@@ -28,6 +28,7 @@ import {
   ReviewProgressBar,
   LogTimeMenu,
   SessionComplete,
+  ExplainOnMiss,
   useReviewClock,
 } from "@/features/review";
 import type { GradeKey, GradeTally } from "@/features/review";
@@ -155,6 +156,7 @@ export default function SessionPage() {
   const [endStats, setEndStats] = useState<Stats | null>(null);
   const [nextBlock, setNextBlock] = useState<BlockEntry | null>(null);
   const [tally, setTally] = useState<GradeTally>({ AGAIN: 0, HARD: 0, GOOD: 0, EASY: 0 });
+  const [explainMiss, setExplainMiss] = useState(false);
   const { elapsed, paused, togglePause } = useReviewClock(queue?.ts ?? null, !done);
 
   // Resolve queue from sessionStorage, refresh from API.
@@ -225,17 +227,21 @@ export default function SessionPage() {
   }, [queue, index, router]);
 
   const submit = useCallback(async (grade: GradeKey) => {
-    if (!current || submitting) return;
+    if (!current || submitting || explainMiss) return;
     setSubmitting(true);
     const elapsed = Math.round((Date.now() - startTs) / 1000);
     try {
       await api.submitReview(current.card_id, grade, elapsed);
       setTally((prev) => ({ ...prev, [grade]: prev[grade] + 1 }));
-      advance();
+      if (grade === "AGAIN") {
+        setExplainMiss(true);
+      } else {
+        advance();
+      }
     } finally {
       setSubmitting(false);
     }
-  }, [current, submitting, startTs, advance]);
+  }, [current, submitting, explainMiss, startTs, advance]);
 
   // Keyboard: Space = reveal, 1–4 = grade.
   useEffect(() => {
@@ -369,6 +375,15 @@ export default function SessionPage() {
         }}
       >
         <ReviewCard item={current} revealed={revealed} nextTitle={nextTitle} />
+        {explainMiss && (
+          <ExplainOnMiss
+            materialTitle={current.material_title}
+            onContinue={() => {
+              setExplainMiss(false);
+              advance();
+            }}
+          />
+        )}
       </main>
 
       {/* Sticky footer */}
@@ -437,7 +452,7 @@ export default function SessionPage() {
             {/* Keyboard hint bar — before reveal */}
             <KeyboardHintBar phase="pre-reveal" />
           </>
-        ) : (
+        ) : explainMiss ? null : (
           <>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, width: "100%" }}>
               <p style={{ fontSize: 13, color: "var(--muted)", fontWeight: 500 }}>

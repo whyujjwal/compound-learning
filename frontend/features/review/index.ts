@@ -19,6 +19,7 @@
  */
 
 export { ReviewCard } from "./ReviewCard";
+export { ExplainOnMiss } from "./ExplainOnMiss";
 export { GradeBar } from "./GradeBar";
 export { ReviewTimer } from "./ReviewTimer";
 export { ReviewProgressBar } from "./ReviewProgressBar";
