@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.schemas.gamification import AchievementView
 from app.schemas.queue import QueueItem
 
 
@@ -22,6 +23,10 @@ class BlockSessionResponse(BaseModel):
     completed_at: datetime | None
     items: list[QueueItem]
     active_card_id: UUID | None
+    # Gamification deltas from the just-submitted review (empty on plain fetches).
+    xp_total: int = 0
+    level: int = 1
+    newly_unlocked: list[AchievementView] = []
 
 
 class BlockReviewSubmit(BaseModel):

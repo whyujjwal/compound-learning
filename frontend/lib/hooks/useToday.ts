@@ -7,7 +7,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { DailyQueue, QueueItem, Stats } from "@/lib/api/types";
+import type { DailyQueue, GamificationProfile, QueueItem, Stats } from "@/lib/api/types";
 
 // ─── Query keys ──────────────────────────────────────────────────────────────
 
@@ -16,6 +16,7 @@ export const todayKeys = {
   stats: ["today", "stats"] as const,
   activity: (days: number) => ["today", "activity", days] as const,
   extraQueue: (slug: string) => ["today", "extra", slug] as const,
+  gamification: ["gamification", "profile"] as const,
 };
 
 // ─── Queries ─────────────────────────────────────────────────────────────────
@@ -74,10 +75,23 @@ export function useExtraQueue(slug: string, count = 5, excludeCardIds: string[] 
   });
 }
 
+/**
+ * Fetches the full gamification profile (level, XP, achievement wall).
+ * Hits: GET /api/gamification/profile
+ */
+export function useGamification() {
+  return useQuery<GamificationProfile>({
+    queryKey: todayKeys.gamification,
+    queryFn: () => api.getGamificationProfile(),
+    staleTime: 60_000,
+  });
+}
+
 // ─── Mutations ───────────────────────────────────────────────────────────────
 
 /**
- * Invalidates the daily queue and stats (e.g. after completing a review block).
+ * Invalidates the daily queue, stats, and gamification profile (e.g. after a
+ * review block, so XP / level / achievements refresh).
  */
 export function useInvalidateToday() {
   const qc = useQueryClient();
@@ -85,5 +99,6 @@ export function useInvalidateToday() {
     Promise.all([
       qc.invalidateQueries({ queryKey: todayKeys.queue }),
       qc.invalidateQueries({ queryKey: todayKeys.stats }),
+      qc.invalidateQueries({ queryKey: todayKeys.gamification }),
     ]);
 }

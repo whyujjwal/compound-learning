@@ -13,6 +13,7 @@ import { useActivity } from "@/lib/hooks/useToday";
 import { useSyllabiList } from "@/lib/hooks/useSyllabi";
 import { ProfileIdentity } from "@/features/profile/ProfileIdentity";
 import { ProfileStats } from "@/features/profile/ProfileStats";
+import { Achievements } from "@/features/profile/Achievements";
 import { StudyPreferences } from "@/features/profile/StudyPreferences";
 
 /* ─── Section header ─────────────────────────────────────────── */
@@ -232,7 +233,20 @@ export default function ProfilePage() {
       <SectionDivider />
 
       {/* ══════════════════════════════════════════
-          Section 3 — Study preferences
+          Section 3 — Achievements
+         ══════════════════════════════════════════ */}
+      <div id="achievements" style={{ scrollMarginTop: 24 }}>
+        <SectionHeader
+          title="Achievements"
+          description="Level up by reviewing. Badges unlock as you build streaks, volume, and mastery."
+        />
+        <Achievements />
+      </div>
+
+      <SectionDivider />
+
+      {/* ══════════════════════════════════════════
+          Section 4 — Study preferences
          ══════════════════════════════════════════ */}
       <SectionHeader
         title="Study preferences"

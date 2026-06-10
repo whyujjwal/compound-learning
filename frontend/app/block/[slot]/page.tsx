@@ -31,11 +31,13 @@ import {
 } from "@/features/review";
 import type { GradeKey, GradeTally } from "@/features/review";
 import { Skeleton, EmptyState } from "@/components/primitives";
+import { useUnlockCelebration } from "@/features/home/useUnlockCelebration";
 
 export default function BlockPage() {
   const router = useRouter();
   const params = useParams<{ slot: string }>();
   const slot = Number(params?.slot ?? "1");
+  const celebrate = useUnlockCelebration();
 
   const [session, setSession] = useState<BlockSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,6 +105,7 @@ export default function BlockPage() {
         setTally((prev) => ({ ...prev, [rating]: prev[rating] + 1 }));
         setSession(next);
         setDoneWorkingIds(new Set());
+        celebrate(next.newly_unlocked);
         if (next.status === "COMPLETED") {
           markBlockComplete(slot);
         }

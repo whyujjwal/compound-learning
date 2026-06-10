@@ -34,6 +34,7 @@ import {
 import type { GradeKey, GradeTally } from "@/features/review";
 import { Skeleton } from "@/components/primitives";
 import { EmptyState } from "@/components/primitives";
+import { useUnlockCelebration } from "@/features/home/useUnlockCelebration";
 
 // ─── Queue persistence ────────────────────────────────────────────────────────
 
@@ -147,6 +148,7 @@ export default function SessionPage() {
     }
   }, [cardId, router]);
 
+  const celebrate = useUnlockCelebration();
   const [queue, setQueue] = useState<Cached | null>(null);
   const [loading, setLoading] = useState(true);
   const [revealed, setRevealed] = useState(false);
@@ -231,8 +233,9 @@ export default function SessionPage() {
     setSubmitting(true);
     const elapsed = Math.round((Date.now() - startTs) / 1000);
     try {
-      await api.submitReview(current.card_id, grade, elapsed);
+      const result = await api.submitReview(current.card_id, grade, elapsed);
       setTally((prev) => ({ ...prev, [grade]: prev[grade] + 1 }));
+      celebrate(result.newly_unlocked);
       if (grade === "AGAIN") {
         setExplainMiss(true);
       } else {
@@ -241,7 +244,7 @@ export default function SessionPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [current, submitting, explainMiss, startTs, advance]);
+  }, [current, submitting, explainMiss, startTs, advance, celebrate]);
 
   // Keyboard: Space = reveal, 1–4 = grade.
   useEffect(() => {

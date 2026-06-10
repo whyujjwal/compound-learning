@@ -16,6 +16,7 @@ from app.models.user import User
 from app.schemas.block import BlockSessionResponse
 from app.schemas.queue import QueueItem
 from app.services.queue_service import build_daily_queue
+from app.services import gamification_service as gamification
 from app.services.fsrs_service import review_card
 from app.services.timezone import local_today, utc_now  # noqa: F401  (patched by tests)
 
@@ -220,7 +221,9 @@ def submit_block_review(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid rating") from exc
 
-    review_card(db, card, user, rating_enum, elapsed_seconds)
+    _card, _log, _actual, _scheduled, newly_unlocked = review_card(
+        db, card, user, rating_enum, elapsed_seconds
+    )
 
     session.current_index += 1
     if session.current_index >= len(card_ids):
@@ -230,4 +233,8 @@ def submit_block_review(
     db.commit()
     db.refresh(session)
     items = _hydrate_items(db, user, card_ids)
-    return _to_response(session, items)
+    response = _to_response(session, items)
+    response.xp_total = user.xp_total
+    response.level = gamification.level_for_xp(user.xp_total)
+    response.newly_unlocked = [gamification.def_to_view(a) for a in newly_unlocked]
+    return response

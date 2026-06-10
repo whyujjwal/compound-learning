@@ -4,6 +4,7 @@ import type { Stats } from "@/lib/api/types";
 import { Skeleton } from "@/components/primitives";
 import Link from "next/link";
 import { GoalRing } from "./GoalRing";
+import { LevelRing } from "./LevelRing";
 
 interface TodayStatsProps {
   stats: Stats | undefined;
@@ -166,6 +167,55 @@ function MinutesCell({
   );
 }
 
+/* ── Level cell (with LevelRing) ───────────────────────────── */
+function LevelCell({
+  level,
+  xpInto,
+  xpSpan,
+  xpTotal,
+}: {
+  level: number;
+  xpInto: number;
+  xpSpan: number;
+  xpTotal: number;
+}) {
+  return (
+    <Link
+      href="/profile#achievements"
+      style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 4px", textDecoration: "none" }}
+    >
+      <LevelRing level={level} xpInto={xpInto} xpSpan={xpSpan} size={56} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        <span
+          style={{
+            fontSize: 22,
+            fontWeight: 700,
+            lineHeight: 1,
+            letterSpacing: "-0.03em",
+            color: "var(--text)",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {xpTotal.toLocaleString()}
+          <span style={{ fontSize: 13, fontWeight: 400, color: "var(--muted)", letterSpacing: 0 }}> xp</span>
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            color: "var(--muted)",
+            fontWeight: 500,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {xpSpan > 0 ? `${xpSpan - xpInto} to lv ${level + 1}` : `level ${level}`}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
 /* ── Main component ─────────────────────────────────────────── */
 export function TodayStats({ stats, statsLoading }: TodayStatsProps) {
   if (statsLoading) {
@@ -211,6 +261,10 @@ export function TodayStats({ stats, statsLoading }: TodayStatsProps) {
   const retention = stats ? Math.round((stats.retention_rate ?? 0) * 100) : 0;
   const dueCards = stats?.due_cards ?? 0;
   const mastered = stats?.materials_mastered ?? 0;
+  const level = stats?.level ?? 1;
+  const xpInto = stats?.level_xp_into ?? 0;
+  const xpSpan = stats?.level_xp_span ?? 100;
+  const xpTotal = stats?.xp_total ?? 0;
 
   return (
     <div
@@ -224,6 +278,13 @@ export function TodayStats({ stats, statsLoading }: TodayStatsProps) {
         overflowX: "auto",
       }}
     >
+      {/* Level + XP */}
+      <LevelCell level={level} xpInto={xpInto} xpSpan={xpSpan} xpTotal={xpTotal} />
+
+      <div style={{ margin: "0 16px" }}>
+        <Divider />
+      </div>
+
       {/* Streak */}
       <StatCell
         value={

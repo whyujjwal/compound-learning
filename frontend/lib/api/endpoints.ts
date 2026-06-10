@@ -16,9 +16,11 @@ import type {
   GraphNode,
   KnowledgeGraph,
   Leaderboards,
+  GamificationProfile,
   Material,
   Organization,
   QueueItem,
+  ReviewResult,
   RoadmapGenerationSummary,
   Stats,
   StudySession,
@@ -235,7 +237,7 @@ export const studyEndpoints = {
       body: JSON.stringify({ rating, elapsed_time_seconds: elapsed }),
     }),
   submitReview: (cardId: string, rating: string, elapsed: number) =>
-    request<{ card: { due_at: string; reps: number } }>(`/cards/${cardId}/review`, {
+    request<ReviewResult>(`/cards/${cardId}/review`, {
       method: "POST",
       body: JSON.stringify({ rating, elapsed_time_seconds: elapsed }),
     }),
@@ -267,6 +269,7 @@ export const studyEndpoints = {
 
 export const insightsEndpoints = {
   getStats: () => request<Stats>("/stats"),
+  getGamificationProfile: () => request<GamificationProfile>("/gamification/profile"),
   getActivity: (days = 120) =>
     request<{ date: string; count: number }[]>(`/stats/activity?days=${days}`),
   getRetentionTimeline: (days = 30) =>

@@ -214,6 +214,10 @@ export type BlockSession = {
   completed_at: string | null;
   items: QueueItem[];
   active_card_id: string | null;
+  // Gamification deltas from the just-submitted review (present after a grade).
+  xp_total?: number;
+  level?: number;
+  newly_unlocked?: Achievement[];
 };
 
 export type TrackProgressBlock = {
@@ -339,6 +343,13 @@ export type Stats = {
   total_minutes_invested: number;
   minutes_today: number;
   daily_goal_minutes: number;
+  // Gamification summary (full breakdown at /api/gamification/profile)
+  xp_total?: number;
+  level?: number;
+  level_xp_into?: number;
+  level_xp_span?: number;
+  achievements_unlocked?: number;
+  streak_freeze_remaining?: number;
   track_breakdown: {
     track_id: string;
     track_name: string;
@@ -348,6 +359,42 @@ export type Stats = {
     due_count: number;
     reviews_total: number;
   }[];
+};
+
+// ─── Gamification ──────────────────────────────────────────────────────────
+
+export type Achievement = {
+  slug: string;
+  title: string;
+  description: string;
+  icon: string;
+  category: string;
+  unlocked: boolean;
+  unlocked_at: string | null;
+  progress: number; // 0..1
+  current: number;
+  threshold: number;
+};
+
+export type GamificationProfile = {
+  xp_total: number;
+  level: number;
+  level_xp_into: number;
+  level_xp_span: number;
+  next_level: number;
+  achievements_unlocked: number;
+  achievements_total: number;
+  achievements: Achievement[];
+};
+
+/** Result of submitting a single card review (includes live gamification deltas). */
+export type ReviewResult = {
+  card: { due_at: string; reps: number };
+  scheduled_interval_days?: number;
+  actual_interval_days?: number;
+  xp_total: number;
+  level: number;
+  newly_unlocked: Achievement[];
 };
 
 export type ScheduleBlock = {
