@@ -140,6 +140,10 @@ def _build_daily_snapshot(
 
     return {
         "date": local.date().isoformat(),
+        "level": stats.level,
+        "xp_to_next": max(0, stats.level_xp_span - stats.level_xp_into),
+        "current_streak": stats.current_streak,
+        "achievements_unlocked": stats.achievements_unlocked,
         "sessions_this_week": stats.sessions_this_week,
         "days_active_30d": stats.days_active_30d,
         "total_minutes_invested": stats.total_minutes_invested,
@@ -275,6 +279,9 @@ def _build_weekly_snapshot(
 
     return {
         "week_key": _week_key(now),
+        "level": stats.level,
+        "current_streak": stats.current_streak,
+        "achievements_unlocked": stats.achievements_unlocked,
         "reviews_this_week": reviews_this_week,
         "reviews_prev_week": reviews_prev_week,
         "lapses_this_week": lapses_this_week,
@@ -388,6 +395,79 @@ def _generate(system: str, snapshot: dict[str, Any], max_tokens: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Deterministic fallbacks — keep the coach useful with no AI key (or on error)
+# ---------------------------------------------------------------------------
+def _fallback_daily(snapshot: dict[str, Any]) -> str:
+    due = int(snapshot.get("due_reviews", 0) or 0)
+    topics = snapshot.get("topics_due") or []
+    struggles = snapshot.get("top_struggles") or []
+    tracks = snapshot.get("available_tracks") or []
+    reviews_yday = int(snapshot.get("reviews_yesterday", 0) or 0)
+    streak = int(snapshot.get("current_streak", 0) or 0)
+
+    if due > 0:
+        top = topics[0]["track"] if topics else (tracks[0] if tracks else "your queue")
+        plural = "s" if due != 1 else ""
+        return f"Clear your {due} due review{plural} first — start with {top} so it doesn't slip."
+    if struggles:
+        s = struggles[0]
+        lapses = int(s.get("lapses", 0) or 0)
+        lp = "s" if lapses != 1 else ""
+        return (
+            f'Revisit "{s["title"]}" today — it\'s your stickiest spot ({lapses} lapse{lp}); '
+            "one focused pass will lock it in."
+        )
+    if reviews_yday == 0:
+        first = tracks[0] if tracks else "a track"
+        return f"Begin with {first} — the first rep is the hardest and the one that compounds most."
+    nxt = tracks[0] if tracks else "your next material"
+    if streak > 0:
+        return f"Keep your {streak}-day streak alive — continue {nxt} and let it compound."
+    return f"Good momentum — continue {nxt} to keep building."
+
+
+def _fallback_weekly(snapshot: dict[str, Any]) -> str:
+    rtw = int(snapshot.get("reviews_this_week", 0) or 0)
+    rpw = int(snapshot.get("reviews_prev_week", 0) or 0)
+    ret = snapshot.get("retention_pct", 0) or 0
+    mins = int(snapshot.get("total_minutes_invested", 0) or 0)
+    days = int(snapshot.get("days_active_30d", 0) or 0)
+    struggles = snapshot.get("top_struggles") or []
+    tracks = snapshot.get("available_tracks") or []
+
+    if rtw == 0:
+        first = tracks[0] if tracks else "a track"
+        return (
+            f"Quiet week — no reviews logged. No pressure: pick **{first}** and do one short "
+            "session to restart the habit. Small, steady reps compound."
+        )
+    trend = "up from" if rtw >= rpw else "down from"
+    parts = [
+        f"You logged **{rtw}** reviews this week ({trend} {rpw}), held **{ret}%** retention, "
+        f"and invested **{mins} min** across **{days}** active days this month."
+    ]
+    if struggles:
+        names = ", ".join(s["title"] for s in struggles[:2])
+        parts.append(f"Stickiest spots: {names} — a focused pass next week will pay off.")
+    focus = tracks[0] if tracks else "your strongest track"
+    parts.append(f"Next week, keep a steady pace on **{focus}**. Pace is personal — consistency beats intensity.")
+    return " ".join(parts)
+
+
+def _compose(system: str, snapshot: dict[str, Any], max_tokens: int, fallback_fn) -> tuple[str, str, str]:
+    """Return (text, provider, model). Falls back to deterministic stats text when AI is
+    unavailable or errors, so the coach is never a dead end."""
+    if settings.ai_enabled:
+        try:
+            text = _generate(system, snapshot, max_tokens)
+            if text:
+                return text, settings.ai_provider, settings.ai_model
+        except Exception:
+            logger.warning("Coach insight AI call failed; using stats fallback", exc_info=True)
+    return fallback_fn(snapshot), "fallback", "stats-fallback"
+
+
+# ---------------------------------------------------------------------------
 # Public API — get-or-create with cache
 # ---------------------------------------------------------------------------
 def _get_cached(
@@ -417,13 +497,13 @@ def get_or_create_daily(
         return cached
 
     snapshot = _build_daily_snapshot(db, user, timezone_name)
-    text = _generate(DAILY_SYSTEM, snapshot, max_tokens=400)
+    text, provider, model = _compose(DAILY_SYSTEM, snapshot, 400, _fallback_daily)
 
     if cached:
         cached.content = text
         cached.metrics = snapshot
-        cached.provider = settings.ai_provider
-        cached.model = settings.ai_model
+        cached.provider = provider
+        cached.model = model
         cached.generated_at = datetime.now(UTC)
         db.add(cached)
         db.commit()
@@ -436,8 +516,8 @@ def get_or_create_daily(
         period_key=key,
         content=text,
         metrics=snapshot,
-        provider=settings.ai_provider,
-        model=settings.ai_model,
+        provider=provider,
+        model=model,
     )
     db.add(insight)
     db.commit()
@@ -458,13 +538,13 @@ def get_or_create_weekly(
         return cached
 
     snapshot = _build_weekly_snapshot(db, user, timezone_name)
-    text = _generate(WEEKLY_SYSTEM, snapshot, max_tokens=900)
+    text, provider, model = _compose(WEEKLY_SYSTEM, snapshot, 900, _fallback_weekly)
 
     if cached:
         cached.content = text
         cached.metrics = snapshot
-        cached.provider = settings.ai_provider
-        cached.model = settings.ai_model
+        cached.provider = provider
+        cached.model = model
         cached.generated_at = datetime.now(UTC)
         db.add(cached)
         db.commit()
@@ -477,8 +557,8 @@ def get_or_create_weekly(
         period_key=key,
         content=text,
         metrics=snapshot,
-        provider=settings.ai_provider,
-        model=settings.ai_model,
+        provider=provider,
+        model=model,
     )
     db.add(insight)
     db.commit()
