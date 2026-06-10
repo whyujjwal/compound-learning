@@ -21,3 +21,11 @@ output/
 # Playwright / Vitest artifacts
 frontend/test-results/
 frontend/playwright-report/
+
+# Serwist / PWA service-worker build output
+frontend/public/sw.js
+frontend/public/sw.js.map
+frontend/public/swe-worker-*.js
+
+# Local e2e helper (hardcodes dev DB creds)
+backend/verify_e2e.py
