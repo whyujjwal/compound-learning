@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <h1>Save to Compound</h1>
+  
+  <div class="field">
+    <label for="title">Title</label>
+    <input type="text" id="title" readonly>
+  </div>
+  
+  <div class="field">
+    <label for="track">Select Track</label>
+    <select id="track">
+      <option value="">Loading tracks...</option>
+    </select>
+  </div>
+  
+  <div class="field">
+    <label for="difficulty">Cognitive Cost</label>
+    <select id="difficulty">
+      <option value="1.0">Light (1x)</option>
+      <option value="1.5">Medium (1.5x)</option>
+      <option value="2.0">Heavy (2x)</option>
+    </select>
+  </div>
+  
+  <div id="status" class="status"></div>
+  
+  <button id="save-btn" disabled>Save Material</button>
+  
+  <script src="panel.js"></script>
+</body>
+</html>
