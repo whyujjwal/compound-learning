@@ -31,5 +31,6 @@ class StatsResponse(BaseModel):
     retention_rate: float
     current_streak: int
     longest_streak: int
+    streak_freeze_remaining: int = 1
     avg_review_seconds: float
     track_breakdown: list[TrackStats]

@@ -32,7 +32,8 @@ def _compute_streaks(
         {local_date_for(d, timezone_name, user) for d in review_dates},
         reverse=True,
     )
-    today = local_today(timezone_name, user, now)
+    today = local_today(timezone_name, user)
+    freezes_left = user.streak_freeze_remaining if user else 0
 
     current = 0
     expected = today
@@ -40,11 +41,20 @@ def _compute_streaks(
         if day == expected:
             current += 1
             expected -= timedelta(days=1)
+        elif day == expected - timedelta(days=1) and freezes_left > 0:
+            # Grace day: bridge one missed calendar day without breaking the streak.
+            freezes_left -= 1
+            current += 1
+            expected = day - timedelta(days=1)
         elif day == today - timedelta(days=1) and current == 0:
             current = 1
             expected = day - timedelta(days=1)
         else:
             break
+
+    if user and freezes_left < user.streak_freeze_remaining:
+        consumed = user.streak_freeze_remaining - freezes_left
+        user.streak_freeze_remaining = max(0, user.streak_freeze_remaining - consumed)
 
     longest = 1
     run = 1
@@ -138,7 +148,10 @@ def get_stats(
         .order_by(ReviewLog.reviewed_at.desc())
         .all()
     ]
+    freeze_before = user.streak_freeze_remaining
     current_streak, longest_streak = _compute_streaks(review_dates, timezone_name, user)
+    if user.streak_freeze_remaining < freeze_before:
+        db.commit()
 
     # Friendlier session-based metrics (no streak pressure)
     week_days = {
@@ -259,6 +272,7 @@ def get_stats(
         retention_rate=retention_rate,
         current_streak=current_streak,
         longest_streak=longest_streak,
+        streak_freeze_remaining=user.streak_freeze_remaining,
         avg_review_seconds=round(float(avg_seconds), 1),
         track_breakdown=track_breakdown,
     )

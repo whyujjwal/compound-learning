@@ -34,6 +34,10 @@ class User(Base):
     # Free-text statement of what the learner wants to achieve. Drives roadmap generation.
     learning_goals: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     onboarded: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="false")
+    # One free streak-freeze by default (Duolingo-style grace day).
+    streak_freeze_remaining: Mapped[int] = mapped_column(
+        nullable=False, default=1, server_default="1"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
