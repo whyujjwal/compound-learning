@@ -27,7 +27,8 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 @router.get("/status", response_model=AIStatus)
 def ai_status() -> AIStatus:
-    return AIStatus(enabled=settings.ai_enabled, provider=settings.ai_provider, model=settings.ai_model)
+    model = settings.ai_model if settings.ai_enabled else "stats-fallback"
+    return AIStatus(enabled=True, provider=settings.ai_provider, model=model)
 
 
 @router.get("/conversations", response_model=list[ConversationSummary])

@@ -431,29 +431,6 @@ def request_track_ai_update(
         .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
         .all()
     )
-    try:
-        result = generate_track_update(track, materials, payload.instruction)
-    except RoadmapError as e:
-        row = TrackAIUpdate(
-            track_id=track.id,
-            user_id=user.id,
-            instruction=payload.instruction,
-            status="FAILED",
-            error=str(e),
-        )
-        db.add(row)
-        db.commit()
-        db.refresh(row)
-        return TrackAIUpdateResponse(
-            id=row.id,
-            track_id=track.id,
-            status=row.status,
-            result=None,
-            error=row.error,
-            created_at=row.created_at,
-        )
-
-    added = 0
     if not payload.apply:
         from app.domains.syllabus import proposals as proposal_service
 
@@ -483,46 +460,68 @@ def request_track_ai_update(
             created_at=row.created_at,
         )
 
-    if payload.apply:
-        next_sequence = max([m.sequence for m in materials], default=0) + 1
-        for i, item in enumerate(result.get("materials") or []):
-            title = item.get("title")
-            if not title:
-                continue
-            existing = (
-                db.query(StudyMaterial)
-                .filter(StudyMaterial.track_id == track.id, StudyMaterial.title == title)
-                .first()
-            )
-            if existing:
-                continue
-            material = StudyMaterial(
-                track_id=track.id,
-                title=title,
-                raw_content=item.get("notes"),
-                external_url=item.get("url"),
-                block_label=item.get("block_label") or f"{track.name} · AI update",
-                resource_type=item.get("type"),
-                difficulty=item.get("difficulty"),
-                sequence=item.get("sequence") or next_sequence + i,
-                estimated_minutes=item.get("estimated_minutes", 20),
-                priority_percent=item.get("priority_percent", 50),
-                cognitive_cost_multiplier=item.get("cognitive_cost_multiplier", 1.0),
-            )
-            module_title = item.get("module") or item.get("module_title")
-            material.block_label = item.get("block_label") or full_block_label(track, module_title or "AI update")
-            db.add(material)
-            db.flush()
-            db.add(Card(user_id=user.id, material_id=material.id))
-            added += 1
-        if added:
-            materials = (
-                db.query(StudyMaterial)
-                .filter(StudyMaterial.track_id == track.id)
-                .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
-                .all()
-            )
-            syllabus_modules(db, track, materials)
+    try:
+        result = generate_track_update(track, materials, payload.instruction)
+    except RoadmapError as e:
+        row = TrackAIUpdate(
+            track_id=track.id,
+            user_id=user.id,
+            instruction=payload.instruction,
+            status="FAILED",
+            error=str(e),
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return TrackAIUpdateResponse(
+            id=row.id,
+            track_id=track.id,
+            status=row.status,
+            result=None,
+            error=row.error,
+            created_at=row.created_at,
+        )
+
+    added = 0
+    next_sequence = max([m.sequence for m in materials], default=0) + 1
+    for i, item in enumerate(result.get("materials") or []):
+        title = item.get("title")
+        if not title:
+            continue
+        existing = (
+            db.query(StudyMaterial)
+            .filter(StudyMaterial.track_id == track.id, StudyMaterial.title == title)
+            .first()
+        )
+        if existing:
+            continue
+        material = StudyMaterial(
+            track_id=track.id,
+            title=title,
+            raw_content=item.get("notes"),
+            external_url=item.get("url"),
+            block_label=item.get("block_label") or f"{track.name} · AI update",
+            resource_type=item.get("type"),
+            difficulty=item.get("difficulty"),
+            sequence=item.get("sequence") or next_sequence + i,
+            estimated_minutes=item.get("estimated_minutes", 20),
+            priority_percent=item.get("priority_percent", 50),
+            cognitive_cost_multiplier=item.get("cognitive_cost_multiplier", 1.0),
+        )
+        module_title = item.get("module") or item.get("module_title")
+        material.block_label = item.get("block_label") or full_block_label(track, module_title or "AI update")
+        db.add(material)
+        db.flush()
+        db.add(Card(user_id=user.id, material_id=material.id))
+        added += 1
+    if added:
+        materials = (
+            db.query(StudyMaterial)
+            .filter(StudyMaterial.track_id == track.id)
+            .order_by(StudyMaterial.sequence.asc(), StudyMaterial.created_at.asc())
+            .all()
+        )
+        syllabus_modules(db, track, materials)
 
     row = TrackAIUpdate(
         track_id=track.id,

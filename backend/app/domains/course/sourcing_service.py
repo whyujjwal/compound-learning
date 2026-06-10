@@ -8,6 +8,7 @@ from typing import Any
 from app.domains.course.link_check import verify_url
 from app.domains.course.source_registry import classify_source
 from app.domains.syllabus.schemas import ProposalOperation, ProposalOperationTarget
+from app.services.roadmap.errors import RoadmapError
 from app.services.roadmap.llm import call_model_json
 
 STRUCTURE_SYSTEM = (
@@ -28,7 +29,126 @@ def _op_id(prefix: str) -> str:
 
 def generate_structure(goal: str, *, level: str | None = None, hours: int | None = None) -> dict[str, Any]:
     prompt = f"Goal: {goal}\nLevel: {level or 'unspecified'}\nWeekly hours: {hours or 'unspecified'}\nReturn JSON only."
-    return call_model_json(STRUCTURE_SYSTEM, prompt, max_tokens=4096)
+    try:
+        return call_model_json(STRUCTURE_SYSTEM, prompt, max_tokens=4096)
+    except RoadmapError:
+        return curated_starter_structure(goal, level=level, hours=hours)
+
+
+def curated_starter_structure(goal: str, *, level: str | None = None, hours: int | None = None) -> dict[str, Any]:
+    """Deterministic starter proposal used when the configured AI provider is unavailable.
+
+    The resources are intentionally conservative and well-known so demo generation still
+    produces reviewable, real links rather than a dead end.
+    """
+    topic = goal.strip().rstrip(".") or "the selected goal"
+    level_text = level or "mixed"
+    weekly_hours = hours or 6
+    return {
+        "summary": (
+            f"Curated starter roadmap for {topic}. It is intentionally compact because "
+            "the live AI provider was unavailable; review and extend it in Studio."
+        ),
+        "modules": [
+            {
+                "title": "Foundations",
+                "objective": f"Build the vocabulary and mental model needed for {topic}.",
+                "kind": "core",
+                "learning_outcomes": [
+                    "Explain the core terms in your own words",
+                    "Connect the goal to one working example",
+                    f"Choose a sustainable weekly pace around {weekly_hours} hours",
+                ],
+                "sections": [
+                    {
+                        "title": "Orientation",
+                        "objective": "Survey the domain through reputable open resources.",
+                        "kind": "core",
+                        "materials": [
+                            {
+                                "title": "freeCodeCamp learning guide",
+                                "url": "https://www.freecodecamp.org/news/",
+                                "resource_type": "article",
+                                "estimated_minutes": 25,
+                                "difficulty": level_text,
+                                "notes": "Search within freeCodeCamp for the exact topic and save one high-signal guide.",
+                            },
+                            {
+                                "title": "MIT OpenCourseWare course search",
+                                "url": "https://ocw.mit.edu/search/",
+                                "resource_type": "course",
+                                "estimated_minutes": 35,
+                                "difficulty": level_text,
+                                "notes": "Find one matching OCW course or lecture series and note prerequisites.",
+                            },
+                        ],
+                    }
+                ],
+            },
+            {
+                "title": "Practice Loop",
+                "objective": "Turn the roadmap into daily retrieval and small projects.",
+                "kind": "core",
+                "learning_outcomes": [
+                    "Create recall prompts after each resource",
+                    "Ship a small artifact that proves understanding",
+                    "Use review ratings to adjust the schedule",
+                ],
+                "sections": [
+                    {
+                        "title": "Build and Recall",
+                        "objective": "Practice actively instead of passively collecting resources.",
+                        "kind": "core",
+                        "materials": [
+                            {
+                                "title": "GitHub topic exploration",
+                                "url": "https://github.com/topics",
+                                "resource_type": "repo",
+                                "estimated_minutes": 30,
+                                "difficulty": level_text,
+                                "notes": "Find one active repository related to the goal and read its README as a map of real-world terms.",
+                            },
+                            {
+                                "title": "Khan Academy practice catalog",
+                                "url": "https://www.khanacademy.org/",
+                                "resource_type": "interactive",
+                                "estimated_minutes": 20,
+                                "difficulty": level_text,
+                                "notes": "Use this for prerequisite math or conceptual drills if the goal exposes a weak foundation.",
+                            },
+                        ],
+                    }
+                ],
+            },
+            {
+                "title": "Capstone",
+                "objective": "Consolidate learning into one demonstrable outcome.",
+                "kind": "core",
+                "learning_outcomes": [
+                    "Define a small capstone scope",
+                    "Explain tradeoffs from memory",
+                    "Identify the next weak concept for FSRS review",
+                ],
+                "sections": [
+                    {
+                        "title": "Project Checkpoint",
+                        "objective": "Make progress visible and reviewable.",
+                        "kind": "core",
+                        "materials": [
+                            {
+                                "title": "Google Technical Writing resources",
+                                "url": "https://developers.google.com/tech-writing",
+                                "resource_type": "docs",
+                                "estimated_minutes": 25,
+                                "difficulty": level_text,
+                                "notes": "Write a short project note explaining what you built, what failed, and what you will review next.",
+                            }
+                        ],
+                    }
+                ],
+            },
+        ],
+    }
 
 
 def draft_to_operations(draft: dict[str, Any]) -> list[ProposalOperation]:

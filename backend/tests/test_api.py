@@ -334,7 +334,8 @@ def test_chat_send_without_api_key(client, monkeypatch):
         f"/api/chat/conversations/{conv['id']}/messages",
         json={"content": "How am I doing?"},
     )
-    assert res.status_code == 503
+    assert res.status_code == 200
+    assert "Fallback reason" in res.json()["assistant_message"]["content"]
 
 
 def test_generate_roadmap_without_api_key(client, monkeypatch):

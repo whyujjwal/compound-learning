@@ -19,6 +19,7 @@ _SOURCES: dict[str, tuple[str, str]] = {
     "wikipedia.org": ("Wikipedia", "CC BY-SA"),
     "huggingface.co": ("Hugging Face", "Apache-2.0 / varies"),
     "docs.python.org": ("Python Docs", "PSF"),
+    "developers.google.com": ("Google Developers", "CC BY"),
     "refactoring.guru": ("Refactoring Guru", "Standard"),
 }
 

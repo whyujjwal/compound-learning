@@ -24,6 +24,9 @@ real progress: stats, reviews, due cards, struggling cards, track details, sessi
 actions (pause track, adjust budget, log sessions).
 
 Operating principles:
+- SOCRATIC MODE: Ask one guiding question before giving an answer. Prefer "What do you think happens when…?" \
+over lecturing. Only give a direct solution after the learner has attempted reasoning, or if they explicitly \
+ask for the answer.
 - Always ground claims in tool data. If asked about progress, call get_overall_stats first.
 - Be concise but specific. Quote actual numbers and material titles from the data.
 - Identify patterns: which tracks lag, which concepts keep lapsing, whether retention is healthy.
@@ -99,16 +102,6 @@ def chat_completion(
 ) -> tuple[Message, Message]:
     """Append user message, run agent loop, persist assistant message. Returns (user_msg, assistant_msg)."""
 
-    if not settings.ai_enabled:
-        env_name = {
-            "anthropic": "ANTHROPIC_API_KEY",
-            "openai": "OPENAI_API_KEY",
-            "gemini": "GEMINI_API_KEY",
-        }.get(settings.ai_provider, "API_KEY")
-        raise AIDisabled(
-            f"AI is not configured. Set {env_name} and restart the backend."
-        )
-
     user_msg = Message(
         conversation_id=conversation.id,
         role=MessageRole.USER,
@@ -122,14 +115,25 @@ def chat_completion(
 
     db.refresh(conversation)
 
-    if settings.ai_provider == "anthropic":
-        assistant_text, tool_calls, tool_results = _run_anthropic_agent(db, user, conversation)
-    elif settings.ai_provider == "openai":
-        assistant_text, tool_calls, tool_results = _run_openai_agent(db, user, conversation)
-    elif settings.ai_provider == "gemini":
-        assistant_text, tool_calls, tool_results = _run_gemini_agent(db, user, conversation)
-    else:
-        raise AIDisabled(f"Unknown AI provider: {settings.ai_provider}")
+    try:
+        if not settings.ai_enabled:
+            raise AIDisabled(_missing_key_message())
+        if settings.ai_provider == "anthropic":
+            assistant_text, tool_calls, tool_results = _run_anthropic_agent(db, user, conversation)
+        elif settings.ai_provider == "openai":
+            assistant_text, tool_calls, tool_results = _run_openai_agent(db, user, conversation)
+        elif settings.ai_provider == "gemini":
+            assistant_text, tool_calls, tool_results = _run_gemini_agent(db, user, conversation)
+        else:
+            raise AIDisabled(f"Unknown AI provider: {settings.ai_provider}")
+    except Exception as exc:
+        logger.warning("Coach provider unavailable; using stats fallback: %s", exc)
+        assistant_text, tool_calls, tool_results = _run_stats_fallback_coach(
+            db,
+            user,
+            user_message_content,
+            reason=str(exc),
+        )
 
     assistant_msg = Message(
         conversation_id=conversation.id,
@@ -143,6 +147,79 @@ def chat_completion(
     db.refresh(user_msg)
     db.refresh(assistant_msg)
     return user_msg, assistant_msg
+
+
+def _missing_key_message() -> str:
+    env_name = {
+        "anthropic": "ANTHROPIC_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+    }.get(settings.ai_provider, "API_KEY")
+    return f"AI is not configured. Set {env_name} and restart the backend."
+
+
+def _run_stats_fallback_coach(
+    db: Session,
+    user: User,
+    user_message_content: str,
+    *,
+    reason: str,
+) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
+    executor = ToolExecutor(db, user)
+    stats = executor.execute("get_overall_stats", {})
+    due = executor.execute("get_due_cards", {"limit": 3})
+    struggling = executor.execute("get_struggling_cards", {"limit": 3})
+    tool_calls = [
+        {"id": "fallback-stats", "name": "get_overall_stats", "input": {}},
+        {"id": "fallback-due", "name": "get_due_cards", "input": {"limit": 3}},
+        {"id": "fallback-struggling", "name": "get_struggling_cards", "input": {"limit": 3}},
+    ]
+    tool_results = [
+        {"tool_use_id": "fallback-stats", "name": "get_overall_stats", "result": stats},
+        {"tool_use_id": "fallback-due", "name": "get_due_cards", "result": due},
+        {"tool_use_id": "fallback-struggling", "name": "get_struggling_cards", "result": struggling},
+    ]
+
+    tracks = stats.get("tracks") or []
+    lagging = sorted(tracks, key=lambda t: (t.get("due", 0), -t.get("reviews", 0)), reverse=True)
+    focus = lagging[0] if lagging else None
+    due_cards = due.get("cards") or []
+    hard_cards = struggling.get("cards") or []
+
+    lines = [
+        "I can still coach from your real Compound stats while the model provider is unavailable.",
+        "",
+        f"Right now you have **{stats.get('reviews_today', 0)}** reviews today, "
+        f"**{stats.get('current_streak_days', 0)}** streak day(s), "
+        f"and **{stats.get('due_cards_now', 0)}** cards due.",
+    ]
+    if focus:
+        lines.append(
+            f"The track most worth looking at is **{focus.get('name')}**: "
+            f"{focus.get('due', 0)} due card(s), {focus.get('reviews', 0)} review(s)."
+        )
+    if due_cards:
+        first = due_cards[0]
+        lines.append(
+            f"Start tiny: review `{first.get('title')}` first, then stop if your energy is low."
+        )
+    elif hard_cards:
+        first = hard_cards[0]
+        lines.append(
+            f"For targeted repair, revisit `{first.get('title')}` because its retrievability is "
+            f"{first.get('retrievability_percent')}%."
+        )
+    else:
+        lines.append("No obvious weak card is showing yet, so the best move is one fresh review to create signal.")
+    lines.extend(
+        [
+            "",
+            "Guiding question: before you open the next card, what would make this concept fail in a real problem?",
+            "",
+            f"_Fallback reason: {reason[:180]}_",
+        ]
+    )
+    return "\n".join(lines), tool_calls, tool_results
 
 
 def _run_anthropic_agent(

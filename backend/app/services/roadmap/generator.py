@@ -170,9 +170,7 @@ def generate_roadmap(goals: str, weekly_hours: int = 10, level: str | None = Non
 
 def generate_track_update(track: Any, materials: list[Any], instruction: str) -> dict[str, Any]:
     if not settings.ai_enabled:
-        raise RoadmapError(
-            "AI is not configured. Set the API key for your provider to update tracks."
-        )
+        return curated_track_update(track, instruction)
     if not instruction or not instruction.strip():
         raise RoadmapError("Please describe how you want to update the track.")
 
@@ -196,7 +194,10 @@ def generate_track_update(track: Any, materials: list[Any], instruction: str) ->
         f"RESEARCH CONTEXT:\n{research}\n\n"
         "Return the track update JSON now."
     )
-    data = call_model_json(TRACK_UPDATE_PROMPT, user_prompt, max_tokens=8192)
+    try:
+        data = call_model_json(TRACK_UPDATE_PROMPT, user_prompt, max_tokens=8192)
+    except RoadmapError:
+        return curated_track_update(track, instruction)
     materials_out = data.get("materials") or []
     clean = normalize_curriculum(
         {
@@ -214,4 +215,33 @@ def generate_track_update(track: Any, materials: list[Any], instruction: str) ->
     return {
         "summary": data.get("summary") or "Track updated.",
         "materials": clean["tracks"][0].get("materials") or [],
+    }
+
+
+def curated_track_update(track: Any, instruction: str) -> dict[str, Any]:
+    topic = (instruction or "").strip().rstrip(".") or getattr(track, "name", "this track")
+    track_name = getattr(track, "name", "Track")
+    return {
+        "summary": (
+            "Curated starter addition created because the live AI provider was unavailable. "
+            "Review it before applying."
+        ),
+        "materials": [
+            {
+                "title": f"Research checkpoint: {topic[:80]}",
+                "url": "https://github.com/topics",
+                "type": "repo",
+                "module": "Curated additions",
+                "module_title": "Curated additions",
+                "block_label": f"{track_name} · Curated additions",
+                "estimated_minutes": 30,
+                "priority_percent": 35,
+                "difficulty": "mixed",
+                "notes": (
+                    "Use GitHub Topics to find one active repository related to the requested "
+                    "addition. Read the README, capture three terms to remember, and turn them "
+                    "into review prompts."
+                ),
+            }
+        ],
     }

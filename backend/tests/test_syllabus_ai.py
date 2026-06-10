@@ -61,7 +61,7 @@ def test_track_ai_update_creates_proposal_by_default(client, monkeypatch):
     system = next(t for t in tracks if t["slug"] == "system-design")
 
     monkeypatch.setattr(
-        "app.api.routes.tracks.generate_track_update",
+        "app.domains.syllabus.proposals.generate_track_update",
         lambda track, materials, instruction: MOCK_AI_RESULT,
     )
 
