@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.models.card import CardState
 from app.models.review_log import ReviewRating
+from app.schemas.gamification import AchievementView
 
 
 class CardResponse(BaseModel):
@@ -54,3 +55,7 @@ class ReviewResponse(BaseModel):
     card: CardResponse
     scheduled_interval_days: int
     actual_interval_days: int
+    # Gamification: lets the UI update the level ring and celebrate unlocks live.
+    xp_total: int = 0
+    level: int = 1
+    newly_unlocked: list[AchievementView] = []

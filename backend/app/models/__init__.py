@@ -20,10 +20,12 @@ from app.models.track_section import TrackSection
 from app.models.track_rating import TrackRating
 from app.models.track_star import TrackStar
 from app.models.user import User
+from app.models.user_achievement import UserAchievement
 from app.models.xapi_statement import XapiStatement
 
 __all__ = [
     "User",
+    "UserAchievement",
     "Track",
     "SyllabusProposal",
     "SyllabusEdge",

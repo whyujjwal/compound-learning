@@ -11,6 +11,7 @@ from app.models.review_log import ReviewLog
 from app.models.track import Track
 from app.models.user import User
 from app.schemas.card import CardDetailResponse, CardResponse, ReviewLogResponse, ReviewResponse, ReviewSubmit
+from app.services import gamification_service as gamification
 from app.services.fsrs_service import review_card
 
 router = APIRouter(prefix="/cards", tags=["cards"])
@@ -93,11 +94,14 @@ def submit_review(
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
 
-    updated, _, actual_days, scheduled_days = review_card(
+    updated, _, actual_days, scheduled_days, newly_unlocked = review_card(
         db, card, user, payload.rating, payload.elapsed_time_seconds
     )
     return ReviewResponse(
         card=CardResponse.model_validate(updated),
         scheduled_interval_days=scheduled_days,
         actual_interval_days=actual_days,
+        xp_total=user.xp_total,
+        level=gamification.level_for_xp(user.xp_total),
+        newly_unlocked=[gamification.def_to_view(a) for a in newly_unlocked],
     )

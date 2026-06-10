@@ -153,6 +153,16 @@ def get_stats(
     if user.streak_freeze_remaining < freeze_before:
         db.commit()
 
+    # Gamification summary (cheap: level is pure math, unlocked count is one query).
+    from app.models.user_achievement import UserAchievement
+    from app.services.gamification_service import level_progress
+
+    xp_total = user.xp_total or 0
+    level, level_xp_into, level_xp_span = level_progress(xp_total)
+    achievements_unlocked = (
+        db.query(UserAchievement).filter(UserAchievement.user_id == user.id).count()
+    )
+
     # Friendlier session-based metrics (no streak pressure)
     week_days = {
         local_date_for(d, timezone_name, user) for d in review_dates if _aware(d) >= week_start
@@ -274,5 +284,10 @@ def get_stats(
         longest_streak=longest_streak,
         streak_freeze_remaining=user.streak_freeze_remaining,
         avg_review_seconds=round(float(avg_seconds), 1),
+        xp_total=xp_total,
+        level=level,
+        level_xp_into=level_xp_into,
+        level_xp_span=level_xp_span,
+        achievements_unlocked=achievements_unlocked,
         track_breakdown=track_breakdown,
     )

@@ -14,6 +14,7 @@ from app.api.routes import (
     catalog,
     chat,
     curriculum,
+    gamification,
     integrations,
     knowledge_graph,
     materials,
@@ -116,6 +117,7 @@ app.include_router(catalog.router, prefix="/api")
 app.include_router(queue.router, prefix="/api")
 app.include_router(blocks.router, prefix="/api")
 app.include_router(stats.router, prefix="/api")
+app.include_router(gamification.router, prefix="/api")
 app.include_router(user.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(curriculum.router, prefix="/api")

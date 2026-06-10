@@ -9,6 +9,7 @@ from app.models.card import Card, CardState
 from app.models.review_log import ReviewLog, ReviewRating
 from app.models.scheduler_params import DEFAULT_FSRS_WEIGHTS, SchedulerParameters
 from app.models.user import User
+from app.services import gamification_service as gamification
 
 
 def _to_fsrs_state(state: CardState) -> State:
@@ -81,11 +82,14 @@ def review_card(
     user: User,
     rating: ReviewRating,
     elapsed_seconds: int,
-) -> tuple[Card, ReviewLog, int, int]:
+) -> tuple[Card, ReviewLog, int, int, list]:
     track_id = card.material.track_id
     scheduler = get_scheduler(db, user, track_id)
     fsrs_card = card_to_fsrs(card)
     now = datetime.now(UTC)
+
+    # Capture before any mutation: a brand-new card has never been reviewed.
+    is_first_review = card.last_reviewed_at is None
 
     actual_days = 0
     if card.last_reviewed_at:
@@ -125,6 +129,10 @@ def review_card(
         reviewed_at=now.replace(tzinfo=None),
     )
     db.add(log)
+    gamification.award_review_xp(user, is_first_review=is_first_review)
     db.commit()
     db.refresh(card)
-    return card, log, actual_days, new_scheduled_days
+
+    # Evaluate achievements after the review is persisted so it counts toward totals.
+    newly_unlocked = gamification.evaluate_achievements(db, user)
+    return card, log, actual_days, new_scheduled_days, newly_unlocked

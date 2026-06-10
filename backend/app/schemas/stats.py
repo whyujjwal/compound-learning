@@ -33,4 +33,10 @@ class StatsResponse(BaseModel):
     longest_streak: int
     streak_freeze_remaining: int = 1
     avg_review_seconds: float
+    # Gamification summary (full breakdown lives at /api/gamification/profile).
+    xp_total: int = 0
+    level: int = 1
+    level_xp_into: int = 0
+    level_xp_span: int = 100
+    achievements_unlocked: int = 0
     track_breakdown: list[TrackStats]

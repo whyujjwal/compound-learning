@@ -38,6 +38,8 @@ class User(Base):
     streak_freeze_remaining: Mapped[int] = mapped_column(
         nullable=False, default=1, server_default="1"
     )
+    # Cumulative experience points earned across all reviews. Levels are derived.
+    xp_total: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
